@@ -1,6 +1,9 @@
 package keel
 
 import com.github.michaelbull.result.getOrElse
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.toKString
+import platform.posix.getcwd
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -10,6 +13,7 @@ fun main(args: Array<String>) {
     }
 
     when (args[0]) {
+        "init" -> doInit(args.drop(1))
         "build" -> doBuild()
         "run" -> {
             val (config, classpath) = doBuild()
@@ -29,10 +33,57 @@ private fun printUsage() {
     eprintln("usage: keel <command>")
     eprintln("")
     eprintln("commands:")
+    eprintln("  init       Create a new project")
     eprintln("  build      Compile the project")
     eprintln("  run        Build and run the project")
     eprintln("  clean      Remove build artifacts")
     eprintln("  version    Show version information")
+}
+
+private const val KEEL_TOML = "keel.toml"
+private const val SRC_DIR = "src"
+
+@OptIn(ExperimentalForeignApi::class)
+private fun doInit(args: List<String>) {
+    if (fileExists(KEEL_TOML)) {
+        eprintln("error: $KEEL_TOML already exists")
+        exitProcess(1)
+    }
+
+    val projectName = if (args.isNotEmpty()) {
+        args[0]
+    } else {
+        val cwd = getcwd(null, 0u)?.toKString()
+        if (cwd == null) {
+            eprintln("error: could not determine current directory")
+            exitProcess(1)
+        }
+        inferProjectName(cwd)
+    }
+
+    writeFileAsString(KEEL_TOML, generateKeelToml(projectName)).getOrElse { error ->
+        eprintln("error: could not write ${error.path}")
+        exitProcess(1)
+    }
+    println("created $KEEL_TOML")
+
+    if (!fileExists(SRC_DIR)) {
+        ensureDirectory(SRC_DIR).getOrElse { error ->
+            eprintln("error: could not create directory ${error.path}")
+            exitProcess(1)
+        }
+    }
+
+    val mainKtPath = "$SRC_DIR/Main.kt"
+    if (!fileExists(mainKtPath)) {
+        writeFileAsString(mainKtPath, generateMainKt()).getOrElse { error ->
+            eprintln("error: could not write ${error.path}")
+            exitProcess(1)
+        }
+        println("created $mainKtPath")
+    }
+
+    println("initialized project '$projectName'")
 }
 
 private fun doClean() {
