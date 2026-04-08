@@ -9,6 +9,17 @@ data class BuildCommand(
     val outputPath: String
 )
 
+fun checkCommand(config: KeelConfig, classpath: String? = null): List<String> = buildList {
+    add("kotlinc")
+    if (!classpath.isNullOrEmpty()) {
+        add("-cp")
+        add(classpath)
+    }
+    addAll(config.sources)
+    add("-jvm-target")
+    add(config.jvmTarget)
+}
+
 fun buildCommand(config: KeelConfig, classpath: String? = null): BuildCommand {
     val outputPath = jarPath(config)
     val args = buildList {

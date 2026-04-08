@@ -71,4 +71,24 @@ class BuilderTest {
             cmd.args
         )
     }
+
+    @Test
+    fun checkCommandDoesNotIncludeRuntimeOrOutput() {
+        val cmd = checkCommand(testConfig())
+
+        assertEquals(
+            listOf("kotlinc", "src", "-jvm-target", "17"),
+            cmd
+        )
+    }
+
+    @Test
+    fun checkCommandWithClasspath() {
+        val cmd = checkCommand(testConfig(), classpath = "/cache/a.jar")
+
+        assertEquals(
+            listOf("kotlinc", "-cp", "/cache/a.jar", "src", "-jvm-target", "17"),
+            cmd
+        )
+    }
 }

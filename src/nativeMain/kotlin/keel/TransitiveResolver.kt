@@ -37,7 +37,7 @@ fun resolveTransitive(
  * Parsed POM metadata is cached in memory to avoid re-reading and re-parsing
  * the same POM (e.g., shared parent POMs in diamond dependencies).
  */
-private fun createPomLookup(
+internal fun createPomLookup(
     cacheBase: String,
     deps: ResolverDeps
 ): (String, String) -> PomInfo? {

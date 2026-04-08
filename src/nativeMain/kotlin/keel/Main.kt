@@ -20,6 +20,7 @@ fun main(args: Array<String>) {
     when (args[0]) {
         "init" -> doInit(args.drop(1))
         "build" -> doBuild()
+        "check" -> doCheck()
         "run" -> {
             val appArgs = args.toList().let { all ->
                 val sep = all.indexOf("--")
@@ -29,6 +30,8 @@ fun main(args: Array<String>) {
             doRun(config, classpath, appArgs)
         }
         "clean" -> doClean()
+        "deps" -> doDeps(args.drop(1))
+        "update" -> doUpdate()
         "--version", "version" -> println(versionString())
         else -> {
             eprintln("error: unknown command '${args[0]}'")
@@ -44,8 +47,11 @@ private fun printUsage() {
     eprintln("commands:")
     eprintln("  init       Create a new project")
     eprintln("  build      Compile the project")
+    eprintln("  check      Check compilation without producing artifacts")
     eprintln("  run        Build and run the project")
     eprintln("  clean      Remove build artifacts")
+    eprintln("  deps tree  Show dependency tree")
+    eprintln("  update     Re-resolve dependencies and update lockfile")
     eprintln("  version    Show version information")
 }
 
@@ -102,6 +108,105 @@ private fun doInit(args: List<String>) {
     }
 
     println("initialized project '$projectName'")
+}
+
+private fun doUpdate() {
+    val config = loadProjectConfig()
+    if (config.dependencies.isEmpty()) {
+        println("no dependencies to update")
+        return
+    }
+
+    val home = homeDirectory().getOrElse { error ->
+        eprintln("error: ${error.message}")
+        exitProcess(EXIT_DEPENDENCY_ERROR)
+    }
+    val cacheBase = "$home/.keel/cache"
+
+    // Delete cached JARs to force re-download
+    for ((groupArtifact, version) in config.dependencies) {
+        val coord = parseCoordinate(groupArtifact, version).getOrElse { continue }
+        val jarPath = "$cacheBase/${buildCachePath(coord)}"
+        if (fileExists(jarPath)) {
+            deleteFile(jarPath)
+        }
+    }
+
+    // Resolve without existing lockfile to get fresh state
+    println("updating dependencies...")
+    val resolveResult = withHttpClient { client ->
+        resolve(config, null, cacheBase, createResolverDeps(client))
+    }.getOrElse { error ->
+        when (error) {
+            is ResolveError.InvalidDependency -> eprintln("error: invalid dependency '${error.input}'")
+            is ResolveError.Sha256Mismatch -> {
+                eprintln("error: sha256 mismatch for ${error.groupArtifact}")
+                eprintln("  expected: ${error.expected}")
+                eprintln("  got:      ${error.actual}")
+            }
+            is ResolveError.DownloadFailed -> eprintln("error: failed to download ${error.groupArtifact}")
+            is ResolveError.HashComputeFailed -> eprintln("error: failed to compute hash for ${error.groupArtifact}")
+            is ResolveError.DirectoryCreateFailed -> eprintln("error: could not create directory ${error.path}")
+        }
+        exitProcess(EXIT_DEPENDENCY_ERROR)
+    }
+
+    // Always write lockfile
+    val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
+    val lockJson = serializeLockfile(lockfile)
+    writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
+        eprintln("error: could not write ${error.path}")
+        exitProcess(EXIT_DEPENDENCY_ERROR)
+    }
+    println("updated ${resolveResult.deps.size} dependencies")
+}
+
+private fun doDeps(args: List<String>) {
+    if (args.isEmpty() || args[0] != "tree") {
+        eprintln("usage: keel deps tree")
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+    val config = loadProjectConfig()
+    if (config.dependencies.isEmpty()) {
+        println("no dependencies")
+        return
+    }
+
+    val home = homeDirectory().getOrElse { error ->
+        eprintln("error: ${error.message}")
+        exitProcess(EXIT_DEPENDENCY_ERROR)
+    }
+    val cacheBase = "$home/.keel/cache"
+
+    withHttpClient { client ->
+        val pomLookup = createPomLookup(cacheBase, createResolverDeps(client))
+        val tree = buildDependencyTree(config.dependencies, pomLookup)
+        println(formatDependencyTree(tree))
+    }
+}
+
+private fun doCheck() {
+    val startMark = TimeSource.Monotonic.markNow()
+    val config = loadProjectConfig()
+    checkVersion(config)
+
+    val classpath = resolveDependencies(config)
+    val cmd = checkCommand(config, classpath)
+
+    println("checking ${config.name}...")
+    executeCommand(cmd).getOrElse { error ->
+        when (error) {
+            is ProcessError.NonZeroExit -> eprintln("error: check failed with exit code ${error.exitCode}")
+            is ProcessError.EmptyArgs -> eprintln("error: no command to execute")
+            is ProcessError.ForkFailed -> eprintln("error: failed to start compiler process")
+            is ProcessError.WaitFailed -> eprintln("error: failed waiting for compiler process")
+            is ProcessError.SignalKilled -> eprintln("error: compiler process was killed")
+            is ProcessError.PopenFailed -> eprintln("error: failed to start compiler process")
+        }
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+    val elapsed = startMark.elapsedNow()
+    println("check passed in ${formatDuration(elapsed)}")
 }
 
 private fun doClean() {
