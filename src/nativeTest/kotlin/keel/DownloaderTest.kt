@@ -17,7 +17,7 @@ class DownloaderTest {
         val destPath = "/tmp/keel_test_download.xml"
         remove(destPath)
         try {
-            // maven-metadata.xmlは小さく安定しているのでテストに適している
+            // maven-metadata.xml is small and stable, suitable for testing
             val url = "https://repo1.maven.org/maven2/junit/junit/maven-metadata.xml"
             val result = downloadFile(url, destPath)
             assertNotNull(result.get())

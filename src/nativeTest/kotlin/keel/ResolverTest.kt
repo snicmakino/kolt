@@ -69,7 +69,7 @@ class ResolverTest {
         val resolved = assertNotNull(result.get())
         assertEquals(1, resolved.deps.size)
         assertFalse(resolved.lockChanged)
-        // ダウンロードされていないことを確認
+        // Verify no downloads occurred
         assertTrue(downloaded.isEmpty())
     }
 
@@ -223,7 +223,7 @@ class ResolverTest {
         assertEquals(LockEntry("1.0.0", "abc123"), lockfile.dependencies["com.example:lib"])
     }
 
-    // テスト用の副作用注入
+    // Fake side-effect injection for testing
     private fun fakeDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),
         downloadedFiles: MutableMap<String, String> = mutableMapOf(),

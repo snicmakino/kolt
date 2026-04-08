@@ -50,7 +50,7 @@ private fun checkVersion(config: KeelConfig) {
             is ProcessError.NonZeroExit,
             is ProcessError.PopenFailed,
             is ProcessError.SignalKilled -> eprintln("warning: could not determine kotlinc version")
-            // executeAndCaptureでは発生しない
+            // Not reachable via executeAndCapture
             is ProcessError.EmptyArgs,
             is ProcessError.ForkFailed,
             is ProcessError.WaitFailed -> eprintln("warning: could not determine kotlinc version")
@@ -90,7 +90,7 @@ private fun resolveDependencies(config: KeelConfig): String? {
     }
     val cacheBase = "$home/.keel/cache"
 
-    // 既存ロックファイルの読み込み
+    // Load existing lockfile
     val existingLock = if (fileExists(LOCK_FILE)) {
         val lockJson = readFileAsString(LOCK_FILE).getOrElse { error ->
             eprintln("warning: could not read $LOCK_FILE: ${error.path}")
@@ -126,7 +126,7 @@ private fun resolveDependencies(config: KeelConfig): String? {
         exitProcess(1)
     }
 
-    // ロックファイルの書き込み
+    // Write lockfile
     if (resolveResult.lockChanged) {
         val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
         val lockJson = serializeLockfile(lockfile)
@@ -159,7 +159,7 @@ private fun doBuild(): KeelConfig {
             is ProcessError.ForkFailed -> eprintln("error: failed to start compiler process")
             is ProcessError.WaitFailed -> eprintln("error: failed waiting for compiler process")
             is ProcessError.SignalKilled -> eprintln("error: compiler process was killed")
-            // executeCommandでは発生しない
+            // Not reachable via executeCommand
             is ProcessError.PopenFailed -> eprintln("error: failed to start compiler process")
         }
         exitProcess(1)
@@ -183,7 +183,7 @@ private fun doRun(config: KeelConfig) {
             is ProcessError.ForkFailed,
             is ProcessError.WaitFailed,
             is ProcessError.SignalKilled -> exitProcess(1)
-            // executeCommandでは発生しない
+            // Not reachable via executeCommand
             is ProcessError.PopenFailed -> exitProcess(1)
         }
     }

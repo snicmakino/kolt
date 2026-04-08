@@ -85,7 +85,7 @@ class LockfileTest {
         assertEquals(lockfile.jvmTarget, reparsed.jvmTarget)
         assertEquals(lockfile.dependencies, reparsed.dependencies)
 
-        // dependenciesのキーがソートされていることを確認
+        // Verify dependency keys are sorted alphabetically
         val comIndex = serialized.indexOf("com.squareup:okhttp")
         val orgIndex = serialized.indexOf("org.jetbrains.kotlinx:kotlinx-coroutines-core")
         assertTrue(comIndex < orgIndex, "dependencies should be sorted alphabetically")

@@ -66,7 +66,7 @@ fun resolve(
         val fullCachePath = "$cacheBase/$relativePath"
         val lockEntry = existingLock?.dependencies?.get(groupArtifact)
 
-        // キャッシュにない場合はダウンロード
+        // Download if not cached
         if (!deps.fileExists(fullCachePath)) {
             val parentDir = fullCachePath.substringBeforeLast('/')
             deps.ensureDirectoryRecursive(parentDir).getOrElse {
@@ -84,7 +84,7 @@ fun resolve(
             return Err(ResolveError.HashComputeFailed(groupArtifact, error))
         }
 
-        // ロックファイルとの照合
+        // Verify against lockfile
         if (lockEntry != null) {
             if (lockEntry.version != version) {
                 lockChanged = true
@@ -99,11 +99,11 @@ fun resolve(
     }
 
     if (existingLock != null) {
-        // kotlin/jvmTargetの変更検出
+        // Detect kotlin/jvmTarget changes
         if (existingLock.kotlin != config.kotlin || existingLock.jvmTarget != config.jvmTarget) {
             lockChanged = true
         }
-        // 削除された依存の検出
+        // Detect removed dependencies
         for (key in existingLock.dependencies.keys) {
             if (key !in config.dependencies) {
                 lockChanged = true
