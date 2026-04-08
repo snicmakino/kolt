@@ -34,31 +34,38 @@ fun resolveTransitive(
 
 /**
  * Creates a POM lookup function that downloads, caches, and parses POM files.
+ * Parsed POM metadata is cached in memory to avoid re-reading and re-parsing
+ * the same POM (e.g., shared parent POMs in diamond dependencies).
  */
 private fun createPomLookup(
     cacheBase: String,
     deps: ResolverDeps
 ): (String, String) -> PomInfo? {
+    val cache = mutableMapOf<String, PomInfo?>()
+
     return { groupArtifact, version ->
-        val parts = groupArtifact.split(":")
-        if (parts.size == 2) {
-            val coord = Coordinate(parts[0], parts[1], version)
-            val pomCachePath = "$cacheBase/${buildPomCachePath(coord)}"
+        val cacheKey = "$groupArtifact:$version"
+        cache.getOrPut(cacheKey) {
+            val parts = groupArtifact.split(":")
+            if (parts.size == 2) {
+                val coord = Coordinate(parts[0], parts[1], version)
+                val pomCachePath = "$cacheBase/${buildPomCachePath(coord)}"
 
-            // Download POM if not cached
-            if (!deps.fileExists(pomCachePath)) {
-                val parentDir = pomCachePath.substringBeforeLast('/')
-                val dirOk = deps.ensureDirectoryRecursive(parentDir).getOrElse { null }
-                if (dirOk != null) {
-                    deps.downloadFile(buildPomDownloadUrl(coord), pomCachePath).getOrElse { null }
+                // Download POM if not cached on disk
+                if (!deps.fileExists(pomCachePath)) {
+                    val parentDir = pomCachePath.substringBeforeLast('/')
+                    val dirOk = deps.ensureDirectoryRecursive(parentDir).getOrElse { null }
+                    if (dirOk != null) {
+                        deps.downloadFile(buildPomDownloadUrl(coord), pomCachePath).getOrElse { null }
+                    }
                 }
-            }
 
-            // Read and parse POM
-            val content = deps.readFileContent(pomCachePath).getOrElse { null }
-            content?.let { parsePom(it).getOrElse { null } }
-        } else {
-            null
+                // Read and parse POM
+                val content = deps.readFileContent(pomCachePath).getOrElse { null }
+                content?.let { parsePom(it).getOrElse { null } }
+            } else {
+                null
+            }
         }
     }
 }

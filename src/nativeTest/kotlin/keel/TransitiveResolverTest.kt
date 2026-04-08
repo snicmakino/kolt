@@ -484,6 +484,79 @@ class TransitiveResolverTest {
         assertTrue("com.example:c" in names)
     }
 
+    @Test
+    fun pomLookupCachesSharedParentPom() {
+        // child-a and child-b share the same parent POM.
+        // The parent POM should be read only once.
+        val config = testConfig().copy(
+            dependencies = mapOf(
+                "com.example:child-a" to "1.0.0",
+                "com.example:child-b" to "1.0.0"
+            )
+        )
+        val childAPom = """
+            <project>
+                <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>parent</artifactId>
+                    <version>1.0.0</version>
+                </parent>
+                <artifactId>child-a</artifactId>
+                <dependencies>
+                    <dependency><groupId>com.example</groupId><artifactId>util</artifactId></dependency>
+                </dependencies>
+            </project>
+        """.trimIndent()
+        val childBPom = """
+            <project>
+                <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>parent</artifactId>
+                    <version>1.0.0</version>
+                </parent>
+                <artifactId>child-b</artifactId>
+                <dependencies>
+                    <dependency><groupId>com.example</groupId><artifactId>util</artifactId></dependency>
+                </dependencies>
+            </project>
+        """.trimIndent()
+        val parentPom = """
+            <project>
+                <groupId>com.example</groupId>
+                <artifactId>parent</artifactId>
+                <version>1.0.0</version>
+                <dependencyManagement>
+                    <dependencies>
+                        <dependency><groupId>com.example</groupId><artifactId>util</artifactId><version>2.0.0</version></dependency>
+                    </dependencies>
+                </dependencyManagement>
+            </project>
+        """.trimIndent()
+        val utilPom = """
+            <project><groupId>com.example</groupId><artifactId>util</artifactId><version>2.0.0</version></project>
+        """.trimIndent()
+
+        val readCounts = mutableMapOf<String, Int>()
+        val deps = countingDeps(
+            sha256Results = mapOf(
+                "/cache/com/example/child-a/1.0.0/child-a-1.0.0.jar" to "hashA",
+                "/cache/com/example/child-b/1.0.0/child-b-1.0.0.jar" to "hashB",
+                "/cache/com/example/util/2.0.0/util-2.0.0.jar" to "hashU"
+            ),
+            pomContents = mapOf(
+                "/cache/com/example/child-a/1.0.0/child-a-1.0.0.pom" to childAPom,
+                "/cache/com/example/child-b/1.0.0/child-b-1.0.0.pom" to childBPom,
+                "/cache/com/example/parent/1.0.0/parent-1.0.0.pom" to parentPom,
+                "/cache/com/example/util/2.0.0/util-2.0.0.pom" to utilPom
+            ),
+            readCounts = readCounts
+        )
+        val result = resolveTransitive(config, null, "/cache", deps)
+        assertNotNull(result.get())
+        val parentReads = readCounts["/cache/com/example/parent/1.0.0/parent-1.0.0.pom"] ?: 0
+        assertEquals(1, parentReads, "Shared parent POM should be read exactly once")
+    }
+
     // Helper: creates a fake ResolverDeps with POM content support
     private fun fakeTransitiveDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),
@@ -507,6 +580,38 @@ class TransitiveResolverTest {
             }
 
             override fun readFileContent(path: String): Result<String, OpenFailed> {
+                val content = pomContents[path]
+                    ?: return Err(OpenFailed(path))
+                return Ok(content)
+            }
+        }
+    }
+
+    // Helper: like fakeTransitiveDeps but tracks readFileContent call counts
+    private fun countingDeps(
+        cachedFiles: MutableSet<String> = mutableSetOf(),
+        sha256Results: Map<String, String> = emptyMap(),
+        pomContents: Map<String, String> = emptyMap(),
+        readCounts: MutableMap<String, Int>
+    ): ResolverDeps {
+        return object : ResolverDeps {
+            override fun fileExists(path: String): Boolean = path in cachedFiles
+
+            override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
+
+            override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+                cachedFiles.add(destPath)
+                return Ok(Unit)
+            }
+
+            override fun computeSha256(filePath: String): Result<String, Sha256Error> {
+                val hash = sha256Results[filePath]
+                    ?: return Err(Sha256Error(filePath))
+                return Ok(hash)
+            }
+
+            override fun readFileContent(path: String): Result<String, OpenFailed> {
+                readCounts[path] = (readCounts[path] ?: 0) + 1
                 val content = pomContents[path]
                     ?: return Err(OpenFailed(path))
                 return Ok(content)
