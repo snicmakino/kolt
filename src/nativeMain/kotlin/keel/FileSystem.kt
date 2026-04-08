@@ -119,7 +119,7 @@ fun removeDirectoryRecursive(path: String): Result<Unit, RemoveFailed> {
 private fun isDirectory(path: String): Boolean {
     memScoped {
         val statBuf = alloc<stat>()
-        if (stat(path, statBuf.ptr) != 0) return false
+        if (lstat(path, statBuf.ptr) != 0) return false
         return (statBuf.st_mode.toInt() and S_IFMT) == S_IFDIR
     }
 }

@@ -2,7 +2,11 @@ package keel
 
 import com.github.michaelbull.result.getOrElse
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.ByteVar
+import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.toKString
+import platform.posix.PATH_MAX
 import platform.posix.getcwd
 import kotlin.system.exitProcess
 import kotlin.time.TimeSource
@@ -58,10 +62,13 @@ private fun doInit(args: List<String>) {
     val projectName = if (args.isNotEmpty()) {
         args[0]
     } else {
-        val cwd = getcwd(null, 0u)?.toKString()
+        val cwd = memScoped {
+            val buf = allocArray<ByteVar>(PATH_MAX)
+            getcwd(buf, PATH_MAX.toULong())?.toKString()
+        }
         if (cwd == null) {
             eprintln("error: could not determine current directory")
-            exitProcess(EXIT_BUILD_ERROR)
+            exitProcess(EXIT_CONFIG_ERROR)
         }
         inferProjectName(cwd)
     }
