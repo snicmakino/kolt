@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Kotlin/Native
+.konan/
+
+# OS
+.DS_Store
+
+# Database
+*.db
+
+# Exclude zigpj directory
+zigpj/
