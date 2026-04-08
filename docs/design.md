@@ -222,6 +222,7 @@ Phase 2では直接依存のみのためpom.xmlの取得は不要。
 | Deno | Rust | ツールチェイン一体型、lockファイル自動管理、`deno.json` の設計 |
 | pnpm | JS | コンテンツアドレッサブルなグローバルストア設計 |
 | Zig build | Zig | 宣言的依存定義（`build.zig.zon`）のフォーマット設計 |
+| [coursier](https://github.com/coursier/coursier) | Scala | **依存解決の設計参考（重要度: 高）**。状態マシン解決 (Done/Missing/Continue)、Exclusions (MinimizedExclusions)、VersionConstraint (interval + preferred)、不変な解決状態、POMメタデータキャッシュ |
 
 **共通して学べる設計判断:**
 

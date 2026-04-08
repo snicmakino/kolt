@@ -5,19 +5,14 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 
-private data class QueueEntry(
-    val groupArtifact: String,
-    val version: String
-)
-
 /**
- * Resolves dependencies transitively via BFS.
- * 1. Seed queue with direct deps
- * 2. For each dep: download JAR + POM if not cached, parse POM
- * 3. Extract transitive deps (filter scope/optional)
- * 4. Version conflicts: direct deps always win, otherwise highest version wins
- * 5. Cycle detection via visited set
- * 6. Parent POM chain for dependencyManagement version lookup
+ * Resolves dependencies transitively. Orchestrates I/O (POM/JAR fetching,
+ * hashing) around the pure [resolveGraph] algorithm.
+ *
+ * 1. Creates a POM lookup function backed by cache + download
+ * 2. Calls [resolveGraph] to resolve the dependency graph
+ * 3. Downloads JARs and computes SHA256 hashes
+ * 4. Detects lockfile changes
  */
 fun resolveTransitive(
     config: KeelConfig,
@@ -25,101 +20,71 @@ fun resolveTransitive(
     cacheBase: String,
     deps: ResolverDeps
 ): Result<ResolveResult, ResolveError> {
+    // Create POM lookup backed by cache + download
+    val pomLookup = createPomLookup(cacheBase, deps)
+
+    // Pure resolution
+    val nodes = resolveGraph(config.dependencies, pomLookup).getOrElse { error ->
+        return Err(error)
+    }
+
+    // Download JARs and compute hashes
+    return materialize(nodes, config, existingLock, cacheBase, deps)
+}
+
+/**
+ * Creates a POM lookup function that downloads, caches, and parses POM files.
+ */
+private fun createPomLookup(
+    cacheBase: String,
+    deps: ResolverDeps
+): (String, String) -> PomInfo? {
+    return { groupArtifact, version ->
+        val parts = groupArtifact.split(":")
+        if (parts.size == 2) {
+            val coord = Coordinate(parts[0], parts[1], version)
+            val pomCachePath = "$cacheBase/${buildPomCachePath(coord)}"
+
+            // Download POM if not cached
+            if (!deps.fileExists(pomCachePath)) {
+                val parentDir = pomCachePath.substringBeforeLast('/')
+                val dirOk = deps.ensureDirectoryRecursive(parentDir).getOrElse { null }
+                if (dirOk != null) {
+                    deps.downloadFile(buildPomDownloadUrl(coord), pomCachePath).getOrElse { null }
+                }
+            }
+
+            // Read and parse POM
+            val content = deps.readFileContent(pomCachePath).getOrElse { null }
+            content?.let { parsePom(it).getOrElse { null } }
+        } else {
+            null
+        }
+    }
+}
+
+/**
+ * Downloads JARs, computes SHA256 hashes, and checks lockfile for changes.
+ * Converts pure [DependencyNode] list into [ResolveResult] with I/O.
+ */
+private fun materialize(
+    nodes: List<DependencyNode>,
+    config: KeelConfig,
+    existingLock: Lockfile?,
+    cacheBase: String,
+    deps: ResolverDeps
+): Result<ResolveResult, ResolveError> {
     var lockChanged = false
-
-    // Track resolved versions: groupArtifact -> (version, isDirect)
-    val resolvedVersions = mutableMapOf<String, Pair<String, Boolean>>()
-    val queue = ArrayDeque<QueueEntry>()
-    val visited = mutableSetOf<String>() // "group:artifact:version"
-
-    // Seed with direct deps
-    for ((groupArtifact, version) in config.dependencies) {
-        resolvedVersions[groupArtifact] = Pair(version, true)
-        queue.addLast(QueueEntry(groupArtifact, version))
-    }
-
-    // BFS
-    while (queue.isNotEmpty()) {
-        val entry = queue.removeFirst()
-        val visitKey = "${entry.groupArtifact}:${entry.version}"
-        if (visitKey in visited) continue
-        visited.add(visitKey)
-
-        val coord = parseCoordinate(entry.groupArtifact, entry.version).getOrElse {
-            return Err(ResolveError.InvalidDependency(entry.groupArtifact))
-        }
-
-        // Download POM if not cached
-        val pomCachePath = "$cacheBase/${buildPomCachePath(coord)}"
-        if (!deps.fileExists(pomCachePath)) {
-            val parentDir = pomCachePath.substringBeforeLast('/')
-            deps.ensureDirectoryRecursive(parentDir).getOrElse {
-                return Err(ResolveError.DirectoryCreateFailed(parentDir))
-            }
-            val pomUrl = buildPomDownloadUrl(coord)
-            deps.downloadFile(pomUrl, pomCachePath).getOrElse { error ->
-                return Err(ResolveError.DownloadFailed(entry.groupArtifact, error))
-            }
-        }
-
-        // Parse POM
-        val pomContent = deps.readFileContent(pomCachePath).getOrElse {
-            // If POM can't be read, skip transitive deps for this artifact
-            continue
-        }
-        val pomInfo = parsePom(pomContent).getOrElse {
-            // If POM can't be parsed, skip transitive deps
-            continue
-        }
-
-        // Resolve parent POM chain for dependencyManagement
-        val depMgmt = collectDependencyManagement(pomInfo, cacheBase, deps)
-
-        // Process transitive dependencies
-        for (pomDep in pomInfo.dependencies) {
-            // Filter scope
-            val scope = pomDep.scope ?: "compile"
-            if (scope != "compile" && scope != "runtime") continue
-
-            // Filter optional
-            if (pomDep.optional) continue
-
-            val depGroupArtifact = "${pomDep.groupId}:${pomDep.artifactId}"
-
-            // Resolve version from dependencyManagement if not specified
-            val depVersion = pomDep.version
-                ?: depMgmt[depGroupArtifact]
-                ?: continue // Skip if version can't be determined
-
-            val existing = resolvedVersions[depGroupArtifact]
-            if (existing != null) {
-                val (existingVersion, isDirect) = existing
-                if (isDirect) {
-                    // Direct deps always win
-                    continue
-                }
-                // Transitive: highest version wins
-                if (compareVersions(depVersion, existingVersion) <= 0) {
-                    continue
-                }
-            }
-
-            resolvedVersions[depGroupArtifact] = Pair(depVersion, false)
-            queue.addLast(QueueEntry(depGroupArtifact, depVersion))
-        }
-    }
-
-    // Now download JARs and compute hashes for all resolved deps
     val resolvedDeps = mutableListOf<ResolvedDep>()
-    for ((groupArtifact, versionAndDirect) in resolvedVersions) {
-        val (version, isDirect) = versionAndDirect
-        val coord = parseCoordinate(groupArtifact, version).getOrElse {
-            return Err(ResolveError.InvalidDependency(groupArtifact))
+
+    for (node in nodes) {
+        val coord = parseCoordinate(node.groupArtifact, node.version).getOrElse {
+            return Err(ResolveError.InvalidDependency(node.groupArtifact))
         }
 
         val relativePath = buildCachePath(coord)
         val fullCachePath = "$cacheBase/$relativePath"
-        val lockEntry = existingLock?.dependencies?.get(groupArtifact)
+        val lockEntry = existingLock?.dependencies?.get(node.groupArtifact)
 
         // Download JAR if not cached
         if (!deps.fileExists(fullCachePath)) {
@@ -127,91 +92,42 @@ fun resolveTransitive(
             deps.ensureDirectoryRecursive(parentDir).getOrElse {
                 return Err(ResolveError.DirectoryCreateFailed(parentDir))
             }
-            val url = buildDownloadUrl(coord)
-            deps.downloadFile(url, fullCachePath).getOrElse { error ->
-                return Err(ResolveError.DownloadFailed(groupArtifact, error))
+            deps.downloadFile(buildDownloadUrl(coord), fullCachePath).getOrElse { error ->
+                return Err(ResolveError.DownloadFailed(node.groupArtifact, error))
             }
             lockChanged = true
         }
 
         // Compute SHA256
         val hash = deps.computeSha256(fullCachePath).getOrElse { error ->
-            return Err(ResolveError.HashComputeFailed(groupArtifact, error))
+            return Err(ResolveError.HashComputeFailed(node.groupArtifact, error))
         }
 
         // Verify against lockfile
         if (lockEntry != null) {
-            if (lockEntry.version != version) {
+            if (lockEntry.version != node.version) {
                 lockChanged = true
             } else if (lockEntry.sha256 != hash) {
-                return Err(ResolveError.Sha256Mismatch(groupArtifact, lockEntry.sha256, hash))
+                return Err(ResolveError.Sha256Mismatch(node.groupArtifact, lockEntry.sha256, hash))
             }
         } else {
             lockChanged = true
         }
 
-        resolvedDeps.add(ResolvedDep(groupArtifact, version, hash, fullCachePath, transitive = !isDirect))
+        resolvedDeps.add(ResolvedDep(node.groupArtifact, node.version, hash, fullCachePath, transitive = !node.direct))
     }
 
     if (existingLock != null) {
         if (existingLock.kotlin != config.kotlin || existingLock.jvmTarget != config.jvmTarget) {
             lockChanged = true
         }
+        val resolvedKeys = nodes.map { it.groupArtifact }.toSet()
         for (key in existingLock.dependencies.keys) {
-            if (key !in resolvedVersions) {
+            if (key !in resolvedKeys) {
                 lockChanged = true
             }
         }
     }
 
     return Ok(ResolveResult(resolvedDeps, lockChanged))
-}
-
-/**
- * Collects dependencyManagement entries from the POM and its parent chain.
- * Returns a map of groupArtifact -> version.
- */
-private fun collectDependencyManagement(
-    pomInfo: PomInfo,
-    cacheBase: String,
-    deps: ResolverDeps,
-    depth: Int = 0
-): Map<String, String> {
-    if (depth > 10) return emptyMap()
-
-    val result = mutableMapOf<String, String>()
-
-    // Add current POM's dependencyManagement
-    for (managed in pomInfo.dependencyManagement) {
-        val key = "${managed.groupId}:${managed.artifactId}"
-        if (managed.version != null && key !in result) {
-            result[key] = managed.version
-        }
-    }
-
-    // Follow parent POM chain
-    val parent = pomInfo.parent ?: return result
-    val parentCoord = Coordinate(parent.groupId, parent.artifactId, parent.version)
-    val parentPomPath = "$cacheBase/${buildPomCachePath(parentCoord)}"
-
-    // Download parent POM if not cached
-    if (!deps.fileExists(parentPomPath)) {
-        val parentDir = parentPomPath.substringBeforeLast('/')
-        deps.ensureDirectoryRecursive(parentDir).getOrElse { return result }
-        val parentUrl = buildPomDownloadUrl(parentCoord)
-        deps.downloadFile(parentUrl, parentPomPath).getOrElse { return result }
-    }
-
-    val parentContent = deps.readFileContent(parentPomPath).getOrElse { return result }
-    val parentPomInfo = parsePom(parentContent).getOrElse { return result }
-
-    // Parent entries have lower priority (don't override child's)
-    val parentMgmt = collectDependencyManagement(parentPomInfo, cacheBase, deps, depth + 1)
-    for ((key, version) in parentMgmt) {
-        if (key !in result) {
-            result[key] = version
-        }
-    }
-
-    return result
 }

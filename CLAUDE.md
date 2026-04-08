@@ -38,8 +38,9 @@ Binary: `build/bin/linuxX64/debugExecutable/keel.kexe`
 | Sha256.kt | SHA256 hash computation |
 | PomParser.kt | POM XML parsing, property interpolation (pure function) |
 | VersionCompare.kt | Maven version comparison (pure function) |
-| TransitiveResolver.kt | BFS transitive dependency resolution with scope/optional filtering |
-| Resolver.kt | Dependency resolution orchestration, delegates to TransitiveResolver |
+| Resolution.kt | Pure BFS dependency graph resolution (pure function, no I/O) |
+| TransitiveResolver.kt | I/O orchestration: POM/JAR fetching, hashing, lockfile change detection |
+| Resolver.kt | Dependency resolution entry point, delegates to TransitiveResolver |
 | Main.kt | CLI entrypoint, module integration |
 
 ## Error Handling Policy
@@ -57,6 +58,10 @@ ensureDirectory()  → Result<Unit, MkdirFailed>
 executeCommand()   → Result<Int, ProcessError>
 executeAndCapture() → Result<String, ProcessError>
 ```
+
+## Design References
+
+- [coursier](https://github.com/coursier/coursier) — Scala-based Maven/Ivy dependency resolver. Primary reference for transitive resolution design: state-machine resolution (Done/Missing/Continue), exclusions (MinimizedExclusions), version intervals/constraints, immutable resolution state.
 
 ## Coding Conventions
 
