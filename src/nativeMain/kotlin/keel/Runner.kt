@@ -5,10 +5,11 @@ data class RunCommand(
     val jarPath: String
 )
 
-fun runCommand(config: KeelConfig): RunCommand {
+fun runCommand(config: KeelConfig, classpath: String? = null): RunCommand {
     val path = jarPath(config)
+    val cp = if (!classpath.isNullOrEmpty()) "$path:$classpath" else path
     return RunCommand(
-        args = listOf("java", "-jar", path),
+        args = listOf("java", "-cp", cp, config.main),
         jarPath = path
     )
 }

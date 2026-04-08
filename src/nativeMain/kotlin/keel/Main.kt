@@ -12,8 +12,8 @@ fun main(args: Array<String>) {
     when (args[0]) {
         "build" -> doBuild()
         "run" -> {
-            val config = doBuild()
-            doRun(config)
+            val (config, classpath) = doBuild()
+            doRun(config, classpath)
         }
         else -> {
             eprintln("error: unknown command '${args[0]}'")
@@ -141,7 +141,9 @@ private fun resolveDependencies(config: KeelConfig): String? {
     return buildClasspath(paths).ifEmpty { null }
 }
 
-private fun doBuild(): KeelConfig {
+private data class BuildResult(val config: KeelConfig, val classpath: String?)
+
+private fun doBuild(): BuildResult {
     val config = loadProjectConfig()
     checkVersion(config)
 
@@ -166,11 +168,11 @@ private fun doBuild(): KeelConfig {
         exitProcess(1)
     }
     println("built ${cmd.outputPath}")
-    return config
+    return BuildResult(config, classpath)
 }
 
-private fun doRun(config: KeelConfig) {
-    val cmd = runCommand(config)
+private fun doRun(config: KeelConfig, classpath: String?) {
+    val cmd = runCommand(config, classpath)
 
     if (!fileExists(cmd.jarPath)) {
         eprintln("error: ${cmd.jarPath} not found. Run 'keel build' first.")
