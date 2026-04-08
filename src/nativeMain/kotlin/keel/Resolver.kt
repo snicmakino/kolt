@@ -29,6 +29,10 @@ data class ResolveResult(
     val lockChanged: Boolean
 )
 
+/**
+ * Abstraction of side effects required for dependency resolution.
+ * Inject a fake implementation in tests for isolation.
+ */
 interface ResolverDeps {
     fun fileExists(path: String): Boolean
     fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed>
@@ -36,6 +40,14 @@ interface ResolverDeps {
     fun computeSha256(filePath: String): Result<String, Sha256Error>
 }
 
+/**
+ * Resolves dependencies. For each dependency:
+ * 1. Parse Maven coordinate
+ * 2. Download from Maven Central if not cached
+ * 3. Compute SHA256 hash
+ * 4. Verify hash against existing lockfile (mismatch is an error)
+ * 5. Detect changes in kotlin/jvmTarget or added/removed deps, reflected in [ResolveResult.lockChanged]
+ */
 fun resolve(
     config: KeelConfig,
     existingLock: Lockfile?,

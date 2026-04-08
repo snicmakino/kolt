@@ -15,6 +15,19 @@ sealed class LockfileError {
 
 data class LockEntry(val version: String, val sha256: String)
 
+/**
+ * Domain model for keel.lock. Serialized as JSON:
+ * ```json
+ * {
+ *   "version": 1,
+ *   "kotlin": "2.1.0",
+ *   "jvm_target": "17",
+ *   "dependencies": {
+ *     "group:artifact": { "version": "1.0.0", "sha256": "..." }
+ *   }
+ * }
+ * ```
+ */
 data class Lockfile(
     val version: Int,
     val kotlin: String,
