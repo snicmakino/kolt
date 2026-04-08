@@ -81,9 +81,10 @@ fun resolveGraph(
             // Check if this dep is excluded by inherited exclusions
             if (isExcluded(pomDep.groupId, pomDep.artifactId, entry.exclusions)) continue
 
-            val depVersion = pomDep.version
+            val rawVersion = pomDep.version
                 ?: depMgmt[depGroupArtifact]
                 ?: continue
+            val depVersion = selectVersion(rawVersion)
 
             val existing = resolvedVersions[depGroupArtifact]
             if (existing != null) {

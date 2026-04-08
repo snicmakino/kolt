@@ -406,6 +406,43 @@ class ResolutionTest {
         dependencies = deps
     )
 
+    @Test
+    fun resolveGraphVersionRangeSelectsConcreteVersion() {
+        // lib depends on util with version range [1.0.0,2.0.0)
+        val poms = mapOf(
+            "com.example:lib:1.0.0" to pomInfo(
+                "com.example", "lib", "1.0.0",
+                deps = listOf(pomDep("com.example", "util", "[1.0.0,2.0.0)"))
+            ),
+            "com.example:util:1.0.0" to pomInfo("com.example", "util", "1.0.0")
+        )
+        val result = resolveGraph(
+            mapOf("com.example:lib" to "1.0.0"),
+            poms.pomLookup()
+        )
+        val nodes = assertNotNull(result.get())
+        val util = nodes.first { it.groupArtifact == "com.example:util" }
+        assertEquals("1.0.0", util.version)
+    }
+
+    @Test
+    fun resolveGraphPinnedIntervalSelectsExactVersion() {
+        val poms = mapOf(
+            "com.example:lib:1.0.0" to pomInfo(
+                "com.example", "lib", "1.0.0",
+                deps = listOf(pomDep("com.example", "util", "[3.5.0]"))
+            ),
+            "com.example:util:3.5.0" to pomInfo("com.example", "util", "3.5.0")
+        )
+        val result = resolveGraph(
+            mapOf("com.example:lib" to "1.0.0"),
+            poms.pomLookup()
+        )
+        val nodes = assertNotNull(result.get())
+        val util = nodes.first { it.groupArtifact == "com.example:util" }
+        assertEquals("3.5.0", util.version)
+    }
+
     private fun Map<String, PomInfo>.pomLookup(): (String, String) -> PomInfo? = { groupArtifact, version ->
         this["$groupArtifact:$version"]
     }

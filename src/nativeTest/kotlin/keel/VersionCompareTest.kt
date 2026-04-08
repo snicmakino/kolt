@@ -2,6 +2,9 @@ package keel
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class VersionCompareTest {
@@ -94,5 +97,126 @@ class VersionCompareTest {
     @Test
     fun trailingZeroSegmentsAreEqualLonger() {
         assertEquals(0, compareVersions("1.0.0", "1.0.0.0"))
+    }
+
+    // --- Version interval parsing ---
+
+    @Test
+    fun parseExactVersionConstraint() {
+        val vc = parseVersionConstraint("1.0.0")
+        assertNull(vc.interval)
+        assertEquals("1.0.0", vc.preferred)
+    }
+
+    @Test
+    fun parseClosedInterval() {
+        val vc = parseVersionConstraint("[1.0.0,2.0.0]")
+        val interval = assertNotNull(vc.interval)
+        assertEquals("1.0.0", interval.from)
+        assertTrue(interval.fromInclusive)
+        assertEquals("2.0.0", interval.to)
+        assertTrue(interval.toInclusive)
+        assertNull(vc.preferred)
+    }
+
+    @Test
+    fun parseHalfOpenInterval() {
+        val vc = parseVersionConstraint("[1.0.0,2.0.0)")
+        val interval = assertNotNull(vc.interval)
+        assertEquals("1.0.0", interval.from)
+        assertTrue(interval.fromInclusive)
+        assertEquals("2.0.0", interval.to)
+        assertFalse(interval.toInclusive)
+    }
+
+    @Test
+    fun parseOpenInterval() {
+        val vc = parseVersionConstraint("(1.0.0,2.0.0)")
+        val interval = assertNotNull(vc.interval)
+        assertEquals("1.0.0", interval.from)
+        assertFalse(interval.fromInclusive)
+        assertEquals("2.0.0", interval.to)
+        assertFalse(interval.toInclusive)
+    }
+
+    @Test
+    fun parseUnboundedUpperInterval() {
+        val vc = parseVersionConstraint("[1.0.0,)")
+        val interval = assertNotNull(vc.interval)
+        assertEquals("1.0.0", interval.from)
+        assertTrue(interval.fromInclusive)
+        assertNull(interval.to)
+    }
+
+    @Test
+    fun parseUnboundedLowerInterval() {
+        val vc = parseVersionConstraint("(,2.0.0]")
+        val interval = assertNotNull(vc.interval)
+        assertNull(interval.from)
+        assertEquals("2.0.0", interval.to)
+        assertTrue(interval.toInclusive)
+    }
+
+    @Test
+    fun parsePinnedInterval() {
+        val vc = parseVersionConstraint("[1.5.0]")
+        val interval = assertNotNull(vc.interval)
+        assertEquals("1.5.0", interval.from)
+        assertEquals("1.5.0", interval.to)
+        assertTrue(interval.fromInclusive)
+        assertTrue(interval.toInclusive)
+    }
+
+    // --- selectVersion ---
+
+    @Test
+    fun selectVersionFromExactConstraint() {
+        assertEquals("1.0.0", selectVersion("1.0.0"))
+    }
+
+    @Test
+    fun selectVersionFromClosedIntervalUsesLowerBound() {
+        assertEquals("1.0.0", selectVersion("[1.0.0,2.0.0]"))
+    }
+
+    @Test
+    fun selectVersionFromPinnedInterval() {
+        assertEquals("1.5.0", selectVersion("[1.5.0]"))
+    }
+
+    @Test
+    fun selectVersionFromUnboundedUpperUsesLowerBound() {
+        assertEquals("1.0.0", selectVersion("[1.0.0,)"))
+    }
+
+    @Test
+    fun selectVersionFromUnboundedLowerUsesUpperBound() {
+        assertEquals("2.0.0", selectVersion("(,2.0.0]"))
+    }
+
+    // --- VersionInterval.contains ---
+
+    @Test
+    fun intervalContainsVersionInRange() {
+        val vc = parseVersionConstraint("[1.0.0,2.0.0]")
+        assertTrue(vc.interval!!.contains("1.5.0"))
+    }
+
+    @Test
+    fun intervalExcludesVersionOutOfRange() {
+        val vc = parseVersionConstraint("[1.0.0,2.0.0)")
+        assertFalse(vc.interval!!.contains("2.0.0"))
+    }
+
+    @Test
+    fun intervalIncludesLowerBoundWhenInclusive() {
+        val vc = parseVersionConstraint("[1.0.0,2.0.0)")
+        assertTrue(vc.interval!!.contains("1.0.0"))
+    }
+
+    @Test
+    fun intervalExcludesLowerBoundWhenExclusive() {
+        val vc = parseVersionConstraint("(1.0.0,2.0.0)")
+        assertFalse(vc.interval!!.contains("1.0.0"))
     }
 }

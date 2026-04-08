@@ -81,3 +81,93 @@ private fun parseSegment(token: String): VersionSegment {
     // Unknown qualifier treated as release-level
     return VersionSegment.Qualifier(VersionSegment.RANK_RELEASE, 0L)
 }
+
+// --- Version intervals (Maven version range syntax) ---
+
+/**
+ * Represents a Maven version interval, e.g. `[1.0,2.0)`.
+ */
+data class VersionInterval(
+    val from: String?,
+    val fromInclusive: Boolean,
+    val to: String?,
+    val toInclusive: Boolean
+) {
+    fun contains(version: String): Boolean {
+        if (from != null) {
+            val cmp = compareVersions(version, from)
+            if (fromInclusive && cmp < 0) return false
+            if (!fromInclusive && cmp <= 0) return false
+        }
+        if (to != null) {
+            val cmp = compareVersions(version, to)
+            if (toInclusive && cmp > 0) return false
+            if (!toInclusive && cmp >= 0) return false
+        }
+        return true
+    }
+}
+
+/**
+ * A parsed version constraint — either a preferred (exact) version
+ * or a version interval.
+ */
+data class VersionConstraint(
+    val preferred: String?,
+    val interval: VersionInterval?
+)
+
+/**
+ * Parses a Maven version constraint string.
+ * - `1.0.0` → preferred version
+ * - `[1.0,2.0)` → interval
+ * - `[1.5]` → pinned interval (from == to, both inclusive)
+ */
+fun parseVersionConstraint(constraint: String): VersionConstraint {
+    val trimmed = constraint.trim()
+    if (trimmed.isEmpty()) return VersionConstraint(trimmed, null)
+
+    val first = trimmed[0]
+    if (first != '[' && first != '(') {
+        return VersionConstraint(trimmed, null)
+    }
+
+    val last = trimmed.last()
+    val fromInclusive = first == '['
+    val toInclusive = last == ']'
+    val inner = trimmed.substring(1, trimmed.length - 1)
+
+    val commaIndex = inner.indexOf(',')
+    if (commaIndex == -1) {
+        // Pinned: [1.5.0]
+        val version = inner.trim()
+        return VersionConstraint(null, VersionInterval(version, true, version, true))
+    }
+
+    val fromStr = inner.substring(0, commaIndex).trim()
+    val toStr = inner.substring(commaIndex + 1).trim()
+
+    return VersionConstraint(
+        null,
+        VersionInterval(
+            from = fromStr.ifEmpty { null },
+            fromInclusive = fromInclusive,
+            to = toStr.ifEmpty { null },
+            toInclusive = toInclusive
+        )
+    )
+}
+
+/**
+ * Selects a concrete version from a version constraint string.
+ * - Exact version: returned as-is
+ * - Interval with lower bound: uses lower bound
+ * - Interval with only upper bound: uses upper bound
+ * - Pinned interval `[X]`: uses X
+ */
+fun selectVersion(constraint: String): String {
+    val vc = parseVersionConstraint(constraint)
+    if (vc.preferred != null) return vc.preferred
+    val interval = vc.interval ?: return constraint
+    return interval.from ?: interval.to ?: constraint
+}
