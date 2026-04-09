@@ -24,3 +24,4 @@ kls-classpath
 
 # Exclude zigpj directory
 zigpj/
+.takt/
