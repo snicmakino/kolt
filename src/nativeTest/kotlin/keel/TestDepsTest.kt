@@ -43,23 +43,63 @@ class TestDepsTest {
         val config = testConfig(testDependencies = mapOf(
             "org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"
         ))
-        val injected = autoInjectedTestDeps(config)
-        val allDeps = injected + config.dependencies + config.testDependencies
+        val allDeps = mergeAllDeps(config)
 
-        // User's explicit version wins (Map.plus keeps right-hand side)
+        // User's [test-dependencies] version wins
         assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
     }
 
     @Test
-    fun mergedDepsIncludesAutoInjectedAndUserDeps() {
-        val config = testConfig(testDependencies = mapOf(
-            "io.kotest:kotest-runner-junit5" to "5.8.0"
+    fun mainDepOverridesAutoInjected() {
+        val config = testConfig(dependencies = mapOf(
+            "org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"
         ))
-        val injected = autoInjectedTestDeps(config)
-        val allTestDeps = injected + config.testDependencies
+        val allDeps = mergeAllDeps(config)
 
-        assertEquals(2, allTestDeps.size)
-        assertEquals("2.1.0", allTestDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
-        assertEquals("5.8.0", allTestDeps["io.kotest:kotest-runner-junit5"])
+        // User's [dependencies] version wins over auto-injected
+        assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
+    }
+
+    @Test
+    fun testDepOverridesMainDep() {
+        val config = testConfig(
+            dependencies = mapOf(
+                "org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"
+            ),
+            testDependencies = mapOf(
+                "org.jetbrains.kotlin:kotlin-test-junit5" to "1.9.0"
+            )
+        )
+        val allDeps = mergeAllDeps(config)
+
+        // [test-dependencies] has highest priority
+        assertEquals("1.9.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
+    }
+
+    @Test
+    fun mergeAllDepsIncludesAutoInjectedAndUserDeps() {
+        val config = testConfig(
+            dependencies = mapOf("com.example:lib" to "1.0.0"),
+            testDependencies = mapOf("io.kotest:kotest-runner-junit5" to "5.8.0")
+        )
+        val allDeps = mergeAllDeps(config)
+
+        assertEquals(3, allDeps.size)
+        assertEquals("2.1.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
+        assertEquals("1.0.0", allDeps["com.example:lib"])
+        assertEquals("5.8.0", allDeps["io.kotest:kotest-runner-junit5"])
+    }
+
+    @Test
+    fun mergeAllDepsNativeTargetHasNoAutoInjected() {
+        val config = KeelConfig(
+            name = "my-app", version = "0.1.0", kotlin = "2.1.0",
+            target = "native", main = "MainKt", sources = listOf("src"),
+            dependencies = mapOf("com.example:lib" to "1.0.0")
+        )
+        val allDeps = mergeAllDeps(config)
+
+        assertEquals(1, allDeps.size)
+        assertEquals("1.0.0", allDeps["com.example:lib"])
     }
 }

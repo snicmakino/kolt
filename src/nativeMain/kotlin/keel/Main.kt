@@ -332,13 +332,6 @@ private fun createResolverDeps(client: io.ktor.client.HttpClient) = object : Res
     override fun readFileContent(path: String) = readFileAsString(path)
 }
 
-/**
- * Merges main deps, auto-injected test deps, and user test deps.
- * Priority: auto-injected < main deps < user test deps (right-hand side wins).
- */
-private fun mergeAllDeps(config: KeelConfig): Map<String, String> =
-    autoInjectedTestDeps(config) + config.dependencies + config.testDependencies
-
 private fun resolveDependencies(config: KeelConfig): String? {
     // Warn if the same dependency appears in both [dependencies] and [test-dependencies]
     val overlap = config.dependencies.keys.intersect(config.testDependencies.keys)
