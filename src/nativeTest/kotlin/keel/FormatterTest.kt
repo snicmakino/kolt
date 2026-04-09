@@ -6,18 +6,74 @@ import kotlin.test.assertEquals
 class FormatterTest {
 
     @Test
-    fun formatCommandWithSingleFile() {
+    fun formatCommandDefaultsToGoogleStyle() {
         val cmd = formatCommand(
-            ktfmtJarPath = "/home/user/.keel/tools/ktfmt-0.54-jar-with-dependencies.jar",
+            ktfmtJarPath = "/tools/ktfmt.jar",
             files = listOf("src/Main.kt"),
             checkOnly = false
         )
 
         assertEquals(
             listOf(
-                "java", "-jar",
-                "/home/user/.keel/tools/ktfmt-0.54-jar-with-dependencies.jar",
+                "java", "-jar", "/tools/ktfmt.jar",
+                "--google-style",
+                "src/Main.kt"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun formatCommandWithGoogleStyle() {
+        val cmd = formatCommand(
+            ktfmtJarPath = "/tools/ktfmt.jar",
+            files = listOf("src/Main.kt"),
+            checkOnly = false,
+            style = "google"
+        )
+
+        assertEquals(
+            listOf(
+                "java", "-jar", "/tools/ktfmt.jar",
+                "--google-style",
+                "src/Main.kt"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun formatCommandWithKotlinlangStyle() {
+        val cmd = formatCommand(
+            ktfmtJarPath = "/tools/ktfmt.jar",
+            files = listOf("src/Main.kt"),
+            checkOnly = false,
+            style = "kotlinlang"
+        )
+
+        assertEquals(
+            listOf(
+                "java", "-jar", "/tools/ktfmt.jar",
                 "--kotlinlang-style",
+                "src/Main.kt"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun formatCommandWithMetaStyle() {
+        val cmd = formatCommand(
+            ktfmtJarPath = "/tools/ktfmt.jar",
+            files = listOf("src/Main.kt"),
+            checkOnly = false,
+            style = "meta"
+        )
+
+        assertEquals(
+            listOf(
+                "java", "-jar", "/tools/ktfmt.jar",
+                "--meta-style",
                 "src/Main.kt"
             ),
             cmd.args
@@ -35,7 +91,7 @@ class FormatterTest {
         assertEquals(
             listOf(
                 "java", "-jar", "/tools/ktfmt.jar",
-                "--kotlinlang-style",
+                "--google-style",
                 "src/Main.kt", "src/Config.kt", "test/MainTest.kt"
             ),
             cmd.args
@@ -53,7 +109,7 @@ class FormatterTest {
         assertEquals(
             listOf(
                 "java", "-jar", "/tools/ktfmt.jar",
-                "--kotlinlang-style"
+                "--google-style"
             ),
             cmd.args
         )
@@ -70,7 +126,7 @@ class FormatterTest {
         assertEquals(
             listOf(
                 "java", "-jar", "/tools/ktfmt.jar",
-                "--kotlinlang-style",
+                "--google-style",
                 "--set-exit-if-changed",
                 "--dry-run",
                 "src/Main.kt"

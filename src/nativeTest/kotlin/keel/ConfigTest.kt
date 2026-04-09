@@ -243,6 +243,28 @@ class ConfigTest {
     }
 
     @Test
+    fun parseMinimalConfigHasDefaultFmtStyle() {
+        val config = assertNotNull(parseConfig(minimalToml).get())
+        assertEquals("google", config.fmtStyle)
+    }
+
+    @Test
+    fun parseConfigWithFmtStyle() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            fmt_style = "kotlinlang"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("kotlinlang", config.fmtStyle)
+    }
+
+    @Test
     fun commentsAreIgnored() {
         val toml = """
             # Project configuration

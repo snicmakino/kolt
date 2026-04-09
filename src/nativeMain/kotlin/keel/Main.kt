@@ -361,7 +361,7 @@ private fun doFmt(args: List<String>) {
         return
     }
 
-    val cmd = formatCommand(ktfmtPath, files, checkOnly)
+    val cmd = formatCommand(ktfmtPath, files, checkOnly, style = config.fmtStyle)
 
     if (checkOnly) {
         println("checking format...")

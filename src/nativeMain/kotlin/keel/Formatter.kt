@@ -7,13 +7,14 @@ data class FormatCommand(
 fun formatCommand(
     ktfmtJarPath: String,
     files: List<String>,
-    checkOnly: Boolean
+    checkOnly: Boolean,
+    style: String = "google"
 ): FormatCommand {
     val args = buildList {
         add("java")
         add("-jar")
         add(ktfmtJarPath)
-        add("--kotlinlang-style")
+        add("--${style}-style")
         if (checkOnly) {
             add("--set-exit-if-changed")
             add("--dry-run")
