@@ -294,6 +294,8 @@ private fun checkVersion(config: KeelConfig) {
 }
 
 private const val LOCK_FILE = "keel.lock"
+private const val WORKSPACE_JSON = "workspace.json"
+private const val KLS_CLASSPATH = "kls-classpath"
 
 private const val KTFMT_VERSION = "0.54"
 private const val KTFMT_ARTIFACT = "ktfmt"
@@ -504,8 +506,27 @@ private fun resolveDependencies(config: KeelConfig): String? {
         }
     }
 
+    // Generate workspace.json and kls-classpath when lockfile changes or files are missing
+    if (resolveResult.lockChanged || !fileExists(WORKSPACE_JSON) || !fileExists(KLS_CLASSPATH)) {
+        writeWorkspaceFiles(config, resolveResult.deps)
+    }
+
     val paths = resolveResult.deps.map { it.cachePath }
     return buildClasspath(paths).ifEmpty { null }
+}
+
+private fun writeWorkspaceFiles(config: KeelConfig, deps: List<ResolvedDep>) {
+    val workspaceJson = generateWorkspaceJson(config, deps)
+    writeFileAsString(WORKSPACE_JSON, workspaceJson).getOrElse { error ->
+        eprintln("warning: could not write $WORKSPACE_JSON: ${error.path}")
+        return
+    }
+
+    val klsContent = generateKlsClasspath(deps)
+    writeFileAsString(KLS_CLASSPATH, klsContent).getOrElse { error ->
+        eprintln("warning: could not write $KLS_CLASSPATH: ${error.path}")
+        return
+    }
 }
 
 private fun doTest(testArgs: List<String> = emptyList()) {
