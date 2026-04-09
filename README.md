@@ -25,19 +25,24 @@ cp build/bin/linuxX64/debugExecutable/keel.kexe ~/.local/bin/keel
 ## Quick Start
 
 ```sh
-keel init my-app
-cd my-app
+mkdir my-app && cd my-app
+keel init
 keel build
 keel run
 ```
 
-This creates a project with the following structure:
+This creates the following structure in the current directory:
 
 ```
-my-app/
-  keel.toml
-  src/Main.kt
-  test/MainTest.kt
+keel.toml
+src/Main.kt
+test/MainTest.kt
+```
+
+The project name is inferred from the directory name. To use a different name:
+
+```sh
+keel init custom-name
 ```
 
 ## Commands
