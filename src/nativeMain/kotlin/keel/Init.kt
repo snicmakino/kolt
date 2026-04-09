@@ -8,6 +8,21 @@ fun generateKeelToml(projectName: String): String = buildString {
     appendLine("""jvm_target = "17"""")
     appendLine("""main = "MainKt"""")
     appendLine("""sources = ["src"]""")
+    appendLine()
+    appendLine("[test-dependencies]")
+    appendLine(""""org.jetbrains.kotlin:kotlin-test-junit5" = "2.1.0"""")
+}
+
+fun generateTestKt(): String = buildString {
+    appendLine("import kotlin.test.Test")
+    appendLine("import kotlin.test.assertEquals")
+    appendLine()
+    appendLine("class MainTest {")
+    appendLine("    @Test")
+    appendLine("    fun example() {")
+    appendLine("        assertEquals(4, 2 + 2)")
+    appendLine("    }")
+    appendLine("}")
 }
 
 fun generateMainKt(): String = buildString {

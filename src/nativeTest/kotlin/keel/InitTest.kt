@@ -59,6 +59,20 @@ class InitTest {
     }
 
     @Test
+    fun generateTomlContainsTestDependencies() {
+        val toml = generateKeelToml("my-app")
+        assertTrue(toml.contains("[test-dependencies]"))
+        assertTrue(toml.contains("kotlin-test-junit5"))
+    }
+
+    @Test
+    fun generateTestKtContainsTestAnnotation() {
+        val source = generateTestKt()
+        assertTrue(source.contains("@Test"))
+        assertTrue(source.contains("import kotlin.test.Test"))
+    }
+
+    @Test
     fun invalidProjectNames() {
         assertFalse(isValidProjectName(""))
         assertFalse(isValidProjectName("my\"app"))

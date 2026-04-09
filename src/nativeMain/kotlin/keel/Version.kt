@@ -1,5 +1,5 @@
 package keel
 
-const val KEEL_VERSION = "0.3.0"
+const val KEEL_VERSION = "0.4.0"
 
 fun versionString(): String = "keel $KEEL_VERSION"

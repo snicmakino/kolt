@@ -29,6 +29,13 @@ fun main(args: Array<String>) {
             val (config, classpath) = doBuild()
             doRun(config, classpath, appArgs)
         }
+        "test" -> {
+            val testArgs = args.toList().let { all ->
+                val sep = all.indexOf("--")
+                if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
+            }
+            doTest(testArgs)
+        }
         "clean" -> doClean()
         "deps" -> doDeps(args.drop(1))
         "update" -> doUpdate()
@@ -49,6 +56,7 @@ private fun printUsage() {
     eprintln("  build      Compile the project")
     eprintln("  check      Check compilation without producing artifacts")
     eprintln("  run        Build and run the project")
+    eprintln("  test       Build and run tests")
     eprintln("  clean      Remove build artifacts")
     eprintln("  deps tree  Show dependency tree")
     eprintln("  update     Re-resolve dependencies and update lockfile")
@@ -107,12 +115,30 @@ private fun doInit(args: List<String>) {
         println("created $mainKtPath")
     }
 
+    val testDir = "test"
+    if (!fileExists(testDir)) {
+        ensureDirectory(testDir).getOrElse { error ->
+            eprintln("error: could not create directory ${error.path}")
+            exitProcess(EXIT_BUILD_ERROR)
+        }
+    }
+
+    val testKtPath = "$testDir/MainTest.kt"
+    if (!fileExists(testKtPath)) {
+        writeFileAsString(testKtPath, generateTestKt()).getOrElse { error ->
+            eprintln("error: could not write ${error.path}")
+            exitProcess(EXIT_BUILD_ERROR)
+        }
+        println("created $testKtPath")
+    }
+
     println("initialized project '$projectName'")
 }
 
 private fun doUpdate() {
     val config = loadProjectConfig()
-    if (config.dependencies.isEmpty()) {
+    val allDeps = config.dependencies + config.testDependencies
+    if (allDeps.isEmpty()) {
         println("no dependencies to update")
         return
     }
@@ -124,7 +150,7 @@ private fun doUpdate() {
     val cacheBase = "$home/.keel/cache"
 
     // Delete cached JARs to force re-download
-    for ((groupArtifact, version) in config.dependencies) {
+    for ((groupArtifact, version) in allDeps) {
         val coord = parseCoordinate(groupArtifact, version).getOrElse { continue }
         val jarPath = "$cacheBase/${buildCachePath(coord)}"
         if (fileExists(jarPath)) {
@@ -133,9 +159,14 @@ private fun doUpdate() {
     }
 
     // Resolve without existing lockfile to get fresh state
+    val resolveConfig = if (config.testDependencies.isNotEmpty()) {
+        config.copy(dependencies = allDeps)
+    } else {
+        config
+    }
     println("updating dependencies...")
     val resolveResult = withHttpClient { client ->
-        resolve(config, null, cacheBase, createResolverDeps(client))
+        resolve(resolveConfig, null, cacheBase, createResolverDeps(client))
     }.getOrElse { error ->
         when (error) {
             is ResolveError.InvalidDependency -> eprintln("error: invalid dependency '${error.input}'")
@@ -152,7 +183,7 @@ private fun doUpdate() {
     }
 
     // Always write lockfile
-    val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
+    val lockfile = buildLockfileFromResolved(resolveConfig, resolveResult.deps)
     val lockJson = serializeLockfile(lockfile)
     writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
         eprintln("error: could not write ${error.path}")
@@ -167,7 +198,8 @@ private fun doDeps(args: List<String>) {
         exitProcess(EXIT_BUILD_ERROR)
     }
     val config = loadProjectConfig()
-    if (config.dependencies.isEmpty()) {
+    val allDeps = config.dependencies + config.testDependencies
+    if (allDeps.isEmpty()) {
         println("no dependencies")
         return
     }
@@ -180,8 +212,16 @@ private fun doDeps(args: List<String>) {
 
     withHttpClient { client ->
         val pomLookup = createPomLookup(cacheBase, createResolverDeps(client))
-        val tree = buildDependencyTree(config.dependencies, pomLookup)
-        println(formatDependencyTree(tree))
+        if (config.dependencies.isNotEmpty()) {
+            val tree = buildDependencyTree(config.dependencies, pomLookup)
+            println(formatDependencyTree(tree))
+        }
+        if (config.testDependencies.isNotEmpty()) {
+            if (config.dependencies.isNotEmpty()) println()
+            println("test dependencies:")
+            val testTree = buildDependencyTree(config.testDependencies, pomLookup)
+            println(formatDependencyTree(testTree))
+        }
     }
 }
 
@@ -259,6 +299,35 @@ private fun checkVersion(config: KeelConfig) {
 
 private const val LOCK_FILE = "keel.lock"
 
+private const val JUNIT_CONSOLE_VERSION = "1.11.4"
+private const val JUNIT_CONSOLE_ARTIFACT = "junit-platform-console-standalone"
+private const val JUNIT_CONSOLE_GROUP = "org.junit.platform"
+
+private fun ensureConsoleLauncher(home: String): String {
+    val toolsDir = "$home/.keel/tools"
+    val fileName = "$JUNIT_CONSOLE_ARTIFACT-$JUNIT_CONSOLE_VERSION.jar"
+    val launcherPath = "$toolsDir/$fileName"
+    if (fileExists(launcherPath)) return launcherPath
+
+    ensureDirectoryRecursive(toolsDir).getOrElse { error ->
+        eprintln("error: could not create directory ${error.path}")
+        exitProcess(EXIT_TEST_ERROR)
+    }
+
+    val groupPath = JUNIT_CONSOLE_GROUP.replace('.', '/')
+    val url = "https://repo1.maven.org/maven2/$groupPath/$JUNIT_CONSOLE_ARTIFACT/$JUNIT_CONSOLE_VERSION/$fileName"
+    println("downloading $JUNIT_CONSOLE_ARTIFACT...")
+    downloadFile(url, launcherPath).getOrElse { error ->
+        when (error) {
+            is DownloadError.HttpFailed -> eprintln("error: failed to download console launcher (HTTP ${error.statusCode})")
+            is DownloadError.WriteFailed -> eprintln("error: could not write $launcherPath")
+            is DownloadError.NetworkError -> eprintln("error: network error downloading console launcher: ${error.message}")
+        }
+        exitProcess(EXIT_TEST_ERROR)
+    }
+    return launcherPath
+}
+
 private fun createResolverDeps(client: io.ktor.client.HttpClient) = object : ResolverDeps {
     override fun fileExists(path: String): Boolean = keel.fileExists(path)
     override fun ensureDirectoryRecursive(path: String) = keel.ensureDirectoryRecursive(path)
@@ -268,11 +337,29 @@ private fun createResolverDeps(client: io.ktor.client.HttpClient) = object : Res
 }
 
 private fun resolveDependencies(config: KeelConfig): String? {
-    if (config.dependencies.isEmpty()) {
+    // Warn if the same dependency appears in both [dependencies] and [test-dependencies]
+    val overlap = config.dependencies.keys.intersect(config.testDependencies.keys)
+    for (key in overlap) {
+        val mainVersion = config.dependencies[key]
+        val testVersion = config.testDependencies[key]
+        if (mainVersion != testVersion) {
+            eprintln("warning: '$key' is in both [dependencies] ($mainVersion) and [test-dependencies] ($testVersion); using $mainVersion")
+        }
+    }
+
+    val allDeps = config.dependencies + config.testDependencies
+    if (allDeps.isEmpty()) {
         if (fileExists(LOCK_FILE)) {
             deleteFile(LOCK_FILE)
         }
         return null
+    }
+
+    // Resolve main + test dependencies together for a consistent lockfile
+    val resolveConfig = if (config.testDependencies.isNotEmpty()) {
+        config.copy(dependencies = allDeps)
+    } else {
+        config
     }
 
     val home = homeDirectory().getOrElse { error ->
@@ -300,7 +387,7 @@ private fun resolveDependencies(config: KeelConfig): String? {
 
     println("resolving dependencies...")
     val resolveResult = withHttpClient { client ->
-        resolve(config, existingLock, cacheBase, createResolverDeps(client))
+        resolve(resolveConfig, existingLock, cacheBase, createResolverDeps(client))
     }.getOrElse { error ->
         when (error) {
             is ResolveError.InvalidDependency -> eprintln("error: invalid dependency '${error.input}'")
@@ -319,7 +406,7 @@ private fun resolveDependencies(config: KeelConfig): String? {
 
     // Write lockfile
     if (resolveResult.lockChanged) {
-        val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
+        val lockfile = buildLockfileFromResolved(resolveConfig, resolveResult.deps)
         val lockJson = serializeLockfile(lockfile)
         writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
             eprintln("error: could not write ${error.path}")
@@ -329,6 +416,67 @@ private fun resolveDependencies(config: KeelConfig): String? {
 
     val paths = resolveResult.deps.map { it.cachePath }
     return buildClasspath(paths).ifEmpty { null }
+}
+
+private fun doTest(testArgs: List<String> = emptyList()) {
+    // Build main sources first (also resolves main + test deps together)
+    val (config, classpath) = doBuild()
+
+    // Filter to test source directories that actually exist
+    val existingTestSources = config.testSources.filter { fileExists(it) }
+    if (existingTestSources.isEmpty()) {
+        eprintln("error: no test sources found in ${config.testSources}")
+        exitProcess(EXIT_TEST_ERROR)
+    }
+
+    val testStartMark = TimeSource.Monotonic.markNow()
+
+    // Ensure JUnit Platform Console Standalone is available
+    val home = homeDirectory().getOrElse { error ->
+        eprintln("error: ${error.message}")
+        exitProcess(EXIT_TEST_ERROR)
+    }
+    val consoleLauncherPath = ensureConsoleLauncher(home)
+
+    // Compile test sources (use config with only existing test source dirs)
+    val testConfig = config.copy(testSources = existingTestSources)
+    val mainJar = jarPath(config)
+    val testCmd = testBuildCommand(testConfig, mainJar, classpath)
+    println("compiling tests...")
+    executeCommand(testCmd.args).getOrElse { error ->
+        when (error) {
+            is ProcessError.NonZeroExit -> eprintln("error: test compilation failed with exit code ${error.exitCode}")
+            is ProcessError.EmptyArgs -> eprintln("error: no command to execute")
+            is ProcessError.ForkFailed -> eprintln("error: failed to start compiler process")
+            is ProcessError.WaitFailed -> eprintln("error: failed waiting for compiler process")
+            is ProcessError.SignalKilled -> eprintln("error: compiler process was killed")
+            is ProcessError.PopenFailed -> eprintln("error: failed to start compiler process")
+        }
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    // Run tests (classpath already includes main + test deps from unified resolution)
+    val runCmd = testRunCommand(mainJar, testCmd.outputPath, consoleLauncherPath, classpath, testArgs)
+    println("running tests...")
+    executeCommand(runCmd.args).getOrElse { error ->
+        when (error) {
+            is ProcessError.NonZeroExit -> {
+                val elapsed = testStartMark.elapsedNow()
+                eprintln("tests failed in ${formatDuration(elapsed)}")
+                exitProcess(EXIT_TEST_ERROR)
+            }
+            is ProcessError.EmptyArgs,
+            is ProcessError.ForkFailed,
+            is ProcessError.WaitFailed,
+            is ProcessError.SignalKilled,
+            is ProcessError.PopenFailed -> {
+                eprintln("error: failed to run tests")
+                exitProcess(EXIT_TEST_ERROR)
+            }
+        }
+    }
+    val elapsed = testStartMark.elapsedNow()
+    println("tests passed in ${formatDuration(elapsed)}")
 }
 
 private data class BuildResult(val config: KeelConfig, val classpath: String?)

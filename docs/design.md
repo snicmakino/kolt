@@ -11,6 +11,7 @@ Gradleを介さずに `kotlinc` / `konanc` を直接呼び出す、Kotlin Native
 keel init      # プロジェクト雛形を生成
 keel build     # コンパイル
 keel run       # 実行（keel run -- args でアプリ引数も渡せる）
+keel test      # テスト実行（keel test -- args でJUnit Platform引数も渡せる）
 keel clean     # ビルド成果物を削除
 keel --version # バージョン表示
 ```
@@ -209,13 +210,40 @@ https://repo1.maven.org/maven2/{group}/{artifact}/{version}/{artifact}-{version}
 ### Phase 5 — DX改善 🚧 進行中
 
 **実装済み:**
-- `keel init [project-name]` によるプロジェクト雛形生成（keel.toml + src/Main.kt）
+- `keel init [project-name]` によるプロジェクト雛形生成（keel.toml + src/Main.kt + test/MainTest.kt）
 - `keel clean` によるビルド成果物の削除
 - `keel --version` / `keel version` によるバージョン表示
 - `keel run -- args` でアプリへの引数渡し
 - ビルド所要時間の表示（例: "2.3s"、"1m 5.0s"）
-- 標準化された終了コード（0=成功, 1=ビルドエラー, 2=設定エラー, 3=依存エラー, 127=コマンド未発見）
+- 標準化された終了コード（0=成功, 1=ビルドエラー, 2=設定エラー, 3=依存エラー, 4=テストエラー, 127=コマンド未発見）
 - プロジェクト名のバリデーション（`[a-zA-Z0-9][a-zA-Z0-9._-]*`）
+
+### Phase 6 — テスト実行 ✅
+
+- `keel test` でテストのコンパイル・実行
+- `keel test -- <args>` でJUnit Platformへの引数渡し
+- JUnit 5、kotlin-test、Kotest をサポート（JUnit Platform Console Standalone経由）
+- `[test-dependencies]` セクションによるテスト専用依存管理
+- `test_sources` フィールド（デフォルト: `["test"]`）
+- `keel init` でテスト雛形（test/MainTest.kt + kotlin-test-junit5）も生成
+- JUnit Platform Console Standalone JARは `~/.keel/tools/` に自動キャッシュ
+
+**テスト実行フロー:**
+
+1. メインソースをビルド（`build/{name}.jar`）
+2. テスト依存を解決（推移的依存含む）
+3. JUnit Platform Console Standalone JARを確保（キャッシュ or ダウンロード）
+4. テストソースをコンパイル（`build/{name}-test.jar`）
+5. `java -jar junit-platform-console-standalone.jar --class-path ... --scan-class-path` で実行
+
+**keel.tomlの拡張:**
+
+```toml
+test_sources = ["test"]   # optional, defaults to ["test"]
+
+[test-dependencies]
+"org.jetbrains.kotlin:kotlin-test-junit5" = "2.1.0"
+```
 
 **未実装:**
 - インクリメンタルビルド（変更ファイルのみ再コンパイル）
@@ -226,7 +254,6 @@ https://repo1.maven.org/maven2/{group}/{artifact}/{version}/{artifact}-{version}
 
 以下は現時点でkeelのスコープに含めない。将来的に再検討する可能性はあるが、初期の判断基準としてここに明記する。
 
-- **テスト実行（`keel test`）**: テストフレームワーク（JUnit等）との統合が必要で複雑。初期はユーザーが `kotlinc` でテストコードをコンパイルし直接実行する形で対応
 - **ソースフォーマッター/リンター**: ktlint, detekt等の既存ツールに委ねる。keelが内蔵する必要はない
 - **タスクランナー**: `npm scripts` のようなカスタムコマンド定義。Cargo/Goの思想に従い、ビルドツールの責務外とする
 - **Kotlin Multiplatform（KMP）プロジェクト**: 複数ターゲットを単一プロジェクトで管理する機能。Gradleとの差別化ポイントではなく複雑性が高い

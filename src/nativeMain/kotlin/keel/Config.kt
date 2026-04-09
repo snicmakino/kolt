@@ -22,7 +22,9 @@ data class KeelConfig(
     @SerialName("jvm_target") val jvmTarget: String = "17",
     val main: String,
     val sources: List<String>,
-    val dependencies: Map<String, String> = emptyMap()
+    @SerialName("test_sources") val testSources: List<String> = listOf("test"),
+    val dependencies: Map<String, String> = emptyMap(),
+    @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap()
 )
 
 private val toml = Toml(
@@ -34,7 +36,8 @@ fun parseConfig(tomlString: String): Result<KeelConfig, ConfigError> {
         val config = toml.decodeFromString(KeelConfig.serializer(), tomlString)
         // ktoml preserves quotes in map keys; strip them
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
-        Ok(config.copy(dependencies = cleanedDeps))
+        val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
+        Ok(config.copy(dependencies = cleanedDeps, testDependencies = cleanedTestDeps))
     } catch (e: SerializationException) {
         Err(ConfigError.ParseFailed("failed to parse keel.toml: ${e.message}"))
     } catch (e: IllegalArgumentException) {

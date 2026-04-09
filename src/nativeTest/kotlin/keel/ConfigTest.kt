@@ -179,6 +179,70 @@ class ConfigTest {
     }
 
     @Test
+    fun parseMinimalConfigHasDefaultTestSources() {
+        val config = assertNotNull(parseConfig(minimalToml).get())
+        assertEquals(listOf("test"), config.testSources)
+        assertEquals(emptyMap(), config.testDependencies)
+    }
+
+    @Test
+    fun parseConfigWithTestSources() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            test_sources = ["test", "integration-test"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(listOf("test", "integration-test"), config.testSources)
+    }
+
+    @Test
+    fun parseConfigWithTestDependencies() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [test-dependencies]
+            "org.jetbrains.kotlin:kotlin-test-junit5" = "2.1.0"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.testDependencies.size)
+        assertEquals("2.1.0", config.testDependencies["org.jetbrains.kotlin:kotlin-test-junit5"])
+    }
+
+    @Test
+    fun parseConfigWithBothDependenciesAndTestDependencies() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [dependencies]
+            "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
+
+            [test-dependencies]
+            "org.jetbrains.kotlin:kotlin-test-junit5" = "2.1.0"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.dependencies.size)
+        assertEquals(1, config.testDependencies.size)
+    }
+
+    @Test
     fun commentsAreIgnored() {
         val toml = """
             # Project configuration
