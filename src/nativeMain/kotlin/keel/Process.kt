@@ -15,6 +15,15 @@ sealed class ProcessError {
     data object PopenFailed : ProcessError()
 }
 
+fun formatProcessError(error: ProcessError, context: String): String = when (error) {
+    is ProcessError.NonZeroExit -> "error: $context failed with exit code ${error.exitCode}"
+    is ProcessError.EmptyArgs -> "error: no command to execute"
+    is ProcessError.ForkFailed -> "error: failed to start $context process"
+    is ProcessError.WaitFailed -> "error: failed waiting for $context process"
+    is ProcessError.SignalKilled -> "error: $context process was killed"
+    is ProcessError.PopenFailed -> "error: failed to start $context process"
+}
+
 @OptIn(ExperimentalForeignApi::class)
 fun executeCommand(args: List<String>): Result<Int, ProcessError> {
     if (args.isEmpty()) return Err(ProcessError.EmptyArgs)

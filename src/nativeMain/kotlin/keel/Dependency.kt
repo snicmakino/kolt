@@ -12,6 +12,8 @@ data class Coordinate(
     val version: String
 )
 
+const val MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2"
+
 fun parseCoordinate(groupArtifact: String, version: String): Result<Coordinate, InvalidCoordinate> {
     val parts = groupArtifact.split(":")
     if (parts.size != 2) {
@@ -26,7 +28,7 @@ fun parseCoordinate(groupArtifact: String, version: String): Result<Coordinate, 
 
 private fun buildMavenUrl(coord: Coordinate, extension: String): String {
     val groupPath = coord.group.replace('.', '/')
-    return "https://repo1.maven.org/maven2/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
+    return "$MAVEN_CENTRAL_BASE/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
 }
 
 private fun buildRelativePath(coord: Coordinate, extension: String): String {

@@ -18,7 +18,7 @@ fun parseMetadataXml(xml: String): Result<String, MetadataParseError> {
 
 fun buildMetadataDownloadUrl(group: String, artifact: String): String {
     val groupPath = group.replace('.', '/')
-    return "https://repo1.maven.org/maven2/$groupPath/$artifact/maven-metadata.xml"
+    return "$MAVEN_CENTRAL_BASE/$groupPath/$artifact/maven-metadata.xml"
 }
 
 private fun extractSimpleTag(xml: String, tagName: String): String? {
