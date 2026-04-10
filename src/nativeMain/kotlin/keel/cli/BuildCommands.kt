@@ -14,7 +14,7 @@ internal const val LOCK_FILE = "keel.lock"
 private const val WORKSPACE_JSON = "workspace.json"
 private const val KLS_CLASSPATH = "kls-classpath"
 
-internal data class BuildResult(val config: KeelConfig, val classpath: String?)
+internal data class BuildResult(val config: KeelConfig, val classpath: String?, val pluginArgs: List<String> = emptyList())
 
 internal fun loadProjectConfig(): KeelConfig {
     val tomlString = readFileAsString(KEEL_TOML).getOrElse { error ->
@@ -50,7 +50,8 @@ internal fun doCheck() {
     checkVersion(config)
 
     val classpath = resolveDependencies(config)
-    val cmd = checkCommand(config, classpath)
+    val pArgs = resolvePluginArgs(config)
+    val cmd = checkCommand(config, classpath, pArgs)
 
     println("checking ${config.name}...")
     executeCommand(cmd).getOrElse { error ->
@@ -91,12 +92,13 @@ internal fun doBuild(): BuildResult {
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, cachedState!!.classpath)
+        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config))
     }
 
     checkVersion(config)
     val classpath = resolveDependencies(config)
-    val cmd = buildCommand(config, classpath)
+    val pArgs = resolvePluginArgs(config)
+    val cmd = buildCommand(config, classpath, pArgs)
     ensureDirectory(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
         exitProcess(EXIT_BUILD_ERROR)
@@ -119,7 +121,7 @@ internal fun doBuild(): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built ${cmd.outputPath} in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath)
+    return BuildResult(config, classpath, pArgs)
 }
 
 internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String> = emptyList()) {
@@ -139,7 +141,7 @@ internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String>
 }
 
 internal fun doTest(testArgs: List<String> = emptyList()) {
-    val (config, classpath) = doBuild()
+    val (config, classpath, pArgs) = doBuild()
 
     val existingTestSources = config.testSources.filter { fileExists(it) }
     if (existingTestSources.isEmpty()) {
@@ -154,7 +156,7 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
 
     val testConfig = config.copy(testSources = existingTestSources)
     val mainJar = jarPath(config)
-    val testCmd = testBuildCommand(testConfig, mainJar, classpath)
+    val testCmd = testBuildCommand(testConfig, mainJar, classpath, pArgs)
     println("compiling tests...")
     executeCommand(testCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "test compilation"))

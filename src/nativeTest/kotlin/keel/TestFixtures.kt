@@ -8,7 +8,8 @@ fun testConfig(
     jvmTarget: String = "17",
     dependencies: Map<String, String> = emptyMap(),
     testSources: List<String> = listOf("test"),
-    testDependencies: Map<String, String> = emptyMap()
+    testDependencies: Map<String, String> = emptyMap(),
+    plugins: Map<String, Boolean> = emptyMap()
 ) = KeelConfig(
     name = name,
     version = "0.1.0",
@@ -19,5 +20,6 @@ fun testConfig(
     sources = sources,
     dependencies = dependencies,
     testSources = testSources,
-    testDependencies = testDependencies
+    testDependencies = testDependencies,
+    plugins = plugins
 )

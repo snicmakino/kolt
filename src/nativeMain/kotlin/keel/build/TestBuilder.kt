@@ -12,7 +12,8 @@ fun testJarPath(config: KeelConfig): String = "$BUILD_DIR/${config.name}-test.ja
 fun testBuildCommand(
     config: KeelConfig,
     mainJarPath: String,
-    classpath: String? = null
+    classpath: String? = null,
+    pluginArgs: List<String> = emptyList()
 ): TestBuildCommand {
     val outputPath = testJarPath(config)
     val cp = buildList {
@@ -26,6 +27,7 @@ fun testBuildCommand(
         addAll(config.testSources)
         add("-jvm-target")
         add(config.jvmTarget)
+        addAll(pluginArgs)
         add("-d")
         add(outputPath)
     }

@@ -11,7 +11,11 @@ data class BuildCommand(
     val outputPath: String
 )
 
-fun checkCommand(config: KeelConfig, classpath: String? = null): List<String> = buildList {
+fun checkCommand(
+    config: KeelConfig,
+    classpath: String? = null,
+    pluginArgs: List<String> = emptyList()
+): List<String> = buildList {
     add("kotlinc")
     if (!classpath.isNullOrEmpty()) {
         add("-cp")
@@ -20,9 +24,14 @@ fun checkCommand(config: KeelConfig, classpath: String? = null): List<String> = 
     addAll(config.sources)
     add("-jvm-target")
     add(config.jvmTarget)
+    addAll(pluginArgs)
 }
 
-fun buildCommand(config: KeelConfig, classpath: String? = null): BuildCommand {
+fun buildCommand(
+    config: KeelConfig,
+    classpath: String? = null,
+    pluginArgs: List<String> = emptyList()
+): BuildCommand {
     val outputPath = jarPath(config)
     val args = buildList {
         add("kotlinc")
@@ -33,6 +42,7 @@ fun buildCommand(config: KeelConfig, classpath: String? = null): BuildCommand {
         addAll(config.sources)
         add("-jvm-target")
         add(config.jvmTarget)
+        addAll(pluginArgs)
         add("-include-runtime")
         add("-d")
         add(outputPath)

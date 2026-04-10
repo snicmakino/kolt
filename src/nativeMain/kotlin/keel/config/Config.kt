@@ -25,7 +25,8 @@ data class KeelConfig(
     @SerialName("test_sources") val testSources: List<String> = listOf("test"),
     val dependencies: Map<String, String> = emptyMap(),
     @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-    @SerialName("fmt_style") val fmtStyle: String = "google"
+    @SerialName("fmt_style") val fmtStyle: String = "google",
+    val plugins: Map<String, Boolean> = emptyMap()
 )
 
 private val toml = Toml(

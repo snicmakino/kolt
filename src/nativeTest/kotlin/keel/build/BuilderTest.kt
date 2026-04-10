@@ -92,4 +92,91 @@ class BuilderTest {
             cmd
         )
     }
+
+    @Test
+    fun buildCommandWithPluginArgs() {
+        val pluginArgs = listOf("-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar")
+
+        val cmd = buildCommand(testConfig(), pluginArgs = pluginArgs)
+
+        assertEquals(
+            listOf(
+                "kotlinc", "src", "-jvm-target", "17",
+                "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+                "-include-runtime", "-d", "build/my-app.jar"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun buildCommandWithMultiplePluginArgs() {
+        val pluginArgs = listOf(
+            "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+            "-Xplugin=/usr/local/kotlinc/lib/allopen-compiler-plugin.jar"
+        )
+
+        val cmd = buildCommand(testConfig(), pluginArgs = pluginArgs)
+
+        assertEquals(
+            listOf(
+                "kotlinc", "src", "-jvm-target", "17",
+                "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+                "-Xplugin=/usr/local/kotlinc/lib/allopen-compiler-plugin.jar",
+                "-include-runtime", "-d", "build/my-app.jar"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun buildCommandWithEmptyPluginArgs() {
+        val cmd = buildCommand(testConfig(), pluginArgs = emptyList())
+
+        assertEquals(
+            listOf("kotlinc", "src", "-jvm-target", "17", "-include-runtime", "-d", "build/my-app.jar"),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun buildCommandWithClasspathAndPluginArgs() {
+        val pluginArgs = listOf("-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar")
+
+        val cmd = buildCommand(testConfig(), classpath = "/cache/a.jar", pluginArgs = pluginArgs)
+
+        assertEquals(
+            listOf(
+                "kotlinc", "-cp", "/cache/a.jar", "src", "-jvm-target", "17",
+                "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+                "-include-runtime", "-d", "build/my-app.jar"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun checkCommandWithPluginArgs() {
+        val pluginArgs = listOf("-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar")
+
+        val cmd = checkCommand(testConfig(), pluginArgs = pluginArgs)
+
+        assertEquals(
+            listOf(
+                "kotlinc", "src", "-jvm-target", "17",
+                "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar"
+            ),
+            cmd
+        )
+    }
+
+    @Test
+    fun checkCommandWithEmptyPluginArgs() {
+        val cmd = checkCommand(testConfig(), pluginArgs = emptyList())
+
+        assertEquals(
+            listOf("kotlinc", "src", "-jvm-target", "17"),
+            cmd
+        )
+    }
 }

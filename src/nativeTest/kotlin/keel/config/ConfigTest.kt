@@ -265,6 +265,76 @@ class ConfigTest {
     }
 
     @Test
+    fun parseMinimalConfigHasNoPlugins() {
+        val config = assertNotNull(parseConfig(minimalToml).get())
+        assertEquals(emptyMap(), config.plugins)
+    }
+
+    @Test
+    fun parseConfigWithPlugins() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [plugins]
+            serialization = true
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.plugins.size)
+        assertEquals(true, config.plugins["serialization"])
+    }
+
+    @Test
+    fun parseConfigWithMultiplePlugins() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [plugins]
+            serialization = true
+            allopen = true
+            noarg = false
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(3, config.plugins.size)
+        assertEquals(true, config.plugins["serialization"])
+        assertEquals(true, config.plugins["allopen"])
+        assertEquals(false, config.plugins["noarg"])
+    }
+
+    @Test
+    fun parseConfigWithPluginsAndDependencies() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [dependencies]
+            "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.0"
+
+            [plugins]
+            serialization = true
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.plugins.size)
+        assertEquals(1, config.dependencies.size)
+    }
+
+    @Test
     fun commentsAreIgnored() {
         val toml = """
             # Project configuration
