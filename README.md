@@ -246,7 +246,7 @@ keel aims to be what `go build` is to Go or `cargo build` is to Rust — a fast,
 
 ## Claude Code Integration
 
-This project includes [Claude Code](https://claude.ai/code) skills. If you use Claude Code, the `/keel-usage` skill provides interactive help with keel commands, configuration, and dependency management.
+This project includes [Claude Code](https://claude.ai/code) skills. If you use Claude Code, the `/keel-usage` skill provides interactive help with keel commands, configuration, and dependency management. You can also [read it directly](.claude/skills/keel-usage/SKILL.md) as a reference.
 
 ## License
 
