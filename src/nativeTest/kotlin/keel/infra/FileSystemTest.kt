@@ -279,6 +279,142 @@ class FileSystemTest {
         }
     }
 
+    @Test
+    fun copyDirectoryContentsCopiesFilesToDest() {
+        // Given: source dir with one file
+        val src = "/tmp/keel_copy_src_basic"
+        val dest = "/tmp/keel_copy_dest_basic"
+        platform.posix.mkdir(src, 0b111111101u)
+        platform.posix.mkdir(dest, 0b111111101u)
+        writeTestFile("$src/hello.txt", "hello")
+        try {
+            // When: copyDirectoryContents is called
+            val result = copyDirectoryContents(src, dest)
+
+            // Then: file exists in dest
+            assertNotNull(result.get())
+            assertTrue(fileExists("$dest/hello.txt"))
+            assertEquals("hello", assertNotNull(readFileAsString("$dest/hello.txt").get()))
+        } finally {
+            remove("$src/hello.txt")
+            remove("$dest/hello.txt")
+            platform.posix.rmdir(src)
+            platform.posix.rmdir(dest)
+        }
+    }
+
+    @Test
+    fun copyDirectoryContentsPreservesRelativePaths() {
+        // Given: source dir with a nested file
+        val src = "/tmp/keel_copy_src_nested"
+        val sub = "$src/config"
+        val dest = "/tmp/keel_copy_dest_nested"
+        platform.posix.mkdir(src, 0b111111101u)
+        platform.posix.mkdir(sub, 0b111111101u)
+        platform.posix.mkdir(dest, 0b111111101u)
+        writeTestFile("$sub/app.properties", "key=value")
+        try {
+            // When: copyDirectoryContents is called
+            val result = copyDirectoryContents(src, dest)
+
+            // Then: nested file exists at same relative path in dest
+            assertNotNull(result.get())
+            assertTrue(fileExists("$dest/config/app.properties"))
+            assertEquals("key=value", assertNotNull(readFileAsString("$dest/config/app.properties").get()))
+        } finally {
+            remove("$sub/app.properties")
+            remove("$dest/config/app.properties")
+            platform.posix.rmdir(sub)
+            platform.posix.rmdir("$dest/config")
+            platform.posix.rmdir(src)
+            platform.posix.rmdir(dest)
+        }
+    }
+
+    @Test
+    fun copyDirectoryContentsCopiesMultipleFiles() {
+        // Given: source dir with multiple files
+        val src = "/tmp/keel_copy_src_multi"
+        val dest = "/tmp/keel_copy_dest_multi"
+        platform.posix.mkdir(src, 0b111111101u)
+        platform.posix.mkdir(dest, 0b111111101u)
+        writeTestFile("$src/a.txt", "aaa")
+        writeTestFile("$src/b.conf", "bbb")
+        try {
+            // When: copyDirectoryContents is called
+            val result = copyDirectoryContents(src, dest)
+
+            // Then: all files exist in dest
+            assertNotNull(result.get())
+            assertTrue(fileExists("$dest/a.txt"))
+            assertTrue(fileExists("$dest/b.conf"))
+            assertEquals("aaa", assertNotNull(readFileAsString("$dest/a.txt").get()))
+            assertEquals("bbb", assertNotNull(readFileAsString("$dest/b.conf").get()))
+        } finally {
+            remove("$src/a.txt")
+            remove("$src/b.conf")
+            remove("$dest/a.txt")
+            remove("$dest/b.conf")
+            platform.posix.rmdir(src)
+            platform.posix.rmdir(dest)
+        }
+    }
+
+    @Test
+    fun copyDirectoryContentsOverwritesExistingFile() {
+        // Given: dest already has a file with old content
+        val src = "/tmp/keel_copy_src_overwrite"
+        val dest = "/tmp/keel_copy_dest_overwrite"
+        platform.posix.mkdir(src, 0b111111101u)
+        platform.posix.mkdir(dest, 0b111111101u)
+        writeTestFile("$src/data.txt", "new content")
+        writeTestFile("$dest/data.txt", "old content")
+        try {
+            // When: copyDirectoryContents is called
+            copyDirectoryContents(src, dest)
+
+            // Then: dest file has new content
+            assertEquals("new content", assertNotNull(readFileAsString("$dest/data.txt").get()))
+        } finally {
+            remove("$src/data.txt")
+            remove("$dest/data.txt")
+            platform.posix.rmdir(src)
+            platform.posix.rmdir(dest)
+        }
+    }
+
+    @Test
+    fun copyDirectoryContentsForNonExistentSrcReturnsErr() {
+        // Given: source dir does not exist
+        val result = copyDirectoryContents(
+            src = "/tmp/keel_copy_nonexistent_src",
+            dest = "/tmp/keel_copy_dest_err"
+        )
+
+        // Then: returns Err
+        assertNull(result.get())
+        assertIs<CopyFailed>(result.getError())
+    }
+
+    @Test
+    fun copyDirectoryContentsForEmptySrcSucceeds() {
+        // Given: source dir exists but is empty
+        val src = "/tmp/keel_copy_src_empty"
+        val dest = "/tmp/keel_copy_dest_empty"
+        platform.posix.mkdir(src, 0b111111101u)
+        platform.posix.mkdir(dest, 0b111111101u)
+        try {
+            // When: copyDirectoryContents is called
+            val result = copyDirectoryContents(src, dest)
+
+            // Then: succeeds with no files copied
+            assertNotNull(result.get())
+        } finally {
+            platform.posix.rmdir(src)
+            platform.posix.rmdir(dest)
+        }
+    }
+
     private fun writeTestFile(path: String, content: String) {
         val fp = platform.posix.fopen(path, "w") ?: error("could not create test file: $path")
         if (content.isNotEmpty()) {

@@ -153,7 +153,6 @@ private fun collectNewestMtime(directory: String, onFile: (Long) -> Unit) {
     }
 }
 
-/** Return the newest mtime among all files (any extension) in the given directory tree. 0 if no files found. */
 @OptIn(ExperimentalForeignApi::class)
 fun newestMtimeAll(directory: String): Long {
     var newest = 0L
@@ -216,6 +215,60 @@ private fun collectKotlinFiles(directory: String, result: MutableList<String>): 
         closedir(dir)
     }
     return null
+}
+
+data class CopyFailed(val path: String)
+
+fun copyDirectoryContents(src: String, dest: String): Result<Unit, CopyFailed> {
+    if (!fileExists(src)) return Err(CopyFailed(src))
+    return copyDirRecursive(src, dest)
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun copyDirRecursive(src: String, dest: String): Result<Unit, CopyFailed> {
+    val dir = opendir(src) ?: return Err(CopyFailed(src))
+    try {
+        while (true) {
+            val entry = readdir(dir) ?: break
+            val name = entry.pointed.d_name.toKString()
+            if (name == "." || name == "..") continue
+            val srcChild = "$src/$name"
+            val destChild = "$dest/$name"
+            if (isDirectory(srcChild)) {
+                ensureDirectory(destChild).getOrElse { return Err(CopyFailed(destChild)) }
+                copyDirRecursive(srcChild, destChild).getOrElse { return Err(it) }
+            } else {
+                copyFile(srcChild, destChild).getOrElse { return Err(it) }
+            }
+        }
+    } finally {
+        closedir(dir)
+    }
+    return Ok(Unit)
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun copyFile(src: String, dest: String): Result<Unit, CopyFailed> {
+    val srcFp = fopen(src, "rb") ?: return Err(CopyFailed(src))
+    try {
+        val destFp = fopen(dest, "wb") ?: return Err(CopyFailed(dest))
+        try {
+            memScoped {
+                val buffer = allocArray<ByteVar>(4096)
+                while (true) {
+                    val bytesRead = fread(buffer, 1u, 4096u, srcFp)
+                    if (bytesRead == 0uL) break
+                    val written = fwrite(buffer, 1u, bytesRead, destFp)
+                    if (written != bytesRead) return Err(CopyFailed(dest))
+                }
+            }
+        } finally {
+            fclose(destFp)
+        }
+    } finally {
+        fclose(srcFp)
+    }
+    return Ok(Unit)
 }
 
 data class HomeNotFound(val message: String = "HOME environment variable is not set")

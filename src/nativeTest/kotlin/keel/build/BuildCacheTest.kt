@@ -3,6 +3,7 @@ package keel.build
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -171,5 +172,95 @@ class BuildCacheTest {
     @Test
     fun parseEmptyStringReturnsNull() {
         assertNull(parseBuildState(""))
+    }
+
+    @Test
+    fun upToDateWhenResourcesMtimesMatch() {
+        // Given: both current and cached have the same resourcesNewestMtime
+        val state = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = null,
+            resourcesNewestMtime = 4000L
+        )
+        assertTrue(isBuildUpToDate(current = state, cached = state))
+    }
+
+    @Test
+    fun notUpToDateWhenResourcesMtimeChanged() {
+        // Given: cached has older resourcesNewestMtime
+        val cached = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = null,
+            resourcesNewestMtime = 4000L
+        )
+        val current = cached.copy(resourcesNewestMtime = 5000L)
+        assertFalse(isBuildUpToDate(current = current, cached = cached))
+    }
+
+    @Test
+    fun notUpToDateWhenResourcesMtimeChangedFromNullToValue() {
+        // Given: cached has null (no resources), current has resources
+        val cached = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = null,
+            resourcesNewestMtime = null
+        )
+        val current = cached.copy(resourcesNewestMtime = 4000L)
+        assertFalse(isBuildUpToDate(current = current, cached = cached))
+    }
+
+    @Test
+    fun upToDateWhenBothResourcesMtimesNull() {
+        // Given: neither current nor cached have resources
+        val state = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = null,
+            resourcesNewestMtime = null
+        )
+        assertTrue(isBuildUpToDate(current = state, cached = state))
+    }
+
+    @Test
+    fun serializeAndDeserializeRoundTripWithResourcesMtime() {
+        val state = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = 500L,
+            resourcesNewestMtime = 4000L
+        )
+        val json = serializeBuildState(state)
+        val parsed = parseBuildState(json)
+        assertEquals(state, parsed)
+    }
+
+    @Test
+    fun serializationUsesResourcesNewestMtimeKey() {
+        val state = BuildState(
+            configMtime = 1000L,
+            sourcesNewestMtime = 2000L,
+            classesDirMtime = 3000L,
+            lockfileMtime = null,
+            resourcesNewestMtime = 4000L
+        )
+        val json = serializeBuildState(state)
+        assertTrue(json.contains("resources_newest_mtime"), "Expected JSON key 'resources_newest_mtime' in: $json")
+    }
+
+    @Test
+    fun resourcesNewestMtimeDefaultsToNullForOlderStateJson() {
+        // Given: older JSON without resources_newest_mtime
+        val oldJson = """{"config_mtime":1000,"sources_newest_mtime":2000,"classes_dir_mtime":3000,"lockfile_mtime":null}"""
+        val parsed = parseBuildState(oldJson)
+        assertNotNull(parsed)
+        assertNull(parsed.resourcesNewestMtime)
     }
 }

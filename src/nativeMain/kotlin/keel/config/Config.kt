@@ -25,6 +25,8 @@ data class KeelConfig(
     val main: String,
     val sources: List<String>,
     @SerialName("test_sources") val testSources: List<String> = listOf("test"),
+    val resources: List<String> = emptyList(),
+    @SerialName("test_resources") val testResources: List<String> = emptyList(),
     val dependencies: Map<String, String> = emptyMap(),
     @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
     @SerialName("fmt_style") val fmtStyle: String = "google",

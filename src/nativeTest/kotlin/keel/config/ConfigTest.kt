@@ -436,6 +436,99 @@ class ConfigTest {
     }
 
     @Test
+    fun parseMinimalConfigHasDefaultResources() {
+        // Given: no resources or test_resources fields in TOML
+        // When: config is parsed
+        val config = assertNotNull(parseConfig(minimalToml).get())
+
+        // Then: both default to empty list
+        assertEquals(emptyList(), config.resources)
+        assertEquals(emptyList(), config.testResources)
+    }
+
+    @Test
+    fun parseConfigWithResources() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            resources = ["resources"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(listOf("resources"), config.resources)
+    }
+
+    @Test
+    fun parseConfigWithMultipleResources() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            resources = ["resources", "assets"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(listOf("resources", "assets"), config.resources)
+    }
+
+    @Test
+    fun parseConfigWithTestResources() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            test_resources = ["test-resources"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(listOf("test-resources"), config.testResources)
+    }
+
+    @Test
+    fun parseConfigWithBothResourceFields() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            resources = ["resources"]
+            test_resources = ["test-resources"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(listOf("resources"), config.resources)
+        assertEquals(listOf("test-resources"), config.testResources)
+    }
+
+    @Test
+    fun parseConfigWithEmptyResources() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+            resources = []
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(emptyList(), config.resources)
+    }
+
+    @Test
     fun commentsAreIgnored() {
         val toml = """
             # Project configuration

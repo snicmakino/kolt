@@ -82,7 +82,9 @@ internal fun doBuild(): BuildResult {
         configMtime = fileMtime(KEEL_TOML) ?: 0L,
         sourcesNewestMtime = newestMtime(config.sources),
         classesDirMtime = if (fileExists(CLASSES_DIR)) newestMtimeAll(CLASSES_DIR) else null,
-        lockfileMtime = if (fileExists(LOCK_FILE)) fileMtime(LOCK_FILE) else null
+        lockfileMtime = if (fileExists(LOCK_FILE)) fileMtime(LOCK_FILE) else null,
+        resourcesNewestMtime = if (config.resources.isEmpty()) null
+            else config.resources.maxOf { newestMtimeAll(it) }
     )
     val cachedState = readFileAsString(BUILD_STATE_FILE).getOrElse { null }
         ?.let { parseBuildState(it) }
@@ -106,6 +108,14 @@ internal fun doBuild(): BuildResult {
     executeCommand(buildCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "compilation"))
         exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    for (resourceDir in config.resources) {
+        if (!fileExists(resourceDir)) continue
+        copyDirectoryContents(resourceDir, CLASSES_DIR).getOrElse { error ->
+            eprintln("error: could not copy resources from ${error.path}")
+            exitProcess(EXIT_BUILD_ERROR)
+        }
     }
 
     val jarCmd = jarCommand(config)
@@ -165,7 +175,15 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    val runCmd = testRunCommand(CLASSES_DIR, testCmd.outputPath, consoleLauncherPath, classpath, testArgs)
+    val existingTestResourceDirs = config.testResources.filter { fileExists(it) }
+    val runCmd = testRunCommand(
+        classesDir = CLASSES_DIR,
+        testClassesDir = testCmd.outputPath,
+        consoleLauncherPath = consoleLauncherPath,
+        testResourceDirs = existingTestResourceDirs,
+        classpath = classpath,
+        testArgs = testArgs
+    )
     println("running tests...")
     executeCommand(runCmd.args).getOrElse { error ->
         when (error) {

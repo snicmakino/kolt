@@ -13,7 +13,8 @@ data class BuildState(
     @SerialName("sources_newest_mtime") val sourcesNewestMtime: Long,
     @SerialName("classes_dir_mtime") val classesDirMtime: Long?,
     @SerialName("lockfile_mtime") val lockfileMtime: Long?,
-    val classpath: String? = null
+    val classpath: String? = null,
+    @SerialName("resources_newest_mtime") val resourcesNewestMtime: Long? = null
 )
 
 fun isBuildUpToDate(current: BuildState, cached: BuildState?): Boolean {
@@ -21,7 +22,8 @@ fun isBuildUpToDate(current: BuildState, cached: BuildState?): Boolean {
     return current.configMtime == cached.configMtime &&
         current.sourcesNewestMtime == cached.sourcesNewestMtime &&
         current.classesDirMtime == cached.classesDirMtime &&
-        current.lockfileMtime == cached.lockfileMtime
+        current.lockfileMtime == cached.lockfileMtime &&
+        current.resourcesNewestMtime == cached.resourcesNewestMtime
 }
 
 private val json = Json { prettyPrint = true }
