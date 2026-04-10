@@ -2,6 +2,7 @@ package keel.resolve
 
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import keel.config.MAVEN_CENTRAL_BASE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -54,7 +55,7 @@ class DependencyTest {
     @Test
     fun buildDownloadUrlProducesCorrectMavenCentralUrl() {
         val coord = Coordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core", "1.9.0")
-        val url = buildDownloadUrl(coord)
+        val url = buildDownloadUrl(coord, MAVEN_CENTRAL_BASE)
         assertEquals(
             "https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/1.9.0/kotlinx-coroutines-core-1.9.0.jar",
             url
@@ -64,9 +65,19 @@ class DependencyTest {
     @Test
     fun buildDownloadUrlWithSingleSegmentGroup() {
         val coord = Coordinate("junit", "junit", "4.13.2")
-        val url = buildDownloadUrl(coord)
+        val url = buildDownloadUrl(coord, MAVEN_CENTRAL_BASE)
         assertEquals(
             "https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar",
+            url
+        )
+    }
+
+    @Test
+    fun buildDownloadUrlWithCustomBaseUrl() {
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val url = buildDownloadUrl(coord, "https://nexus.example.com/repository/maven-public")
+        assertEquals(
+            "https://nexus.example.com/repository/maven-public/com/example/lib/1.0.0/lib-1.0.0.jar",
             url
         )
     }
@@ -101,7 +112,7 @@ class DependencyTest {
     @Test
     fun buildPomDownloadUrlProducesCorrectMavenCentralUrl() {
         val coord = Coordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core", "1.9.0")
-        val url = buildPomDownloadUrl(coord)
+        val url = buildPomDownloadUrl(coord, MAVEN_CENTRAL_BASE)
         assertEquals(
             "https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/1.9.0/kotlinx-coroutines-core-1.9.0.pom",
             url
@@ -111,9 +122,29 @@ class DependencyTest {
     @Test
     fun buildPomDownloadUrlWithSingleSegmentGroup() {
         val coord = Coordinate("junit", "junit", "4.13.2")
-        val url = buildPomDownloadUrl(coord)
+        val url = buildPomDownloadUrl(coord, MAVEN_CENTRAL_BASE)
         assertEquals(
             "https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.pom",
+            url
+        )
+    }
+
+    @Test
+    fun buildPomDownloadUrlWithCustomBaseUrl() {
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val url = buildPomDownloadUrl(coord, "https://nexus.example.com/repository/maven-public")
+        assertEquals(
+            "https://nexus.example.com/repository/maven-public/com/example/lib/1.0.0/lib-1.0.0.pom",
+            url
+        )
+    }
+
+    @Test
+    fun buildModuleDownloadUrlWithCustomBaseUrl() {
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val url = buildModuleDownloadUrl(coord, "https://nexus.example.com/repository/maven-public")
+        assertEquals(
+            "https://nexus.example.com/repository/maven-public/com/example/lib/1.0.0/lib-1.0.0.module",
             url
         )
     }

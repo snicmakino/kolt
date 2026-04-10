@@ -1,5 +1,6 @@
 package keel.cli
 
+import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import keel.build.*
 import keel.config.*
@@ -94,19 +95,26 @@ internal fun doAdd(args: List<String>) {
         exitProcess(EXIT_DEPENDENCY_ERROR)
     }
 
-    val version = if (addArgs.version != null) {
-        addArgs.version
-    } else {
-        println("fetching latest version for ${addArgs.group}:${addArgs.artifact}...")
-        fetchLatestVersion(addArgs.group, addArgs.artifact)
-    }
-
-    val groupArtifact = "${addArgs.group}:${addArgs.artifact}"
     val toml = readFileAsString(KEEL_TOML).getOrElse { error ->
         eprintln("error: could not read ${error.path}")
         exitProcess(EXIT_CONFIG_ERROR)
     }
 
+    val config = parseConfig(toml).getOrElse { error ->
+        when (error) {
+            is ConfigError.ParseFailed -> eprintln("error: ${error.message}")
+        }
+        exitProcess(EXIT_CONFIG_ERROR)
+    }
+
+    val version = if (addArgs.version != null) {
+        addArgs.version
+    } else {
+        println("fetching latest version for ${addArgs.group}:${addArgs.artifact}...")
+        fetchLatestVersion(addArgs.group, addArgs.artifact, config.repositories.values.toList())
+    }
+
+    val groupArtifact = "${addArgs.group}:${addArgs.artifact}"
     val updatedToml = addDependencyToToml(toml, groupArtifact, version, addArgs.isTest).getOrElse { error ->
         when (error) {
             is AlreadyExists -> eprintln("error: '${error.groupArtifact}' already exists in ${if (addArgs.isTest) "[test-dependencies]" else "[dependencies]"}")
@@ -125,22 +133,27 @@ internal fun doAdd(args: List<String>) {
     doInstall()
 }
 
-private fun fetchLatestVersion(group: String, artifact: String): String {
+private fun fetchLatestVersion(group: String, artifact: String, repos: List<String>): String {
     val paths = resolveKeelPaths(EXIT_DEPENDENCY_ERROR)
     val groupPath = group.replace('.', '/')
     val metadataPath = "${paths.cacheBase}/$groupPath/$artifact/maven-metadata.xml"
 
-    val url = buildMetadataDownloadUrl(group, artifact)
     ensureDirectoryRecursive("${paths.cacheBase}/$groupPath/$artifact").getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
         exitProcess(EXIT_DEPENDENCY_ERROR)
     }
 
-    downloadFile(url, metadataPath).getOrElse { error ->
-        when (error) {
-            is DownloadError.HttpFailed -> eprintln("error: could not fetch metadata for $group:$artifact (HTTP ${error.statusCode})")
-            is DownloadError.WriteFailed -> eprintln("error: could not write metadata to ${error.path}")
-            is DownloadError.NetworkError -> eprintln("error: network error fetching metadata for $group:$artifact: ${error.message}")
+    val fetchErr = downloadFromRepositories(
+        repos,
+        metadataPath,
+        { repo -> buildMetadataDownloadUrl(group, artifact, repo) },
+        ::downloadFile
+    ).getError()
+    if (fetchErr != null) {
+        when (fetchErr) {
+            is DownloadError.HttpFailed -> eprintln("error: could not fetch metadata for $group:$artifact (HTTP ${fetchErr.statusCode})")
+            is DownloadError.WriteFailed -> eprintln("error: could not write metadata to ${fetchErr.path}")
+            is DownloadError.NetworkError -> eprintln("error: network error fetching metadata for $group:$artifact: ${fetchErr.message}")
         }
         exitProcess(EXIT_DEPENDENCY_ERROR)
     }
@@ -206,7 +219,7 @@ internal fun doTree() {
 
     val paths = resolveKeelPaths(EXIT_DEPENDENCY_ERROR)
 
-    val pomLookup = createPomLookup(paths.cacheBase, createResolverDeps())
+    val pomLookup = createPomLookup(config.repositories.values.toList(), paths.cacheBase, createResolverDeps())
     if (config.dependencies.isNotEmpty()) {
         val tree = buildDependencyTree(config.dependencies, pomLookup)
         println(formatDependencyTree(tree))

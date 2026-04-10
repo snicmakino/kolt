@@ -1,6 +1,6 @@
 package keel.tool
 
-import keel.resolve.MAVEN_CENTRAL_BASE
+import keel.config.MAVEN_CENTRAL_BASE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

@@ -16,9 +16,9 @@ fun parseMetadataXml(xml: String): Result<String, MetadataParseError> {
     return Err(MetadataParseError("No release or latest version found in metadata"))
 }
 
-fun buildMetadataDownloadUrl(group: String, artifact: String): String {
+fun buildMetadataDownloadUrl(group: String, artifact: String, baseUrl: String): String {
     val groupPath = group.replace('.', '/')
-    return "$MAVEN_CENTRAL_BASE/$groupPath/$artifact/maven-metadata.xml"
+    return "$baseUrl/$groupPath/$artifact/maven-metadata.xml"
 }
 
 private fun extractSimpleTag(xml: String, tagName: String): String? {

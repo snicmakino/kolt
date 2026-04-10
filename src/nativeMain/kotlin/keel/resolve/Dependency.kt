@@ -12,8 +12,6 @@ data class Coordinate(
     val version: String
 )
 
-const val MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2"
-
 fun parseCoordinate(groupArtifact: String, version: String): Result<Coordinate, InvalidCoordinate> {
     val parts = groupArtifact.split(":")
     if (parts.size != 2) {
@@ -26,9 +24,9 @@ fun parseCoordinate(groupArtifact: String, version: String): Result<Coordinate, 
     return Ok(Coordinate(group, artifact, version))
 }
 
-private fun buildMavenUrl(coord: Coordinate, extension: String): String {
+private fun buildMavenUrl(coord: Coordinate, baseUrl: String, extension: String): String {
     val groupPath = coord.group.replace('.', '/')
-    return "$MAVEN_CENTRAL_BASE/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
+    return "$baseUrl/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
 }
 
 private fun buildRelativePath(coord: Coordinate, extension: String): String {
@@ -36,15 +34,15 @@ private fun buildRelativePath(coord: Coordinate, extension: String): String {
     return "$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
 }
 
-fun buildDownloadUrl(coord: Coordinate): String = buildMavenUrl(coord, "jar")
+fun buildDownloadUrl(coord: Coordinate, baseUrl: String): String = buildMavenUrl(coord, baseUrl, "jar")
 
 fun buildCachePath(coord: Coordinate): String = buildRelativePath(coord, "jar")
 
-fun buildPomDownloadUrl(coord: Coordinate): String = buildMavenUrl(coord, "pom")
+fun buildPomDownloadUrl(coord: Coordinate, baseUrl: String): String = buildMavenUrl(coord, baseUrl, "pom")
 
 fun buildPomCachePath(coord: Coordinate): String = buildRelativePath(coord, "pom")
 
-fun buildModuleDownloadUrl(coord: Coordinate): String = buildMavenUrl(coord, "module")
+fun buildModuleDownloadUrl(coord: Coordinate, baseUrl: String): String = buildMavenUrl(coord, baseUrl, "module")
 
 fun buildModuleCachePath(coord: Coordinate): String = buildRelativePath(coord, "module")
 

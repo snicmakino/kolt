@@ -9,6 +9,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 
+const val MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2"
+
 sealed class ConfigError {
     data class ParseFailed(val message: String) : ConfigError()
 }
@@ -26,7 +28,8 @@ data class KeelConfig(
     val dependencies: Map<String, String> = emptyMap(),
     @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
     @SerialName("fmt_style") val fmtStyle: String = "google",
-    val plugins: Map<String, Boolean> = emptyMap()
+    val plugins: Map<String, Boolean> = emptyMap(),
+    val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE)
 )
 
 private val toml = Toml(
@@ -39,7 +42,10 @@ fun parseConfig(tomlString: String): Result<KeelConfig, ConfigError> {
         // ktoml preserves quotes in map keys; strip them
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
-        Ok(config.copy(dependencies = cleanedDeps, testDependencies = cleanedTestDeps))
+        val cleanedRepos = config.repositories
+            .mapKeys { (key, _) -> key.removeSurrounding("\"") }
+            .mapValues { (_, url) -> url.trimEnd('/') }
+        Ok(config.copy(dependencies = cleanedDeps, testDependencies = cleanedTestDeps, repositories = cleanedRepos))
     } catch (e: SerializationException) {
         Err(ConfigError.ParseFailed("failed to parse keel.toml: ${e.message}"))
     } catch (e: IllegalArgumentException) {

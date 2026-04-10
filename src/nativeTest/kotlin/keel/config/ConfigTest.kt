@@ -335,6 +335,107 @@ class ConfigTest {
     }
 
     @Test
+    fun parseMinimalConfigHasDefaultRepositories() {
+        // Given: no [repositories] section in TOML
+        // When: config is parsed
+        val config = assertNotNull(parseConfig(minimalToml).get())
+
+        // Then: default is Maven Central
+        assertEquals(1, config.repositories.size)
+        assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    }
+
+    @Test
+    fun parseConfigWithRepositories() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [repositories]
+            myrepo = "https://nexus.example.com/repository/maven-public"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.repositories.size)
+        assertEquals("https://nexus.example.com/repository/maven-public", config.repositories["myrepo"])
+    }
+
+    @Test
+    fun parseConfigWithMultipleRepositoriesPreservesOrder() {
+        // Given: two repositories declared in a specific order
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [repositories]
+            internal = "https://nexus.example.com/repository/internal"
+            central = "https://repo1.maven.org/maven2"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(2, config.repositories.size)
+        // Map preserves insertion order
+        val entries = config.repositories.entries.toList()
+        assertEquals("internal", entries[0].key)
+        assertEquals("https://nexus.example.com/repository/internal", entries[0].value)
+        assertEquals("central", entries[1].key)
+        assertEquals("https://repo1.maven.org/maven2", entries[1].value)
+    }
+
+    @Test
+    fun parseConfigWithRepositoriesAndDependencies() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [dependencies]
+            "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
+
+            [repositories]
+            central = "https://repo1.maven.org/maven2"
+            internal = "https://nexus.example.com/repository/maven-public"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals(1, config.dependencies.size)
+        assertEquals(2, config.repositories.size)
+    }
+
+    @Test
+    fun repositoryTrailingSlashIsNormalized() {
+        // Given: a repository URL with a trailing slash
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            main = "com.example.MainKt"
+            sources = ["src"]
+
+            [repositories]
+            jitpack = "https://jitpack.io/"
+            central = "https://repo1.maven.org/maven2/"
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        // Trailing slashes must be stripped to prevent double-slash in constructed URLs
+        assertEquals("https://jitpack.io", config.repositories["jitpack"])
+        assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    }
+
+    @Test
     fun commentsAreIgnored() {
         val toml = """
             # Project configuration
@@ -348,5 +449,14 @@ class ConfigTest {
 
         val config = assertNotNull(parseConfig(toml).get())
         assertEquals("my-app", config.name)
+    }
+
+    @Test
+    fun mavenCentralBaseDefinedInConfigPackage() {
+        // Verifies MAVEN_CENTRAL_BASE is defined in keel.config (not scattered to resolve/tool),
+        // and matches the canonical Maven Central URL used as the default repository.
+        assertEquals("https://repo1.maven.org/maven2", MAVEN_CENTRAL_BASE)
+        val config = assertNotNull(parseConfig(minimalToml).get())
+        assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
 }

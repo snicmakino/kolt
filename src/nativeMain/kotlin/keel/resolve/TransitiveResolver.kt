@@ -3,8 +3,10 @@ package keel.resolve
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import keel.config.KeelConfig
+import keel.infra.DownloadError
 
 /**
  * Resolves dependencies transitively. Orchestrates I/O (POM/JAR fetching,
@@ -21,12 +23,14 @@ fun resolveTransitive(
     cacheBase: String,
     deps: ResolverDeps
 ): Result<ResolveResult, ResolveError> {
+    val repos = config.repositories.values.toList()
+
     // Create POM lookup backed by cache + download
-    val basePomLookup = createPomLookup(cacheBase, deps)
+    val basePomLookup = createPomLookup(repos, cacheBase, deps)
 
     // Track KMP redirects: original groupArtifact -> redirected groupArtifact
     val redirects = mutableMapOf<String, String>()
-    val moduleLookup = createModuleLookup(cacheBase, deps)
+    val moduleLookup = createModuleLookup(repos, cacheBase, deps)
 
     val pomLookup: (String, String) -> PomInfo? = { groupArtifact, version ->
         val redirect = moduleLookup(groupArtifact, version)
@@ -45,7 +49,31 @@ fun resolveTransitive(
     }
 
     // Download JARs and compute hashes
-    return materialize(nodes, redirects, config, existingLock, cacheBase, deps)
+    return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos)
+}
+
+/**
+ * Tries each repository in order, downloading to [destPath].
+ * Falls back to the next repository only on HTTP 404. Any other error stops immediately.
+ */
+internal fun downloadFromRepositories(
+    repos: List<String>,
+    destPath: String,
+    urlBuilder: (String) -> String,
+    download: (String, String) -> Result<Unit, DownloadError>
+): Result<Unit, DownloadError> {
+    var lastError: DownloadError? = null
+    for (repo in repos) {
+        val url = urlBuilder(repo)
+        val error = download(url, destPath).getError()
+        if (error == null) return Ok(Unit)
+        if (error is DownloadError.HttpFailed && error.statusCode == 404) {
+            lastError = error
+        } else {
+            return Err(error)
+        }
+    }
+    return Err(lastError ?: DownloadError.NetworkError("", "no repositories configured"))
 }
 
 /**
@@ -54,6 +82,7 @@ fun resolveTransitive(
  * the same POM (e.g., shared parent POMs in diamond dependencies).
  */
 internal fun createPomLookup(
+    repos: List<String>,
     cacheBase: String,
     deps: ResolverDeps
 ): (String, String) -> PomInfo? {
@@ -72,7 +101,7 @@ internal fun createPomLookup(
                     val parentDir = pomCachePath.substringBeforeLast('/')
                     val dirOk = deps.ensureDirectoryRecursive(parentDir).getOrElse { null }
                     if (dirOk != null) {
-                        deps.downloadFile(buildPomDownloadUrl(coord), pomCachePath).getOrElse { null }
+                        downloadFromRepositories(repos, pomCachePath, { buildPomDownloadUrl(coord, it) }, deps::downloadFile).getOrElse { null }
                     }
                 }
 
@@ -92,6 +121,7 @@ internal fun createPomLookup(
  * .module file downloads for the same coordinate.
  */
 private fun createModuleLookup(
+    repos: List<String>,
     cacheBase: String,
     deps: ResolverDeps
 ): (String, String) -> JvmRedirect? {
@@ -105,7 +135,7 @@ private fun createModuleLookup(
         if (cached != null) {
             if (cached === noRedirect) null else cached
         } else {
-            val result = checkModuleFile(groupArtifact, version, cacheBase, deps)
+            val result = checkModuleFile(groupArtifact, version, repos, cacheBase, deps)
             cache[cacheKey] = result ?: noRedirect
             result
         }
@@ -115,6 +145,7 @@ private fun createModuleLookup(
 private fun checkModuleFile(
     groupArtifact: String,
     version: String,
+    repos: List<String>,
     cacheBase: String,
     deps: ResolverDeps
 ): JvmRedirect? {
@@ -127,7 +158,7 @@ private fun checkModuleFile(
     if (!deps.fileExists(moduleCachePath)) {
         val parentDir = moduleCachePath.substringBeforeLast('/')
         deps.ensureDirectoryRecursive(parentDir).getOrElse { return null }
-        deps.downloadFile(buildModuleDownloadUrl(coord), moduleCachePath).getOrElse { return null }
+        downloadFromRepositories(repos, moduleCachePath, { buildModuleDownloadUrl(coord, it) }, deps::downloadFile).getOrElse { return null }
     }
 
     val content = deps.readFileContent(moduleCachePath).getOrElse { return null }
@@ -150,7 +181,8 @@ private fun materialize(
     config: KeelConfig,
     existingLock: Lockfile?,
     cacheBase: String,
-    deps: ResolverDeps
+    deps: ResolverDeps,
+    repos: List<String>
 ): Result<ResolveResult, ResolveError> {
     var lockChanged = false
     val resolvedDeps = mutableListOf<ResolvedDep>()
@@ -172,7 +204,7 @@ private fun materialize(
             deps.ensureDirectoryRecursive(parentDir).getOrElse {
                 return Err(ResolveError.DirectoryCreateFailed(parentDir))
             }
-            deps.downloadFile(buildDownloadUrl(coord), fullCachePath).getOrElse { error ->
+            downloadFromRepositories(repos, fullCachePath, { buildDownloadUrl(coord, it) }, deps::downloadFile).getOrElse { error ->
                 return Err(ResolveError.DownloadFailed(node.groupArtifact, error))
             }
             lockChanged = true

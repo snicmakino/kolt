@@ -825,6 +825,192 @@ class TransitiveResolverTest {
         }
     }
 
+    // ---- Multi-repository fallback tests ----
+
+    @Test
+    fun downloadFromRepositoriesSucceedsOnFirstRepo() {
+        // Given: two repos, first repo returns the artifact
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val downloadedUrls = mutableListOf<String>()
+
+        // When: downloading with two repos
+        val result = downloadFromRepositories(
+            repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+            destPath = "/cache/lib.jar",
+            urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+            download = { url, _ -> downloadedUrls.add(url); Ok(Unit) }
+        )
+
+        // Then: succeeds, only contacts first repo
+        assertNotNull(result.get())
+        assertEquals(1, downloadedUrls.size)
+        assertEquals(
+            "https://repo1.example.com/com/example/lib/1.0.0/lib-1.0.0.jar",
+            downloadedUrls[0]
+        )
+    }
+
+    @Test
+    fun downloadFromRepositoriesFallsBackToSecondRepoOn404() {
+        // Given: first repo returns 404, second repo has the artifact
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val downloadedUrls = mutableListOf<String>()
+        val repo1Base = "https://repo1.example.com"
+        val repo2Base = "https://repo2.example.com"
+
+        // When: downloading with two repos
+        val result = downloadFromRepositories(
+            repos = listOf(repo1Base, repo2Base),
+            destPath = "/cache/lib.jar",
+            urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+            download = { url, _ ->
+                downloadedUrls.add(url)
+                if (url.startsWith(repo1Base)) Err(DownloadError.HttpFailed(url, 404)) else Ok(Unit)
+            }
+        )
+
+        // Then: succeeds using second repo
+        assertNotNull(result.get())
+        assertEquals(2, downloadedUrls.size)
+        assertEquals("https://repo1.example.com/com/example/lib/1.0.0/lib-1.0.0.jar", downloadedUrls[0])
+        assertEquals("https://repo2.example.com/com/example/lib/1.0.0/lib-1.0.0.jar", downloadedUrls[1])
+    }
+
+    @Test
+    fun downloadFromRepositoriesReturnsErrWhenAllRepos404() {
+        // Given: all repos return 404
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+
+        // When: all repos 404
+        val result = downloadFromRepositories(
+            repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+            destPath = "/cache/lib.jar",
+            urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+            download = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) }
+        )
+
+        // Then: returns the last 404 error
+        val error = assertIs<DownloadError.HttpFailed>(result.getError())
+        assertEquals(404, error.statusCode)
+    }
+
+    @Test
+    fun downloadFromRepositoriesStopsOnNon404Error() {
+        // Given: first repo returns a non-404 error (network failure)
+        val coord = Coordinate("com.example", "lib", "1.0.0")
+        val downloadedUrls = mutableListOf<String>()
+
+        // When: first repo has a non-404 error
+        val result = downloadFromRepositories(
+            repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+            destPath = "/cache/lib.jar",
+            urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+            download = { url, _ ->
+                downloadedUrls.add(url)
+                Err(DownloadError.NetworkError(url, "connection refused"))
+            }
+        )
+
+        // Then: stops immediately, returns the network error without trying second repo
+        assertIs<DownloadError.NetworkError>(result.getError())
+        assertEquals(1, downloadedUrls.size)
+    }
+
+    @Test
+    fun resolveWithCustomRepositoryUrl() {
+        // Given: config with a custom repository instead of Maven Central
+        val customRepoBase = "https://nexus.example.com/repository/maven-public"
+        val config = testConfig(
+            dependencies = mapOf("com.example:lib" to "1.0.0"),
+            repositories = mapOf("myrepo" to customRepoBase)
+        )
+        val pomXml = """
+            <project>
+                <groupId>com.example</groupId>
+                <artifactId>lib</artifactId>
+                <version>1.0.0</version>
+            </project>
+        """.trimIndent()
+
+        val downloadedUrls = mutableListOf<String>()
+        val deps = object : ResolverDeps {
+            val cachedFiles = mutableSetOf<String>()
+            val fileContents = mapOf(
+                "/cache/com/example/lib/1.0.0/lib-1.0.0.pom" to pomXml
+            )
+
+            override fun fileExists(path: String) = path in cachedFiles
+            override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
+            override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+                downloadedUrls.add(url)
+                cachedFiles.add(destPath)
+                return Ok(Unit)
+            }
+            override fun computeSha256(filePath: String): Result<String, Sha256Error> = Ok("hash1")
+            override fun readFileContent(path: String): Result<String, OpenFailed> {
+                val content = fileContents[path] ?: return Err(OpenFailed(path))
+                return Ok(content)
+            }
+        }
+
+        // When: resolving dependencies
+        val result = resolveTransitive(config, null, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+
+        // Then: downloaded from custom repo
+        assertEquals(1, resolved.deps.size)
+        assertTrue(downloadedUrls.any { it.startsWith(customRepoBase) })
+    }
+
+    @Test
+    fun resolveWithMultipleRepositoriesFallsBackOn404() {
+        // Given: config with two repos; jar is only in the second repo
+        val repo1Base = "https://repo1.example.com"
+        val repo2Base = "https://repo2.example.com"
+        val config = testConfig(
+            dependencies = mapOf("com.example:lib" to "1.0.0"),
+            repositories = mapOf("primary" to repo1Base, "fallback" to repo2Base)
+        )
+        val pomXml = """
+            <project>
+                <groupId>com.example</groupId>
+                <artifactId>lib</artifactId>
+                <version>1.0.0</version>
+            </project>
+        """.trimIndent()
+
+        val cachedFiles = mutableSetOf<String>()
+        val deps = object : ResolverDeps {
+            val fileContents = mapOf(
+                "/cache/com/example/lib/1.0.0/lib-1.0.0.pom" to pomXml
+            )
+
+            override fun fileExists(path: String) = path in cachedFiles
+            override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
+            override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+                return if (url.startsWith(repo1Base)) {
+                    Err(DownloadError.HttpFailed(url, 404))
+                } else {
+                    cachedFiles.add(destPath)
+                    Ok(Unit)
+                }
+            }
+            override fun computeSha256(filePath: String): Result<String, Sha256Error> = Ok("hash1")
+            override fun readFileContent(path: String): Result<String, OpenFailed> {
+                val content = fileContents[path] ?: return Err(OpenFailed(path))
+                return Ok(content)
+            }
+        }
+
+        // When: resolving with first repo returning 404 for jar
+        val result = resolveTransitive(config, null, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+
+        // Then: resolves successfully using the second repo
+        assertEquals(1, resolved.deps.size)
+        assertEquals("com.example:lib", resolved.deps[0].groupArtifact)
+    }
+
     // Helper: like fakeTransitiveDeps but tracks readFileContent call counts
     private fun countingDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),

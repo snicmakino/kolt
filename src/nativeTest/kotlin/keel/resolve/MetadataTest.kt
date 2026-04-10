@@ -2,6 +2,7 @@ package keel.resolve
 
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import keel.config.MAVEN_CENTRAL_BASE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -101,9 +102,22 @@ class MetadataTest {
 
     @Test
     fun buildMetadataUrl() {
-        val url = buildMetadataDownloadUrl("org.jetbrains.kotlinx", "kotlinx-coroutines-core")
+        val url = buildMetadataDownloadUrl("org.jetbrains.kotlinx", "kotlinx-coroutines-core", MAVEN_CENTRAL_BASE)
         assertEquals(
             "https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/maven-metadata.xml",
+            url
+        )
+    }
+
+    @Test
+    fun buildMetadataUrlWithCustomBaseUrl() {
+        val url = buildMetadataDownloadUrl(
+            "com.example",
+            "lib",
+            "https://nexus.example.com/repository/maven-public"
+        )
+        assertEquals(
+            "https://nexus.example.com/repository/maven-public/com/example/lib/maven-metadata.xml",
             url
         )
     }

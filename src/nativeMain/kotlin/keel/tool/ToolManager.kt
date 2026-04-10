@@ -3,7 +3,7 @@ package keel.tool
 import com.github.michaelbull.result.getOrElse
 import keel.config.KeelPaths
 import keel.infra.*
-import keel.resolve.MAVEN_CENTRAL_BASE
+import keel.config.MAVEN_CENTRAL_BASE
 import kotlin.system.exitProcess
 
 internal data class ToolSpec(
