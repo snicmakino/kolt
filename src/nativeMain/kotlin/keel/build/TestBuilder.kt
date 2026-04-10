@@ -13,14 +13,15 @@ fun testBuildCommand(
     config: KeelConfig,
     classesDir: String,
     classpath: String? = null,
-    pluginArgs: List<String> = emptyList()
+    pluginArgs: List<String> = emptyList(),
+    kotlincPath: String? = null
 ): TestBuildCommand {
     val cp = buildList {
         add(classesDir)
         if (!classpath.isNullOrEmpty()) add(classpath)
     }.joinToString(":")
     val args = buildList {
-        add("kotlinc")
+        add(kotlincPath ?: "kotlinc")
         add("-cp")
         add(cp)
         addAll(config.testSources)

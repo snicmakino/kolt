@@ -8,6 +8,10 @@ import kotlin.system.exitProcess
 internal data class KeelPaths(val home: String) {
     val cacheBase: String = "$home/.keel/cache"
     val toolsDir: String = "$home/.keel/tools"
+    val toolchainsDir: String = "$home/.keel/toolchains"
+
+    fun kotlincPath(version: String): String = "$toolchainsDir/kotlinc/$version"
+    fun kotlincBin(version: String): String = "${kotlincPath(version)}/bin/kotlinc"
 }
 
 internal fun resolveKeelPaths(exitCode: Int): KeelPaths {

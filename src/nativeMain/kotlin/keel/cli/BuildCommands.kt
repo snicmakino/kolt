@@ -29,7 +29,9 @@ internal fun loadProjectConfig(): KeelConfig {
     }
 }
 
-private fun checkVersion(config: KeelConfig) {
+// managedKotlincBin: non-null means managed toolchain (version is known, skip check)
+private fun checkVersion(config: KeelConfig, managedKotlincBin: String?) {
+    if (managedKotlincBin != null) return
     val output = executeAndCapture("kotlinc -version 2>&1").getOrElse {
         eprintln("warning: could not determine kotlinc version")
         return
@@ -47,11 +49,13 @@ private fun checkVersion(config: KeelConfig) {
 internal fun doCheck() {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig()
-    checkVersion(config)
+    val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
+    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
+    checkVersion(config, managedKotlincBin)
 
     val classpath = resolveDependencies(config)
-    val pArgs = resolvePluginArgs(config)
-    val cmd = checkCommand(config, classpath, pArgs)
+    val pArgs = resolvePluginArgs(config, managedKotlincBin)
+    val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
     println("checking ${config.name}...")
     executeCommand(cmd).getOrElse { error ->
@@ -89,16 +93,19 @@ internal fun doBuild(): BuildResult {
     val cachedState = readFileAsString(BUILD_STATE_FILE).getOrElse { null }
         ?.let { parseBuildState(it) }
 
+    val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
+    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
+
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config))
+        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config, managedKotlincBin))
     }
 
-    checkVersion(config)
+    checkVersion(config, managedKotlincBin)
     val classpath = resolveDependencies(config)
-    val pArgs = resolvePluginArgs(config)
-    val buildCmd = buildCommand(config, classpath, pArgs)
+    val pArgs = resolvePluginArgs(config, managedKotlincBin)
+    val buildCmd = buildCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
     ensureDirectoryRecursive(CLASSES_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
         exitProcess(EXIT_BUILD_ERROR)
@@ -166,9 +173,10 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
 
     val paths = resolveKeelPaths(EXIT_TEST_ERROR)
     val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC, EXIT_TEST_ERROR)
+    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
 
     val testConfig = config.copy(testSources = existingTestSources)
-    val testCmd = testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs)
+    val testCmd = testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs, kotlincPath = managedKotlincBin)
     println("compiling tests...")
     executeCommand(testCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "test compilation"))

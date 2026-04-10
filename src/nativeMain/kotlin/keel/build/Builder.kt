@@ -15,9 +15,10 @@ data class BuildCommand(
 fun checkCommand(
     config: KeelConfig,
     classpath: String? = null,
-    pluginArgs: List<String> = emptyList()
+    pluginArgs: List<String> = emptyList(),
+    kotlincPath: String? = null
 ): List<String> = buildList {
-    add("kotlinc")
+    add(kotlincPath ?: "kotlinc")
     if (!classpath.isNullOrEmpty()) {
         add("-cp")
         add(classpath)
@@ -31,10 +32,11 @@ fun checkCommand(
 fun buildCommand(
     config: KeelConfig,
     classpath: String? = null,
-    pluginArgs: List<String> = emptyList()
+    pluginArgs: List<String> = emptyList(),
+    kotlincPath: String? = null
 ): BuildCommand {
     val args = buildList {
-        add("kotlinc")
+        add(kotlincPath ?: "kotlinc")
         if (!classpath.isNullOrEmpty()) {
             add("-cp")
             add(classpath)

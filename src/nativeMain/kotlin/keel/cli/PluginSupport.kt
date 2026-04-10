@@ -23,11 +23,15 @@ internal fun resolveKotlinHome(): String {
     return parseKotlinHome(kotlincPath)
 }
 
-internal fun resolvePluginArgs(config: KeelConfig): List<String> {
+internal fun resolvePluginArgs(config: KeelConfig, managedKotlincBin: String? = null): List<String> {
     val enabled = config.plugins.filterValues { it }
     if (enabled.isEmpty()) return emptyList()
 
-    val kotlinHome = resolveKotlinHome()
+    val kotlinHome = if (managedKotlincBin != null) {
+        parseKotlinHome(managedKotlincBin)
+    } else {
+        resolveKotlinHome()
+    }
     return pluginArgs(config.plugins, kotlinHome).getOrElse { error ->
         eprintln("error: unknown plugin '${error.name}'")
         exitProcess(EXIT_CONFIG_ERROR)

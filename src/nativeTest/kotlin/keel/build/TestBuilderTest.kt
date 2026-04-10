@@ -140,6 +140,58 @@ class TestBuilderTest {
         )
     }
 
+    // --- kotlincPath parameter ---
+
+    @Test
+    fun testBuildCommandWithManagedKotlincPathUsesItAsCompiler() {
+        // Given: a managed kotlinc binary path
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        // When: testBuildCommand is called with that path
+        val cmd = testBuildCommand(
+            config = testConfig(),
+            classesDir = "build/classes",
+            kotlincPath = managedKotlincBin
+        )
+
+        // Then: the managed path is used as the first arg, not system "kotlinc"
+        assertEquals(
+            listOf(managedKotlincBin, "-cp", "build/classes", "test", "-jvm-target", "17", "-d", "build/test-classes"),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun testBuildCommandWithNullKotlincPathDefaultsToSystemKotlinc() {
+        // Given: no managed toolchain (null)
+        val cmd = testBuildCommand(
+            config = testConfig(),
+            classesDir = "build/classes",
+            kotlincPath = null
+        )
+
+        // Then: falls back to system "kotlinc"
+        assertEquals("kotlinc", cmd.args.first())
+    }
+
+    @Test
+    fun testBuildCommandWithManagedKotlincAndClasspath() {
+        // Given: managed kotlinc + extra classpath
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        val cmd = testBuildCommand(
+            config = testConfig(),
+            classesDir = "build/classes",
+            classpath = "/cache/dep.jar",
+            kotlincPath = managedKotlincBin
+        )
+
+        assertEquals(
+            listOf(managedKotlincBin, "-cp", "build/classes:/cache/dep.jar", "test", "-jvm-target", "17", "-d", "build/test-classes"),
+            cmd.args
+        )
+    }
+
     @Test
     fun testBuildCommandWithClasspathAndPluginArgs() {
         val pluginArgs = listOf("-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar")

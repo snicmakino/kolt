@@ -36,6 +36,7 @@ fun main(args: Array<String>) {
         "add" -> doAdd(args.drop(1))
         "install" -> doInstall()
         "update" -> doUpdate()
+        "toolchain" -> doToolchain(args.drop(1))
         "--version", "version" -> println(versionString())
         else -> {
             eprintln("error: unknown command '${args[0]}'")
@@ -60,5 +61,6 @@ private fun printUsage() {
     eprintln("  tree       Show dependency tree")
     eprintln("  install    Resolve dependencies and download JARs")
     eprintln("  update     Re-resolve dependencies and update lockfile")
+    eprintln("  toolchain  Manage kotlinc toolchain (e.g. keel toolchain install)")
     eprintln("  version    Show version information")
 }

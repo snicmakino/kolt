@@ -193,6 +193,85 @@ class BuilderTest {
         )
     }
 
+    @Test
+    fun buildCommandWithManagedKotlincPathUsesItAsCompiler() {
+        // Given: a managed kotlinc binary path
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        // When: buildCommand is called with that path
+        val cmd = buildCommand(testConfig(), kotlincPath = managedKotlincBin)
+
+        // Then: the managed path is used as the first arg, not the system "kotlinc"
+        assertEquals(
+            listOf(managedKotlincBin, "src", "-jvm-target", "17", "-d", "build/classes"),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun buildCommandWithNullKotlincPathDefaultsToSystemKotlinc() {
+        // Given: no managed toolchain (null)
+        // When: buildCommand is called with explicit null kotlincPath
+        val cmd = buildCommand(testConfig(), kotlincPath = null)
+
+        // Then: falls back to system "kotlinc"
+        assertEquals("kotlinc", cmd.args.first())
+    }
+
+    @Test
+    fun buildCommandWithManagedKotlincAndClasspath() {
+        // Given: managed kotlinc + classpath
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        // When: buildCommand is called with both
+        val cmd = buildCommand(testConfig(), classpath = "/cache/a.jar", kotlincPath = managedKotlincBin)
+
+        // Then: managed path is first, classpath follows
+        assertEquals(
+            listOf(managedKotlincBin, "-cp", "/cache/a.jar", "src", "-jvm-target", "17", "-d", "build/classes"),
+            cmd.args
+        )
+    }
+
+    // --- checkCommand (kotlincPath) ---
+
+    @Test
+    fun checkCommandWithManagedKotlincPathUsesItAsCompiler() {
+        // Given: a managed kotlinc binary path
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        // When: checkCommand is called with that path
+        val cmd = checkCommand(testConfig(), kotlincPath = managedKotlincBin)
+
+        // Then: the managed path is first in args
+        assertEquals(
+            listOf(managedKotlincBin, "src", "-jvm-target", "17"),
+            cmd
+        )
+    }
+
+    @Test
+    fun checkCommandWithNullKotlincPathDefaultsToSystemKotlinc() {
+        // Given: no managed toolchain (null)
+        val cmd = checkCommand(testConfig(), kotlincPath = null)
+
+        // Then: falls back to system "kotlinc"
+        assertEquals("kotlinc", cmd.first())
+    }
+
+    @Test
+    fun checkCommandWithManagedKotlincAndClasspath() {
+        // Given: managed kotlinc + classpath
+        val managedKotlincBin = "/home/user/.keel/toolchains/kotlinc/2.1.0/bin/kotlinc"
+
+        val cmd = checkCommand(testConfig(), classpath = "/cache/a.jar", kotlincPath = managedKotlincBin)
+
+        assertEquals(
+            listOf(managedKotlincBin, "-cp", "/cache/a.jar", "src", "-jvm-target", "17"),
+            cmd
+        )
+    }
+
     // --- jarCommand ---
 
     @Test
