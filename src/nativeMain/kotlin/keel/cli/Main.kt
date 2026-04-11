@@ -19,8 +19,8 @@ fun main(args: Array<String>) {
                 val sep = all.indexOf("--")
                 if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
             }
-            val (config, classpath) = doBuild()
-            doRun(config, classpath, appArgs)
+            val (config, classpath, _, javaPath) = doBuild()
+            doRun(config, classpath, appArgs, javaPath)
         }
         "test" -> {
             val testArgs = args.toList().let { all ->
@@ -61,6 +61,6 @@ private fun printUsage() {
     eprintln("  tree       Show dependency tree")
     eprintln("  install    Resolve dependencies and download JARs")
     eprintln("  update     Re-resolve dependencies and update lockfile")
-    eprintln("  toolchain  Manage kotlinc toolchain (e.g. keel toolchain install)")
+    eprintln("  toolchain  Manage toolchains (e.g. keel toolchain install)")
     eprintln("  version    Show version information")
 }

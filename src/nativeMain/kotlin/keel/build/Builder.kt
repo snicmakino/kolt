@@ -5,7 +5,7 @@ import keel.config.KeelConfig
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 
-internal fun jarPath(config: KeelConfig): String = "$BUILD_DIR/${config.name}.jar"
+internal fun outputJarPath(config: KeelConfig): String = "$BUILD_DIR/${config.name}.jar"
 
 data class BuildCommand(
     val args: List<String>,
@@ -51,10 +51,10 @@ fun buildCommand(
     return BuildCommand(args = args, outputPath = CLASSES_DIR)
 }
 
-fun jarCommand(config: KeelConfig): BuildCommand {
-    val outputPath = jarPath(config)
+fun jarCommand(config: KeelConfig, jarPath: String? = null): BuildCommand {
+    val outputPath = outputJarPath(config)
     return BuildCommand(
-        args = listOf("jar", "cf", outputPath, "-C", CLASSES_DIR, "."),
+        args = listOf(jarPath ?: "jar", "cf", outputPath, "-C", CLASSES_DIR, "."),
         outputPath = outputPath
     )
 }

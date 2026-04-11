@@ -14,7 +14,12 @@ internal const val LOCK_FILE = "keel.lock"
 private const val WORKSPACE_JSON = "workspace.json"
 private const val KLS_CLASSPATH = "kls-classpath"
 
-internal data class BuildResult(val config: KeelConfig, val classpath: String?, val pluginArgs: List<String> = emptyList())
+internal data class BuildResult(
+    val config: KeelConfig,
+    val classpath: String?,
+    val pluginArgs: List<String> = emptyList(),
+    val javaPath: String? = null
+)
 
 internal fun loadProjectConfig(): KeelConfig {
     val tomlString = readFileAsString(KEEL_TOML).getOrElse { error ->
@@ -95,11 +100,12 @@ internal fun doBuild(): BuildResult {
 
     val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
     val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
+    val (managedJavaBin, managedJarBin) = resolveJdkBins(config, paths)
 
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config, managedKotlincBin))
+        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config, managedKotlincBin), managedJavaBin)
     }
 
     checkVersion(config, managedKotlincBin)
@@ -125,7 +131,7 @@ internal fun doBuild(): BuildResult {
         }
     }
 
-    val jarCmd = jarCommand(config)
+    val jarCmd = jarCommand(config, jarPath = managedJarBin)
     executeCommand(jarCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "jar packaging"))
         exitProcess(EXIT_BUILD_ERROR)
@@ -142,16 +148,16 @@ internal fun doBuild(): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built ${jarCmd.outputPath} in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath, pArgs)
+    return BuildResult(config, classpath, pArgs, managedJavaBin)
 }
 
-internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String> = emptyList()) {
+internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String> = emptyList(), javaPath: String? = null) {
     if (!fileExists(CLASSES_DIR)) {
         eprintln("error: $CLASSES_DIR not found. Run 'keel build' first.")
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    val cmd = runCommand(config, classpath, appArgs)
+    val cmd = runCommand(config, classpath, appArgs, javaPath = javaPath)
     executeCommand(cmd.args).getOrElse { error ->
         when (error) {
             is ProcessError.NonZeroExit -> exitProcess(error.exitCode)
@@ -161,7 +167,7 @@ internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String>
 }
 
 internal fun doTest(testArgs: List<String> = emptyList()) {
-    val (config, classpath, pArgs) = doBuild()
+    val (config, classpath, pArgs, javaPath) = doBuild()
 
     val existingTestSources = config.testSources.filter { fileExists(it) }
     if (existingTestSources.isEmpty()) {
@@ -190,7 +196,8 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
         consoleLauncherPath = consoleLauncherPath,
         testResourceDirs = existingTestResourceDirs,
         classpath = classpath,
-        testArgs = testArgs
+        testArgs = testArgs,
+        javaPath = javaPath
     )
     println("running tests...")
     executeCommand(runCmd.args).getOrElse { error ->
@@ -205,6 +212,18 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
     }
     val elapsed = testStartMark.elapsedNow()
     println("tests passed in ${formatDuration(elapsed)}")
+}
+
+internal data class JdkBins(val java: String?, val jar: String?)
+
+internal fun resolveJdkBins(config: KeelConfig, paths: KeelPaths): JdkBins {
+    val version = config.jdk ?: return JdkBins(null, null)
+    val javaBin = resolveJavaBinPath(version, paths)
+    val jarBin = resolveJarBinPath(version, paths)
+    if (javaBin == null) {
+        eprintln("warning: jdk $version not installed (run 'keel toolchain install'). falling back to system java/jar")
+    }
+    return JdkBins(javaBin, jarBin)
 }
 
 internal fun createResolverDeps() = object : ResolverDeps {

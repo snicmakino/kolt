@@ -552,4 +552,58 @@ class ConfigTest {
         val config = assertNotNull(parseConfig(minimalToml).get())
         assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
+
+    // --- jdk field ---
+
+    @Test
+    fun parseMinimalConfigHasNullJdk() {
+        // Given: minimal config with no jdk field
+        // When: parsing
+        val config = assertNotNull(parseConfig(minimalToml).get())
+
+        // Then: jdk defaults to null (use system java)
+        assertNull(config.jdk)
+    }
+
+    @Test
+    fun parseConfigWithJdkVersion() {
+        // Given: config with jdk = "21"
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            jdk = "21"
+            main = "com.example.MainKt"
+            sources = ["src"]
+        """.trimIndent()
+
+        // When: parsing
+        val config = assertNotNull(parseConfig(toml).get())
+
+        // Then: jdk field contains the specified version
+        assertEquals("21", config.jdk)
+    }
+
+    @Test
+    fun parseConfigWithJdkAndJvmTargetAreIndependent() {
+        // Given: config with both jdk and jvm_target set to different values
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kotlin = "2.1.0"
+            target = "jvm"
+            jdk = "21"
+            jvm_target = "17"
+            main = "com.example.MainKt"
+            sources = ["src"]
+        """.trimIndent()
+
+        // When: parsing
+        val config = assertNotNull(parseConfig(toml).get())
+
+        // Then: jdk and jvm_target are independent fields
+        assertEquals("21", config.jdk)
+        assertEquals("17", config.jvmTarget)
+    }
 }

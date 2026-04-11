@@ -10,7 +10,8 @@ fun testRunCommand(
     consoleLauncherPath: String,
     testResourceDirs: List<String> = emptyList(),
     classpath: String? = null,
-    testArgs: List<String> = emptyList()
+    testArgs: List<String> = emptyList(),
+    javaPath: String? = null
 ): TestRunCommand {
     val cp = buildList {
         add(classesDir)
@@ -19,7 +20,7 @@ fun testRunCommand(
         if (!classpath.isNullOrEmpty()) add(classpath)
     }.joinToString(":")
     val args = buildList {
-        add("java")
+        add(javaPath ?: "java")
         add("-jar")
         add(consoleLauncherPath)
         add("--class-path")

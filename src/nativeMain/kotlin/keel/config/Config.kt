@@ -31,7 +31,8 @@ data class KeelConfig(
     @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
     @SerialName("fmt_style") val fmtStyle: String = "google",
     val plugins: Map<String, Boolean> = emptyMap(),
-    val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE)
+    val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+    val jdk: String? = null
 )
 
 private val toml = Toml(

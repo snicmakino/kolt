@@ -12,6 +12,10 @@ internal data class KeelPaths(val home: String) {
 
     fun kotlincPath(version: String): String = "$toolchainsDir/kotlinc/$version"
     fun kotlincBin(version: String): String = "${kotlincPath(version)}/bin/kotlinc"
+
+    fun jdkPath(version: String): String = "$toolchainsDir/jdk/$version"
+    fun javaBin(version: String): String = "${jdkPath(version)}/bin/java"
+    fun jarBin(version: String): String = "${jdkPath(version)}/bin/jar"
 }
 
 internal fun resolveKeelPaths(exitCode: Int): KeelPaths {

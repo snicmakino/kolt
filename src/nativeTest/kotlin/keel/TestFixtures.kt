@@ -11,7 +11,8 @@ fun testConfig(
     testSources: List<String> = listOf("test"),
     testDependencies: Map<String, String> = emptyMap(),
     plugins: Map<String, Boolean> = emptyMap(),
-    repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE)
+    repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+    jdk: String? = null
 ) = KeelConfig(
     name = name,
     version = "0.1.0",
@@ -24,5 +25,6 @@ fun testConfig(
     testSources = testSources,
     testDependencies = testDependencies,
     plugins = plugins,
-    repositories = repositories
+    repositories = repositories,
+    jdk = jdk
 )

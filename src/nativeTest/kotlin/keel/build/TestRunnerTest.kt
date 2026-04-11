@@ -164,4 +164,68 @@ class TestRunnerTest {
             cmd.args
         )
     }
+
+    @Test
+    fun testRunCommandWithManagedJavaPathUsesItAsJava() {
+        // Given: a managed java binary path
+        val managedJavaBin = "/home/user/.keel/toolchains/jdk/21/bin/java"
+
+        // When: testRunCommand is called with javaPath
+        val cmd = testRunCommand(
+            classesDir = "build/classes",
+            testClassesDir = "build/test-classes",
+            consoleLauncherPath = "/tools/launcher.jar",
+            javaPath = managedJavaBin
+        )
+
+        // Then: managed path is used as the first arg, not system "java"
+        assertEquals(
+            listOf(
+                managedJavaBin, "-jar", "/tools/launcher.jar",
+                "--class-path", "build/classes:build/test-classes",
+                "--scan-class-path"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun testRunCommandWithNullJavaPathDefaultsToSystemJava() {
+        // Given: no managed JDK (null)
+        // When: testRunCommand is called with explicit null javaPath
+        val cmd = testRunCommand(
+            classesDir = "build/classes",
+            testClassesDir = "build/test-classes",
+            consoleLauncherPath = "/tools/launcher.jar",
+            javaPath = null
+        )
+
+        // Then: falls back to system "java"
+        assertEquals("java", cmd.args.first())
+    }
+
+    @Test
+    fun testRunCommandWithManagedJavaAndClasspath() {
+        // Given: managed java + classpath
+        val managedJavaBin = "/home/user/.keel/toolchains/jdk/21/bin/java"
+
+        // When: testRunCommand is called with both javaPath and classpath
+        val cmd = testRunCommand(
+            classesDir = "build/classes",
+            testClassesDir = "build/test-classes",
+            consoleLauncherPath = "/tools/launcher.jar",
+            classpath = "/cache/dep.jar",
+            javaPath = managedJavaBin
+        )
+
+        // Then: managed java is first, classpath includes dependency
+        assertEquals(
+            listOf(
+                managedJavaBin, "-jar", "/tools/launcher.jar",
+                "--class-path", "build/classes:build/test-classes:/cache/dep.jar",
+                "--scan-class-path"
+            ),
+            cmd.args
+        )
+    }
 }

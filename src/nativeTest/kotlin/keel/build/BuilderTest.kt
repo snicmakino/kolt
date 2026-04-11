@@ -305,4 +305,45 @@ class BuilderTest {
         assertEquals("build/classes", cmd1.args[4])
         assertEquals("build/classes", cmd2.args[4])
     }
+
+    @Test
+    fun jarCommandWithManagedJarPathUsesItAsJar() {
+        // Given: a managed jar binary path
+        val managedJarBin = "/home/user/.keel/toolchains/jdk/21/bin/jar"
+
+        // When: jarCommand is called with that path
+        val cmd = jarCommand(testConfig(), jarPath = managedJarBin)
+
+        // Then: managed path is used as the first arg, not system "jar"
+        assertEquals(
+            listOf(managedJarBin, "cf", "build/my-app.jar", "-C", "build/classes", "."),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun jarCommandWithNullJarPathDefaultsToSystemJar() {
+        // Given: no managed JDK (null)
+        // When: jarCommand is called with explicit null jarPath
+        val cmd = jarCommand(testConfig(), jarPath = null)
+
+        // Then: falls back to system "jar"
+        assertEquals("jar", cmd.args.first())
+    }
+
+    @Test
+    fun jarCommandWithManagedJarPathPreservesOutputPath() {
+        // Given: a managed jar binary path
+        val managedJarBin = "/home/user/.keel/toolchains/jdk/21/bin/jar"
+
+        // When: jarCommand is called with jarPath
+        val cmd = jarCommand(testConfig(name = "hello-world"), jarPath = managedJarBin)
+
+        // Then: outputPath is still derived from project name, not affected by jarPath
+        assertEquals("build/hello-world.jar", cmd.outputPath)
+        assertEquals(
+            listOf(managedJarBin, "cf", "build/hello-world.jar", "-C", "build/classes", "."),
+            cmd.args
+        )
+    }
 }

@@ -2,6 +2,7 @@ package keel.cli
 
 import keel.config.resolveKeelPaths
 import keel.infra.eprintln
+import keel.tool.installJdkToolchain
 import keel.tool.installKotlincToolchain
 import kotlin.system.exitProcess
 
@@ -17,4 +18,7 @@ private fun doToolchainInstall() {
     val config = loadProjectConfig()
     val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
     installKotlincToolchain(config.kotlin, paths, EXIT_BUILD_ERROR)
+    if (config.jdk != null) {
+        installJdkToolchain(config.jdk, paths, EXIT_BUILD_ERROR)
+    }
 }

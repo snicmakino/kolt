@@ -63,4 +63,78 @@ class KeelPathsTest {
 
         assertEquals("/root/.keel/toolchains/kotlinc/2.3.20/bin/kotlinc", paths.kotlincBin("2.3.20"))
     }
+
+    // --- jdkPath ---
+
+    @Test
+    fun jdkPathBuildsVersionedDirectory() {
+        // Given: KeelPaths with a known home
+        val paths = KeelPaths("/home/user")
+
+        // When: jdkPath is called for a specific major version
+        val path = paths.jdkPath("21")
+
+        // Then: path points to the versioned directory under toolchains/jdk
+        assertEquals("/home/user/.keel/toolchains/jdk/21", path)
+    }
+
+    @Test
+    fun jdkPathDifferentVersion() {
+        val paths = KeelPaths("/home/alice")
+
+        assertEquals("/home/alice/.keel/toolchains/jdk/17", paths.jdkPath("17"))
+    }
+
+    // --- javaBin ---
+
+    @Test
+    fun javaBinBuildsVersionedBinPath() {
+        // Given: KeelPaths with a known home
+        val paths = KeelPaths("/home/user")
+
+        // When: javaBin is called for a specific major version
+        val bin = paths.javaBin("21")
+
+        // Then: bin path points to bin/java inside the versioned directory
+        assertEquals("/home/user/.keel/toolchains/jdk/21/bin/java", bin)
+    }
+
+    @Test
+    fun javaBinDifferentHome() {
+        val paths = KeelPaths("/root")
+
+        assertEquals("/root/.keel/toolchains/jdk/17/bin/java", paths.javaBin("17"))
+    }
+
+    // --- jarBin ---
+
+    @Test
+    fun jarBinBuildsVersionedBinPath() {
+        // Given: KeelPaths with a known home
+        val paths = KeelPaths("/home/user")
+
+        // When: jarBin is called for a specific major version
+        val bin = paths.jarBin("21")
+
+        // Then: bin path points to bin/jar inside the versioned directory
+        assertEquals("/home/user/.keel/toolchains/jdk/21/bin/jar", bin)
+    }
+
+    @Test
+    fun jarBinDifferentHome() {
+        val paths = KeelPaths("/root")
+
+        assertEquals("/root/.keel/toolchains/jdk/17/bin/jar", paths.jarBin("17"))
+    }
+
+    @Test
+    fun jdkJavaBinAndJarBinShareSameVersionedDirectory() {
+        // Given: jdkPath, javaBin, and jarBin for the same version
+        val paths = KeelPaths("/home/user")
+
+        // Then: javaBin and jarBin are both under jdkPath
+        val base = paths.jdkPath("21")
+        assertEquals("$base/bin/java", paths.javaBin("21"))
+        assertEquals("$base/bin/jar", paths.jarBin("21"))
+    }
 }

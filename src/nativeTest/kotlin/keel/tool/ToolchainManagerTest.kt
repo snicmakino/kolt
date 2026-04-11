@@ -172,4 +172,168 @@ class ToolchainManagerTest {
             removeDirectoryRecursive(paths.home + "/.keel")
         }
     }
+
+    // --- jdkDownloadUrl ---
+
+    @Test
+    fun jdkDownloadUrlContainsMajorVersion() {
+        // Given: major version 21
+        // When: building JDK download URL
+        val url = jdkDownloadUrl("21")
+
+        // Then: URL contains the major version
+        assertEquals(
+            "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse",
+            url
+        )
+    }
+
+    @Test
+    fun jdkDownloadUrlDifferentVersion() {
+        // Given: major version 17
+        val url = jdkDownloadUrl("17")
+
+        assertEquals(
+            "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse",
+            url
+        )
+    }
+
+    // --- resolveJavaBinPath ---
+
+    @Test
+    fun resolveJavaBinPathReturnsBinPathWhenManagedVersionInstalled() {
+        // Given: managed java bin exists at paths.javaBin(version)
+        val paths = KeelPaths("/tmp/keel_tc_jdk_resolve_installed")
+        val binDir = "${paths.toolchainsDir}/jdk/21/bin"
+        val binPath = "$binDir/java"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString(binPath, "#!/bin/sh")
+        try {
+            // When: resolveJavaBinPath is called with matching version
+            val result = resolveJavaBinPath("21", paths)
+
+            // Then: returns exactly paths.javaBin(version)
+            assertEquals(paths.javaBin("21"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveJavaBinPathReturnsNullWhenToolchainsDirAbsent() {
+        // Given: toolchains directory does not exist at all
+        val paths = KeelPaths("/tmp/keel_tc_jdk_resolve_no_dir")
+
+        // When: resolveJavaBinPath is called
+        val result = resolveJavaBinPath("21", paths)
+
+        // Then: returns null (system java fallback)
+        assertNull(result)
+    }
+
+    @Test
+    fun resolveJavaBinPathReturnsNullWhenVersionDirExistsButBinMissing() {
+        // Given: version directory exists but bin/java is absent
+        val paths = KeelPaths("/tmp/keel_tc_jdk_resolve_no_bin")
+        val versionDir = "${paths.toolchainsDir}/jdk/21"
+        ensureDirectoryRecursive(versionDir)
+        try {
+            // When: resolveJavaBinPath is called
+            val result = resolveJavaBinPath("21", paths)
+
+            // Then: returns null — partial installation is not usable
+            assertNull(result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveJavaBinPathReturnsNullForDifferentInstalledVersion() {
+        // Given: only version 17 is installed, not 21
+        val paths = KeelPaths("/tmp/keel_tc_jdk_resolve_version_isolation")
+        val binDir = "${paths.toolchainsDir}/jdk/17/bin"
+        val binPath = "$binDir/java"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString(binPath, "#!/bin/sh")
+        try {
+            // When: resolveJavaBinPath is called for 21
+            val result = resolveJavaBinPath("21", paths)
+
+            // Then: returns null — version isolation must be exact
+            assertNull(result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveJavaBinPathDelegatesPathConstructionToKeelPaths() {
+        // Given: a paths object and a file at the expected location
+        val paths = KeelPaths("/tmp/keel_tc_jdk_resolve_delegation")
+        val expectedBin = paths.javaBin("21")
+        val binDir = expectedBin.substringBeforeLast("/")
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString(expectedBin, "#!/bin/sh")
+        try {
+            // When: resolveJavaBinPath is called
+            val result = resolveJavaBinPath("21", paths)
+
+            // Then: returned path equals paths.javaBin() — no independent path construction
+            assertEquals(expectedBin, result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    // --- resolveJarBinPath ---
+
+    @Test
+    fun resolveJarBinPathReturnsBinPathWhenManagedVersionInstalled() {
+        // Given: managed jar bin exists at paths.jarBin(version)
+        val paths = KeelPaths("/tmp/keel_tc_jar_resolve_installed")
+        val binDir = "${paths.toolchainsDir}/jdk/21/bin"
+        val binPath = "$binDir/jar"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString(binPath, "#!/bin/sh")
+        try {
+            // When: resolveJarBinPath is called with matching version
+            val result = resolveJarBinPath("21", paths)
+
+            // Then: returns exactly paths.jarBin(version)
+            assertEquals(paths.jarBin("21"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveJarBinPathReturnsNullWhenToolchainsDirAbsent() {
+        // Given: toolchains directory does not exist at all
+        val paths = KeelPaths("/tmp/keel_tc_jar_resolve_no_dir")
+
+        // When: resolveJarBinPath is called
+        val result = resolveJarBinPath("21", paths)
+
+        // Then: returns null (system jar fallback)
+        assertNull(result)
+    }
+
+    @Test
+    fun resolveJarBinPathReturnsNullWhenVersionDirExistsButBinMissing() {
+        // Given: version directory exists but bin/jar is absent
+        val paths = KeelPaths("/tmp/keel_tc_jar_resolve_no_bin")
+        val versionDir = "${paths.toolchainsDir}/jdk/21"
+        ensureDirectoryRecursive(versionDir)
+        try {
+            // When: resolveJarBinPath is called
+            val result = resolveJarBinPath("21", paths)
+
+            // Then: returns null — partial installation is not usable
+            assertNull(result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
 }
