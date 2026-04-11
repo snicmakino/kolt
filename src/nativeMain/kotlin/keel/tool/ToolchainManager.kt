@@ -170,6 +170,34 @@ internal fun resolveKotlincPath(version: String, paths: KeelPaths): String? {
     return if (fileExists(binPath)) binPath else null
 }
 
+internal fun ensureKotlincBin(version: String, paths: KeelPaths, exitCode: Int): String {
+    resolveKotlincPath(version, paths)?.let { return it }
+    installKotlincToolchain(version, paths, exitCode)
+    return resolveKotlincPath(version, paths)
+        ?: run {
+            eprintln("error: kotlinc $version not found after installation")
+            exitProcess(exitCode)
+        }
+}
+
+data class JdkBins(val java: String?, val jar: String?)
+
+internal fun ensureJdkBins(version: String, paths: KeelPaths, exitCode: Int): JdkBins {
+    val javaBin = resolveJavaBinPath(version, paths)
+    if (javaBin != null) {
+        val jarBin = resolveJarBinPath(version, paths)
+        return JdkBins(javaBin, jarBin)
+    }
+    installJdkToolchain(version, paths, exitCode)
+    return JdkBins(
+        resolveJavaBinPath(version, paths) ?: run {
+            eprintln("error: java binary not found after installation")
+            exitProcess(exitCode)
+        },
+        resolveJarBinPath(version, paths)
+    )
+}
+
 internal fun installKotlincToolchain(version: String, paths: KeelPaths, exitCode: Int) {
     val finalPath = paths.kotlincPath(version)
     val binPath = paths.kotlincBin(version)

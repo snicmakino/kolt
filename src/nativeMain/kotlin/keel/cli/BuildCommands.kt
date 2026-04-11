@@ -34,29 +34,12 @@ internal fun loadProjectConfig(): KeelConfig {
     }
 }
 
-// managedKotlincBin: non-null means managed toolchain (version is known, skip check)
-private fun checkVersion(config: KeelConfig, managedKotlincBin: String?) {
-    if (managedKotlincBin != null) return
-    val output = executeAndCapture("kotlinc -version 2>&1").getOrElse {
-        eprintln("warning: could not determine kotlinc version")
-        return
-    }
-    val installedVersion = parseKotlincVersion(output)
-    if (installedVersion == null) {
-        eprintln("warning: could not parse kotlinc version from: $output")
-        return
-    }
-    if (installedVersion != config.kotlin) {
-        eprintln("warning: $KEEL_TOML specifies kotlin ${config.kotlin}, but kotlinc $installedVersion is installed")
-    }
-}
 
 internal fun doCheck() {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig()
     val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
-    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
-    checkVersion(config, managedKotlincBin)
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths, EXIT_BUILD_ERROR)
 
     val classpath = resolveDependencies(config)
     val pArgs = resolvePluginArgs(config, managedKotlincBin)
@@ -99,16 +82,14 @@ internal fun doBuild(): BuildResult {
         ?.let { parseBuildState(it) }
 
     val paths = resolveKeelPaths(EXIT_BUILD_ERROR)
-    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
-    val (managedJavaBin, managedJarBin) = resolveJdkBins(config, paths)
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths, EXIT_BUILD_ERROR)
+    val (managedJavaBin, managedJarBin) = ensureJdkBinsFromConfig(config, paths)
 
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
         return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config, managedKotlincBin), managedJavaBin)
     }
-
-    checkVersion(config, managedKotlincBin)
     val classpath = resolveDependencies(config)
     val pArgs = resolvePluginArgs(config, managedKotlincBin)
     val buildCmd = buildCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
@@ -179,7 +160,7 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
 
     val paths = resolveKeelPaths(EXIT_TEST_ERROR)
     val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC, EXIT_TEST_ERROR)
-    val managedKotlincBin = resolveKotlincPath(config.kotlin, paths)
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths, EXIT_TEST_ERROR)
 
     val testConfig = config.copy(testSources = existingTestSources)
     val testCmd = testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs, kotlincPath = managedKotlincBin)
@@ -214,16 +195,9 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
     println("tests passed in ${formatDuration(elapsed)}")
 }
 
-internal data class JdkBins(val java: String?, val jar: String?)
-
-internal fun resolveJdkBins(config: KeelConfig, paths: KeelPaths): JdkBins {
+internal fun ensureJdkBinsFromConfig(config: KeelConfig, paths: KeelPaths): JdkBins {
     val version = config.jdk ?: return JdkBins(null, null)
-    val javaBin = resolveJavaBinPath(version, paths)
-    val jarBin = resolveJarBinPath(version, paths)
-    if (javaBin == null) {
-        eprintln("warning: jdk $version not installed (run 'keel toolchain install'). falling back to system java/jar")
-    }
-    return JdkBins(javaBin, jarBin)
+    return ensureJdkBins(version, paths, EXIT_BUILD_ERROR)
 }
 
 internal fun createResolverDeps() = object : ResolverDeps {

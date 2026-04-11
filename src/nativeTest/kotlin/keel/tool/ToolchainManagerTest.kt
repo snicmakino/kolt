@@ -452,4 +452,46 @@ class ToolchainManagerTest {
             removeDirectoryRecursive(paths.home + "/.keel")
         }
     }
+
+    // --- ensureKotlincBin ---
+
+    @Test
+    fun ensureKotlincBinReturnsPathWhenAlreadyInstalled() {
+        // Given: managed kotlinc 2.1.0 is already installed
+        val paths = KeelPaths("/tmp/keel_tc_ensure_kotlinc_installed")
+        val binDir = "${paths.toolchainsDir}/kotlinc/2.1.0/bin"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString("$binDir/kotlinc", "#!/bin/sh")
+        try {
+            // When: ensureKotlincBin is called
+            val result = ensureKotlincBin("2.1.0", paths, 1)
+
+            // Then: returns the managed bin path without triggering download
+            assertEquals(paths.kotlincBin("2.1.0"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    // --- ensureJdkBins ---
+
+    @Test
+    fun ensureJdkBinsReturnsPathsWhenAlreadyInstalled() {
+        // Given: managed jdk 21 is already installed
+        val paths = KeelPaths("/tmp/keel_tc_ensure_jdk_installed")
+        val binDir = "${paths.toolchainsDir}/jdk/21/bin"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString("$binDir/java", "#!/bin/sh")
+        writeFileAsString("$binDir/jar", "#!/bin/sh")
+        try {
+            // When: ensureJdkBins is called
+            val result = ensureJdkBins("21", paths, 1)
+
+            // Then: returns managed java and jar paths
+            assertEquals(paths.javaBin("21"), result.java)
+            assertEquals(paths.jarBin("21"), result.jar)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
 }
