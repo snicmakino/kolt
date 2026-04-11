@@ -180,7 +180,7 @@ internal fun ensureKotlincBin(version: String, paths: KeelPaths, exitCode: Int):
         }
 }
 
-data class JdkBins(val java: String?, val jar: String?)
+internal data class JdkBins(val java: String?, val jar: String?)
 
 internal fun ensureJdkBins(version: String, paths: KeelPaths, exitCode: Int): JdkBins {
     val javaBin = resolveJavaBinPath(version, paths)

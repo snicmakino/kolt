@@ -34,7 +34,6 @@ internal fun loadProjectConfig(): KeelConfig {
     }
 }
 
-
 internal fun doCheck() {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig()

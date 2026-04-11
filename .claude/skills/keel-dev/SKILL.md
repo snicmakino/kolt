@@ -47,7 +47,6 @@ Binary: `build/bin/linuxX64/debugExecutable/keel.kexe`
 | build | TestRunner.kt | Build java command for test execution via JUnit Platform (pure function) |
 | build | TestDeps.kt | Auto-injected test dependencies based on target platform (pure function) |
 | build | Formatter.kt | Build ktfmt command args for code formatting (pure function) |
-| build | VersionCheck.kt | Parse kotlinc version string (pure function) |
 | build | Workspace.kt | Generate workspace.json / kls-classpath for IDE support |
 | resolve | Dependency.kt | Maven coordinate parsing, JAR/POM URL/cache path construction (pure function) |
 | resolve | Resolution.kt | Pure BFS dependency graph resolution (pure function, no I/O) |
@@ -66,7 +65,7 @@ Binary: `build/bin/linuxX64/debugExecutable/keel.kexe`
 | infra | Sha256.kt | SHA256 hash computation |
 | infra | Format.kt | Duration formatting utility |
 | tool | ToolManager.kt | External tool download and caching (ktfmt, JUnit Console Launcher) |
-| tool | ToolchainManager.kt | Kotlinc toolchain download, verification, and path resolution |
+| tool | ToolchainManager.kt | Kotlinc/JDK toolchain download, verification, auto-install, and path resolution |
 
 ## Error Handling Policy
 
@@ -75,7 +74,7 @@ Binary: `build/bin/linuxX64/debugExecutable/keel.kexe`
 - Specify only the error types a function can return as type parameters
 - Use sealed class only when a common parent error is meaningful; use individual data class for independent errors
 - Consumers use `getOrElse` + `when` to exhaustively match all variants
-- Pure functions (Builder, Runner, VersionCheck) don't need Result — apply Result to side-effectful functions
+- Pure functions (Builder, Runner) don't need Result — apply Result to side-effectful functions
 
 ```
 parseConfig()       -> Result<KeelConfig, ConfigError>
