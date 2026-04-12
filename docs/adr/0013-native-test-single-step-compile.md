@@ -7,7 +7,7 @@ Accepted (2026-04-13)
 ## Context
 
 Phase D of Kotlin/Native support (#16 / PR #58) had to decide how
-`keel test` produces a runnable test binary when `target = "native"`.
+`kolt test` produces a runnable test binary when `target = "native"`.
 The JVM path is well established: `doTest` first calls `doBuild()` to
 produce `build/classes`, then runs a second `kotlinc` on the test
 sources with `-cp build/classes:<deps>` to produce `build/test-classes`,
@@ -30,7 +30,7 @@ Given those constraints, two approaches are plausible:
 invocation together with `-generate-test-runner`, producing a single
 `build/<name>-test.kexe`. `internal` visibility across main ↔ test works
 naturally because both sides belong to the same compilation unit.
-`keel test` does not call `doNativeBuild` at all.
+`kolt test` does not call `doNativeBuild` at all.
 
 **(β) Two-step.** Compile main sources to a `.klib` (either as part of
 `doNativeBuild` or on demand inside the test path), then compile test
@@ -41,9 +41,9 @@ breaks by default.
 
 β is structurally closer to how the Kotlin Gradle plugin handles native
 tests and is the prerequisite for any future `.klib` publication story
-(which keel does not currently have — it targets applications, not
+(which kolt does not currently have — it targets applications, not
 libraries). α is simpler and matches the single-binary-output nature
-of keel's current native scope.
+of kolt's current native scope.
 
 A Phase D spike verified that α works end-to-end against konanc 2.1.0:
 single-step compile produces a kexe that recognises `kotlin.test.@Test`
@@ -111,19 +111,19 @@ in konanc, there is nothing to resolve.
   `doTest` via the same `ProcessError.NonZeroExit` branch. The CLI
   contract stays consistent.
 - **Reversible.** Moving to β later is a refactor, not a rewrite. The
-  user-visible behaviour (`keel test`, exit codes, CLI args) stays
+  user-visible behaviour (`kolt test`, exit codes, CLI args) stays
   identical; only the internal compilation graph changes.
 
 ### Negative
 
-- **No incremental test builds.** Every `keel test` invocation triggers
+- **No incremental test builds.** Every `kolt test` invocation triggers
   a full `konanc` compile of main + test sources together, even when
   only a test file changed. On Kotlin/Native this is the dominant cost
   of a TDD inner loop — empirically ~20s in Phase D's E2E runs. The JVM
   path has the same property today (test compilation is not cached),
   but native's baseline compile time makes the pain more visible. This
   is tracked as follow-up #59.
-- **Duplicate compilation of main sources.** `keel build && keel test`
+- **Duplicate compilation of main sources.** `kolt build && kolt test`
   compiles main sources twice: once as `build/<name>.kexe` (via
   `doNativeBuild`) and once as part of `build/<name>-test.kexe` (via
   `doNativeTest`). A user running both commands pays the main-source
@@ -137,12 +137,12 @@ in konanc, there is nothing to resolve.
 - **No `-friend-modules` escape hatch for odd cases.** If a future
   native library wants to publish a `.klib` and separately run tests
   against the *published* artifact (rather than the source), α cannot
-  express that. This is not a use case keel supports today, but it
+  express that. This is not a use case kolt supports today, but it
   would force a β-style rewrite to add.
 
 ### Neutral
 
-- **`keel test` with only test-source edits still rebuilds main.** This
+- **`kolt test` with only test-source edits still rebuilds main.** This
   is a direct consequence of α and is the single biggest reason β might
   eventually win. If #59 is addressed with a test-kexe mtime cache
   keyed on (main sources ∪ test sources ∪ klib set), the "edit only
@@ -151,8 +151,8 @@ in konanc, there is nothing to resolve.
   test-only edits skip main compilation; a cache alone cannot.
 - **Bundled `kotlin.test` means no `test_dependencies` entry is needed
   for native.** Users coming from Gradle may expect to declare
-  `kotlin("test")`; keel accepts the entry but silently no-ops it for
-  native. Documented in the keel-usage skill.
+  `kotlin("test")`; kolt accepts the entry but silently no-ops it for
+  native. Documented in the kolt-usage skill.
 
 ## Alternatives Considered
 
@@ -163,7 +163,7 @@ in konanc, there is nothing to resolve.
    caching updates to track the klib separately, plus path plumbing to
    get the klib path from the build path to the test path. The benefit
    is concentrated in a single use case ("edit only tests") that is
-   not yet established as painful in keel's workflow — and the switch
+   not yet established as painful in kolt's workflow — and the switch
    is reversible when it does become painful. Tracked as a discussion
    in the Phase D memory; promotion to an issue is deferred until #59
    resolves or is closed as insufficient.
@@ -171,7 +171,7 @@ in konanc, there is nothing to resolve.
    run** — rejected because it would require `doBuild` to know whether
    the caller intends to run tests, violating the separation between
    "build the program" and "run the tests" that users rely on. Also
-   produces a test kexe even when the user only runs `keel build`,
+   produces a test kexe even when the user only runs `kolt build`,
    wasting time.
 3. **Use `-tr` via `-Xgenerate-test-runner` (hypothetical) and parse
    stdout for pass/fail** — rejected because konanc's Google Test-style
@@ -179,7 +179,7 @@ in konanc, there is nothing to resolve.
    the test binary's exit code already gives an unambiguous signal.
    Parsing stdout would add fragility with no benefit.
 4. **Invoke the test kexe via a wrapper that translates the output to
-   a format `keel` can summarise (e.g. pass/fail counts)** — rejected
+   a format `kolt` can summarise (e.g. pass/fail counts)** — rejected
    for Phase D as gold-plating. The raw konanc test output is already
    informative to humans; structured summarisation can be added later
    if needed without changing the compile strategy.

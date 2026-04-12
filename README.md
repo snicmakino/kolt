@@ -1,6 +1,6 @@
-# keel
+# kolt
 
-> v0.8.0 — Early-stage project. Expect breaking changes.
+> v0.9.0 — Early-stage project. Expect breaking changes.
 
 A lightweight build tool for Kotlin. Compiles with `kotlinc` directly — no Gradle, no JVM startup tax.
 
@@ -11,30 +11,30 @@ Written in Kotlin/Native. Single binary, instant startup. Incremental builds via
 Build from source:
 
 ```sh
-git clone https://github.com/snicmakino/keel.git
-cd keel
+git clone https://github.com/snicmakino/kolt.git
+cd kolt
 ./gradlew build
 ```
 
-The binary is produced at `build/bin/linuxX64/debugExecutable/keel.kexe`. Copy it to a directory on your PATH:
+The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy it to a directory on your PATH:
 
 ```sh
-cp build/bin/linuxX64/debugExecutable/keel.kexe ~/.local/bin/keel
+cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
 ```
 
 ## Quick Start
 
 ```sh
 mkdir my-app && cd my-app
-keel init
-keel build
-keel run
+kolt init
+kolt build
+kolt run
 ```
 
 This creates the following structure in the current directory:
 
 ```
-keel.toml
+kolt.toml
 src/Main.kt
 test/MainTest.kt
 ```
@@ -42,31 +42,31 @@ test/MainTest.kt
 The project name is inferred from the directory name. To use a different name:
 
 ```sh
-keel init custom-name
+kolt init custom-name
 ```
 
 ## Commands
 
 ```
-keel init [name]   Create a new project
-keel build         Compile the project
-keel run           Build and run (keel run -- args for app arguments)
-keel test          Build and run tests (keel test -- args for JUnit Platform arguments)
-keel check         Type-check without producing artifacts
-keel add           Add a dependency (see below)
-keel install       Resolve dependencies and download JARs
-keel fmt           Format source files with ktfmt
-keel fmt --check   Check formatting (CI mode)
-keel clean         Remove build artifacts
-keel deps tree     Show dependency tree
-keel update        Re-resolve dependencies and update lockfile
-keel toolchain install  Install kotlinc version defined in keel.toml
-keel --version     Show version
+kolt init [name]   Create a new project
+kolt build         Compile the project
+kolt run           Build and run (kolt run -- args for app arguments)
+kolt test          Build and run tests (kolt test -- args for JUnit Platform arguments)
+kolt check         Type-check without producing artifacts
+kolt add           Add a dependency (see below)
+kolt install       Resolve dependencies and download JARs
+kolt fmt           Format source files with ktfmt
+kolt fmt --check   Check formatting (CI mode)
+kolt clean         Remove build artifacts
+kolt deps tree     Show dependency tree
+kolt update        Re-resolve dependencies and update lockfile
+kolt toolchain install  Install kotlinc version defined in kolt.toml
+kolt --version     Show version
 ```
 
 ## Configuration
 
-`keel.toml` — declarative, TOML-based:
+`kolt.toml` — declarative, TOML-based:
 
 ```toml
 name = "my-app"
@@ -110,12 +110,12 @@ jitpack = "https://jitpack.io"
 
 ### Dependencies
 
-Add dependencies with `keel add`:
+Add dependencies with `kolt add`:
 
 ```sh
-keel add org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0
-keel add org.jetbrains.kotlinx:kotlinx-coroutines-core   # latest stable version
-keel add --test io.kotest:kotest-runner-junit5:5.8.0      # test dependency
+kolt add org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0
+kolt add org.jetbrains.kotlinx:kotlinx-coroutines-core   # latest stable version
+kolt add --test io.kotest:kotest-runner-junit5:5.8.0      # test dependency
 ```
 
 Or declare Maven coordinates directly in `[dependencies]`:
@@ -126,13 +126,13 @@ Or declare Maven coordinates directly in `[dependencies]`:
 "com.squareup.okhttp3:okhttp" = "4.12.0"
 ```
 
-Run `keel install` to resolve and download all dependencies without building.
+Run `kolt install` to resolve and download all dependencies without building.
 
-Transitive dependencies are resolved automatically via POM metadata. A `keel.lock` file records versions and SHA-256 hashes for reproducible builds.
+Transitive dependencies are resolved automatically via POM metadata. A `kolt.lock` file records versions and SHA-256 hashes for reproducible builds.
 
 ### Custom Repositories
 
-By default, keel resolves dependencies from Maven Central. To add custom repositories (e.g., JitPack), declare them in `[repositories]`:
+By default, kolt resolves dependencies from Maven Central. To add custom repositories (e.g., JitPack), declare them in `[repositories]`:
 
 ```toml
 [repositories]
@@ -166,7 +166,7 @@ Files in `resources` directories are copied into the build output and included i
 
 ### Test Dependencies
 
-For JVM targets, keel automatically injects `kotlin-test-junit5` matching your Kotlin version. Just write tests using `kotlin.test`:
+For JVM targets, kolt automatically injects `kotlin-test-junit5` matching your Kotlin version. Just write tests using `kotlin.test`:
 
 ```kotlin
 import kotlin.test.Test
@@ -189,35 +189,35 @@ For additional test frameworks (e.g., Kotest), declare them in `[test-dependenci
 
 ## Testing
 
-keel runs tests via JUnit Platform Console Standalone, supporting:
+kolt runs tests via JUnit Platform Console Standalone, supporting:
 
 - **kotlin.test** (via kotlin-test-junit5, auto-injected)
 - **JUnit 5** (direct)
 - **Kotest** (via kotest-runner-junit5)
 
 ```sh
-keel test
-keel test -- --include-classname ".*IntegrationTest"
+kolt test
+kolt test -- --include-classname ".*IntegrationTest"
 ```
 
 ## Dependency Management
 
-- **Global cache**: `~/.keel/cache/` — shared across projects (Maven-compatible layout)
-- **Lockfile**: `keel.lock` records versions and SHA-256 hashes
+- **Global cache**: `~/.kolt/cache/` — shared across projects (Maven-compatible layout)
+- **Lockfile**: `kolt.lock` records versions and SHA-256 hashes
 - **SHA-256 verification**: Mismatches cause errors (no silent re-download)
-- **Explicit update**: `keel update` to re-resolve and refresh hashes
+- **Explicit update**: `kolt update` to re-resolve and refresh hashes
 
 ## Toolchain Management
 
-keel can manage its own kotlinc installation, so you don't need to install it system-wide.
+kolt can manage its own kotlinc installation, so you don't need to install it system-wide.
 
 ```sh
-keel toolchain install   # Download kotlinc version specified in keel.toml
+kolt toolchain install   # Download kotlinc version specified in kolt.toml
 ```
 
-Toolchains are stored under `~/.keel/toolchains/kotlinc/{version}/`. When a managed toolchain is available, keel uses it automatically; otherwise it falls back to system `kotlinc` on PATH.
+Toolchains are stored under `~/.kolt/toolchains/kotlinc/{version}/`. When a managed toolchain is available, kolt uses it automatically; otherwise it falls back to system `kotlinc` on PATH.
 
-## Why keel?
+## Why kolt?
 
 Gradle is powerful but heavy for simple Kotlin projects. It imposes:
 
@@ -225,11 +225,11 @@ Gradle is powerful but heavy for simple Kotlin projects. It imposes:
 - Build script compilation
 - Task graph construction
 
-keel aims to be what `go build` is to Go or `cargo build` is to Rust — a fast, focused tool for building Kotlin projects with a declarative config file and zero ceremony.
+kolt aims to be what `go build` is to Go or `cargo build` is to Rust — a fast, focused tool for building Kotlin projects with a declarative config file and zero ceremony.
 
 ## Prerequisites
 
-- `kotlinc` on PATH (matching the version in `keel.toml`)
+- `kotlinc` on PATH (matching the version in `kolt.toml`)
 - `java` on PATH (for running JVM targets and tests)
 
 ## Exit Codes
@@ -246,7 +246,14 @@ keel aims to be what `go build` is to Go or `cargo build` is to Rust — a fast,
 
 ## Claude Code Integration
 
-This project includes [Claude Code](https://claude.ai/code) skills. If you use Claude Code, the `/keel-usage` skill provides interactive help with keel commands, configuration, and dependency management. You can also [read it directly](.claude/skills/keel-usage/SKILL.md) as a reference.
+This project includes [Claude Code](https://claude.ai/code) skills. If you use Claude Code, the `/kolt-usage` skill provides interactive help with kolt commands, configuration, and dependency management. You can also [read it directly](.claude/skills/kolt-usage/SKILL.md) as a reference.
+
+## Name
+
+**kolt** = **Kot**lin + bo**lt** — fast, lightweight Kotlin tooling.
+
+> Previously named `keel`. Renamed in v0.9.0 to avoid collision with
+> [keel.sh](https://keel.sh) and [Spinnaker keel](https://github.com/spinnaker/keel).
 
 ## License
 

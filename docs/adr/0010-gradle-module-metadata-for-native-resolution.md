@@ -6,18 +6,18 @@ Accepted (2026-04-13)
 
 ## Context
 
-keel supports two build targets: `target = "jvm"` and `target = "native"`
+kolt supports two build targets: `target = "jvm"` and `target = "native"`
 (see #16). The two targets need different artifacts from Maven Central:
 
 - **jvm** consumes `.jar` files. Their dependency information lives in
-  `.pom` files (Maven POMs), which keel parses and walks transitively in
+  `.pom` files (Maven POMs), which kolt parses and walks transitively in
   `TransitiveResolver` / `PomParser`.
 - **native** consumes `.klib` files. Modern Kotlin Multiplatform libraries
   (kotlinx-coroutines, kotlinx-serialization, ktor, etc.) publish their
   per-target `.klib` artifacts as **Gradle Module Metadata** (`.module`
   JSON files), not as POMs.
 
-The first decision point was whether keel should:
+The first decision point was whether kolt should:
 
 1. Try to extract native dependencies from POMs anyway (the root POM of a
    KMP library does have a `<dependencies>` section), or
@@ -59,7 +59,7 @@ fun resolve(...): Result<ResolveResult, ResolveError> =
 - **jvm path** (`TransitiveResolver` + `PomParser`): unchanged, walks
   POMs as before. KMP libraries with a JVM redirect are followed via
   `parseJvmRedirect` from `GradleMetadata.kt` — Gradle metadata is used
-  here only to find the `available-at` JVM-specific module, then keel
+  here only to find the `available-at` JVM-specific module, then kolt
   switches back to POM-based resolution from that point.
 - **native path** (`NativeResolver`): walks `.module` files only. For
   each direct dependency:
@@ -80,14 +80,14 @@ The two resolvers are not unified. They share `ResolverDeps`,
 
 ### Positive
 
-- **Correct native artifact resolution**: keel picks up exactly the
+- **Correct native artifact resolution**: kolt picks up exactly the
   `.klib` published for `linux_x64`, the version pinned by the publisher,
   and the transitive native dependencies the library actually needs at
   link time.
 - **Authoritative sha256**: hashes are read from the metadata's
   `files[].sha256` rather than fetched from a separate `.sha256` sidecar,
   which removes one network round-trip and one failure mode.
-- **No POM-fitting hacks**: keel does not have to invent fake "native
+- **No POM-fitting hacks**: kolt does not have to invent fake "native
   classifier" coordinates or guess the `linuxx64` artifact name from the
   POM. The `available-at` redirect is followed verbatim from the
   metadata.
@@ -107,13 +107,13 @@ The two resolvers are not unified. They share `ResolverDeps`,
 - **Libraries without Gradle metadata cannot be used as native deps**:
   if a library is published with a POM only and no `.module` file
   (rare for modern Kotlin libraries, but possible for very old or
-  hand-rolled artifacts), `parseNativeRedirect` returns `null` and keel
+  hand-rolled artifacts), `parseNativeRedirect` returns `null` and kolt
   surfaces `ResolveError.NoNativeVariant`. This is the correct user-
   facing failure mode but may surprise users porting jvm projects.
 
 ### Neutral
 
-- **`.module` parsing complexity is bounded**: keel only reads four
+- **`.module` parsing complexity is bounded**: kolt only reads four
   attributes (`platform.type`, `native.target`, `usage`, `category`),
   the `available-at` block, and the `files[]` / `dependencies[]` arrays.
   We do not implement the full Gradle metadata 1.1 specification.
@@ -141,7 +141,7 @@ The two resolvers are not unified. They share `ResolverDeps`,
    rejected because Android Native targets, special case names, and
    future targets break the convention. The `available-at.module` value
    must be used verbatim.
-4. **Use Coursier as an external dependency** — out of scope; keel is a
+4. **Use Coursier as an external dependency** — out of scope; kolt is a
    single self-contained Kotlin/Native binary and does not shell out
    to JVM tools for core operations.
 

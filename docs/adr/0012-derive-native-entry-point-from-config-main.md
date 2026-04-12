@@ -6,7 +6,7 @@ Accepted (2026-04-13)
 
 ## Context
 
-For `target = "jvm"`, `keel.toml` requires a `main` field that is the
+For `target = "jvm"`, `kolt.toml` requires a `main` field that is the
 fully-qualified name of a JVM class — by convention, the synthetic
 facade class kotlinc generates for top-level functions in a file:
 
@@ -44,7 +44,7 @@ entry point FQN by stripping the class-name segment and appending
 `.main`:
 
 ```kotlin
-internal fun nativeEntryPoint(config: KeelConfig): String {
+internal fun nativeEntryPoint(config: KoltConfig): String {
     val lastDot = config.main.lastIndexOf('.')
     val pkg = if (lastDot >= 0) config.main.substring(0, lastDot) else ""
     return if (pkg.isEmpty()) "main" else "$pkg.main"
@@ -64,12 +64,12 @@ The derivation has two assumptions:
    facade class.
 
 When `config.main`'s last segment does not end in `Kt` (the conventional
-kotlinc suffix for file-level facades), keel emits a warning before the
+kotlinc suffix for file-level facades), kolt emits a warning before the
 build, on the assumption that the user is pointing at a non-top-level
 entry that the heuristic will not match correctly:
 
 ```kotlin
-internal fun needsNativeEntryPointWarning(config: KeelConfig): Boolean {
+internal fun needsNativeEntryPointWarning(config: KoltConfig): Boolean {
     val lastSegment = config.main.substringAfterLast('.')
     return lastSegment.isNotEmpty() && !lastSegment.endsWith("Kt")
 }
@@ -78,7 +78,7 @@ internal fun needsNativeEntryPointWarning(config: KeelConfig): Boolean {
 The warning fires only on native builds (in `doNativeBuild`); the JVM
 path is unaffected because JVM uses `config.main` verbatim.
 
-For `keel test` on native, the entry point is **not** derived. konanc's
+For `kolt test` on native, the entry point is **not** derived. konanc's
 `-generate-test-runner` flag generates a synthesised entry point during
 the test-runner lowering pass, so `nativeTestBuildCommand` omits `-e`
 entirely (see PR #58 / Phase D).
@@ -87,11 +87,11 @@ entirely (see PR #58 / Phase D).
 
 ### Positive
 
-- **Single source of truth in `keel.toml`.** Users do not have to keep
+- **Single source of truth in `kolt.toml`.** Users do not have to keep
   two related fields in sync. A project that switches from
   `target = "jvm"` to `target = "native"` (or maintains both via local
   experiments) does not change `main`.
-- **No new config schema.** Existing `keel.toml` files work for native
+- **No new config schema.** Existing `kolt.toml` files work for native
   builds with no migration. The config structure stays minimal.
 - **Convention matches the standard Kotlin layout.** For the >95% of
   projects that put `fun main()` at the top level of `Main.kt`, the
@@ -113,7 +113,7 @@ entirely (see PR #58 / Phase D).
   what we accept there (e.g. allowing a function FQN directly for JVM
   via `-Xmain-function`) would have to revisit the derivation rule.
 - **No way to override.** A user with a non-standard layout cannot tell
-  keel "ignore the heuristic, use this exact FQN for native". They
+  kolt "ignore the heuristic, use this exact FQN for native". They
   would have to rename their function to `main` or restructure their
   package.
 - **`*Kt` warning is a name-shape heuristic, not a real check.** A user
@@ -123,14 +123,14 @@ entirely (see PR #58 / Phase D).
 
 ### Neutral
 
-- **Test entry point is unaffected.** `keel test` on native does not
+- **Test entry point is unaffected.** `kolt test` on native does not
   use `nativeEntryPoint` at all — konanc's `-generate-test-runner`
   generates the entry point during lowering. The derivation rule only
-  applies to `keel build` / `keel run` for the production binary.
+  applies to `kolt build` / `kolt run` for the production binary.
 
 ## Alternatives Considered
 
-1. **Add a separate `entry_point` field to `keel.toml`** — rejected
+1. **Add a separate `entry_point` field to `kolt.toml`** — rejected
    because (a) it doubles the user's surface area for the >95% case
    that follows the convention, (b) it creates a redundant field for
    the JVM target where it would just duplicate `main`, and (c) it
@@ -138,7 +138,7 @@ entirely (see PR #58 / Phase D).
    information they already provided in `main`.
 2. **Require `config.main` to be the function FQN for both targets,
    change the JVM path to `kotlinc -Xmain-function=...`** — rejected
-   because it breaks every existing `keel.toml` and removes the natural
+   because it breaks every existing `kolt.toml` and removes the natural
    correspondence with how `java` is invoked on the command line.
 3. **Auto-detect the entry function by scanning sources for
    `fun main()`** — rejected because it adds source-level analysis to

@@ -6,11 +6,11 @@ Accepted (2026-04-08)
 
 ## Context
 
-The Phase 1 implementation of keel handled errors in three different ways,
+The Phase 1 implementation of kolt handled errors in three different ways,
 often within the same call path:
 
 - **Exceptions**: `parseConfig` threw a custom `ConfigParseException` when
-  `keel.json` was malformed or missing required fields.
+  `kolt.json` was malformed or missing required fields.
 - **Sentinel exit codes**: `executeCommand` returned `-1` for "process
   failed to start" and any non-zero integer for "process ran but exited
   non-zero". Callers had to know that `-1` was special.
@@ -23,11 +23,11 @@ This made error handling unpredictable. `Main.kt` had to mix `try/catch`,
 and there was no single place that listed all the ways a given operation
 could fail. Adding a new failure mode meant auditing every caller.
 
-keel also has a hard constraint from the project charter: **exception
+kolt also has a hard constraint from the project charter: **exception
 throwing is prohibited**. Kotlin/Native exceptions are awkward
 (stack traces are expensive, `CancellationException` semantics differ
 from JVM, and coroutine boundaries interact poorly with C interop), and
-the tool's error reporting must be deterministic — every `keel build`
+the tool's error reporting must be deterministic — every `kolt build`
 failure should map to a known exit code and a known message.
 
 We needed an error-handling discipline that:
@@ -42,7 +42,7 @@ We needed an error-handling discipline that:
 
 Adopt `kotlin-result` (`com.michael-bull.kotlin-result:kotlin-result:2.3.1`)
 and use `Result<V, E>` as the return type for every side-effectful
-function in keel. Pure functions (value-in / value-out, no I/O) are
+function in kolt. Pure functions (value-in / value-out, no I/O) are
 exempt.
 
 - Each fallible function declares its own error type. Only the errors
@@ -55,7 +55,7 @@ exempt.
   error with an exhaustive `when`. The compiler enforces that every
   variant is handled.
 - `ConfigParseException` is deleted. `parseConfig` returns
-  `Result<KeelConfig, ConfigError>`.
+  `Result<KoltConfig, ConfigError>`.
 - Exit-code sentinels in `executeCommand` are replaced with
   `Result<Int, ProcessError>` — the `Int` is the actual process exit
   code, and start failures are a separate `ProcessError.StartFailed`
@@ -64,7 +64,7 @@ exempt.
 The canonical signatures established at Phase 1 are:
 
 ```
-parseConfig()       -> Result<KeelConfig, ConfigError>
+parseConfig()       -> Result<KoltConfig, ConfigError>
 readFileAsString()  -> Result<String, OpenFailed>
 ensureDirectory()   -> Result<Unit, MkdirFailed>
 executeCommand()    -> Result<Int, ProcessError>
@@ -131,7 +131,7 @@ are introduced per subsystem (`ResolveError`, `LockfileError`,
    annotation is only enforced on the JVM for Java interop and has no
    effect on Kotlin call sites. It would be documentation, not
    enforcement.
-2. **A single top-level `KeelError` sealed class** — rejected. Every
+2. **A single top-level `KoltError` sealed class** — rejected. Every
    function would declare it could return any error, defeating the
    purpose of making signatures precise. Error types need to be local
    to the subsystem they come from.

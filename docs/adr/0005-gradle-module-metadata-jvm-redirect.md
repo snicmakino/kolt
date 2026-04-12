@@ -6,13 +6,13 @@ Accepted (2026-04-09)
 
 ## Context
 
-Once keel's transitive resolver could walk plain Maven POMs (Phase 3),
+Once kolt's transitive resolver could walk plain Maven POMs (Phase 3),
 it broke almost immediately on modern Kotlin Multiplatform libraries.
 The trigger case was OkHttp 5.x, but the same pattern affects
 kotlinx-coroutines, kotlinx-serialization, ktor, Arrow, and any other
 KMP library that publishes a multi-target artifact.
 
-The symptom was puzzling: `keel build` completed dependency
+The symptom was puzzling: `kolt build` completed dependency
 resolution, downloaded a JAR from Maven Central, put it on the
 classpath, and then kotlinc failed with `unresolved reference` for
 every symbol from the library. The JAR was there. The coordinate was
@@ -55,7 +55,7 @@ Inside `.module`, each target (JVM, native, Android, common) is a
 
 Gradle, Maven (via the `gradle-module-metadata` plugin), and
 dependency-resolver libraries like Coursier all know about this
-format and transparently follow the redirect. keel at this point did
+format and transparently follow the redirect. kolt at this point did
 not, which is why the empty JAR ended up on the classpath.
 
 The fix could not be "just download the `-jvm` artifact by naming
@@ -67,10 +67,10 @@ non-conforming libraries.
 
 ## Decision
 
-During transitive resolution of a **jvm-target** project, keel
+During transitive resolution of a **jvm-target** project, kolt
 attempts to read a Gradle Module Metadata file (`.module`) alongside
 every POM it fetches. If the metadata declares a JVM variant with an
-`available-at` redirect, keel switches to the redirect target for
+`available-at` redirect, kolt switches to the redirect target for
 both the POM walk and the JAR download.
 
 The entry point is `parseJvmRedirect(moduleJson)` in
@@ -78,7 +78,7 @@ The entry point is `parseJvmRedirect(moduleJson)` in
 `JvmRedirect(group, module, version)`. The rule it encodes:
 
 - If the `.module` file is absent or unparseable → no redirect
-  (`null`). The POM is authoritative, and keel proceeds with the
+  (`null`). The POM is authoritative, and kolt proceeds with the
   root coordinate as before.
 - If **any** JVM variant has no `available-at` block → no redirect
   (`null`). This signals "the library provides its own JVM jar" and
@@ -102,7 +102,7 @@ metadata file at most once, reusing the result for both redirect
 detection and, on the native side, variant walking (ADR 0010).
 
 Gradle Module Metadata is treated as **supplemental** on the jvm
-side: keel uses it only to find the `available-at` redirect. Once the
+side: kolt uses it only to find the `available-at` redirect. Once the
 redirect is followed, resolution is still driven by POMs. The metadata
 file is not read for dependency information on the jvm side. (This is
 the opposite of the native side — see ADR 0010 — where metadata is
@@ -115,17 +115,17 @@ the sole source of truth.)
 - **KMP libraries work transparently**: OkHttp 5.x,
   kotlinx-coroutines, kotlinx-serialization, ktor, Arrow, and similar
   libraries resolve and compile without the user having to know about
-  `-jvm` suffixes. `keel add com.squareup.okhttp3:okhttp:5.0.0` does
+  `-jvm` suffixes. `kolt add com.squareup.okhttp3:okhttp:5.0.0` does
   the right thing.
 - **Correct classpath entries**: the JAR that actually contains the
   bytecode is the one that ends up on the classpath. Metadata-only
   JARs are never loaded.
 - **Authoritative coordinates**: the redirect target is read
-  verbatim from `available-at.group` / `module` / `version`. keel
+  verbatim from `available-at.group` / `module` / `version`. kolt
   does not guess, does not apply suffix heuristics, and does not
   break when libraries use non-standard names.
 - **Backwards-compatible with plain Maven libraries**: if a library
-  has no `.module` file (most of Maven Central), keel falls through
+  has no `.module` file (most of Maven Central), kolt falls through
   to POM-only resolution immediately. The metadata fetch is a
   best-effort probe, not a hard requirement.
 - **Paved the way for native resolution**: the parser
@@ -135,18 +135,18 @@ the sole source of truth.)
 
 ### Negative
 
-- **Extra network probes**: keel now fetches `.module` for every
+- **Extra network probes**: kolt now fetches `.module` for every
   dependency during a fresh resolve. For libraries that do not
   publish metadata, this is one wasted GET per artifact (cached as
   a negative result for the run, but still a round-trip on a cold
   cache).
 - **Silent failure mode**: the parser returns `null` on any parse
-  error. A subtly malformed `.module` file would cause keel to fall
+  error. A subtly malformed `.module` file would cause kolt to fall
   back to POM-only resolution and produce a broken classpath, with
   no warning. This has not bitten us in practice, but it is a
   trade-off we accepted to avoid per-library special cases.
 - **Pick-the-first-variant rule is a heuristic**: when every JVM
-  variant has an `available-at` block, keel follows the first one
+  variant has an `available-at` block, kolt follows the first one
   it encounters in declaration order. For every library we have
   encountered, all JVM variants redirect to the same target, so
   "first one wins" is equivalent to "any of them". If a library ever
@@ -166,7 +166,7 @@ the sole source of truth.)
   Module Metadata 1.1 spec, and we have no need to.
 - **Lenient JSON parsing**: the decoder is configured with
   `ignoreUnknownKeys = true` so that Gradle evolutions of the
-  metadata schema (new attributes, new fields) do not break keel.
+  metadata schema (new attributes, new fields) do not break kolt.
 
 ## Alternatives Considered
 
@@ -176,7 +176,7 @@ the sole source of truth.)
    produce a broken classpath. Guessing is a bug factory.
 2. **Require users to declare `okhttp-jvm` explicitly** — rejected.
    This pushes the KMP metadata knowledge onto the user and breaks
-   the "just add the dependency" ergonomics that keel is trying to
+   the "just add the dependency" ergonomics that kolt is trying to
    offer. Worse, the user cannot always know the redirect target
    without reading the library's `.module` file themselves.
 3. **Treat metadata as authoritative on jvm too** — rejected.
@@ -192,9 +192,9 @@ the sole source of truth.)
 
 ## Related
 
-- `src/nativeMain/kotlin/keel/resolve/GradleMetadata.kt` —
+- `src/nativeMain/kotlin/kolt/resolve/GradleMetadata.kt` —
   `parseJvmRedirect` and the shared JSON schema
-- `src/nativeMain/kotlin/keel/resolve/TransitiveResolver.kt` — call
+- `src/nativeMain/kotlin/kolt/resolve/TransitiveResolver.kt` — call
   site for JVM redirect handling
 - Commit `7d58f02` (initial Gradle Module Metadata support for KMP)
 - Commit `c20bf37` (`kotlin-test` fix: do not redirect if any JVM

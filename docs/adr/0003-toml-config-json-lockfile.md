@@ -1,4 +1,4 @@
-# ADR 0003: TOML for `keel.toml`, JSON for `keel.lock`
+# ADR 0003: TOML for `kolt.toml`, JSON for `kolt.lock`
 
 ## Status
 
@@ -6,21 +6,21 @@ Accepted (2026-04-09)
 
 ## Context
 
-keel has two persistent file formats:
+kolt has two persistent file formats:
 
-- **`keel.toml`** — the project configuration. Human-authored. Contains
+- **`kolt.toml`** — the project configuration. Human-authored. Contains
   the project name, target (`jvm` / `native`), main class, source
   layout, dependency list, compiler plugins, custom Maven repositories,
   toolchain versions, and formatter options. Users edit this by hand,
   review it in diffs, and expect to be able to comment out a dependency
   while debugging.
-- **`keel.lock`** — the resolved dependency graph. Machine-written.
+- **`kolt.lock`** — the resolved dependency graph. Machine-written.
   Contains the full transitive closure with pinned versions, sha256
   hashes, source repository URLs, and (for native targets) the
-  `available-at` redirect chain. Regenerated on every `keel install` /
-  `keel update` / lockfile-invalidating change.
+  `available-at` redirect chain. Regenerated on every `kolt install` /
+  `kolt update` / lockfile-invalidating change.
 
-The Phase 1 prototype used JSON for both. `keel.json` worked for the
+The Phase 1 prototype used JSON for both. `kolt.json` worked for the
 handful of fields the prototype had, but as soon as dependencies,
 plugins, repositories, and nested tables started showing up it became
 painful:
@@ -56,10 +56,10 @@ data persistence.
 
 Split the two formats:
 
-- **`keel.toml`** is parsed with **ktoml 0.7.1**
+- **`kolt.toml`** is parsed with **ktoml 0.7.1**
   (`com.akuleshov7:ktoml-core` / `ktoml-file`). `parseConfig` reads the
-  file and deserialises into the `KeelConfig` data class.
-- **`keel.lock`** stays on **kotlinx-serialization-json**. `Lockfile.kt`
+  file and deserialises into the `KoltConfig` data class.
+- **`kolt.lock`** stays on **kotlinx-serialization-json**. `Lockfile.kt`
   owns the v1 and v2 schemas; writes go through
   `Json { prettyPrint = true; prettyPrintIndent = "  " }` for
   reviewable diffs.
@@ -72,20 +72,20 @@ strips a leading-and-trailing pair of `"` characters from every map
 key before handing the config back. This is documented at the call site
 and covered by a test.
 
-ktoml is used only for `keel.toml`. Tests for `keel.toml` parsing live
+ktoml is used only for `kolt.toml`. Tests for `kolt.toml` parsing live
 in `ConfigTest.kt`; tests for the lockfile live in `LockfileTest.kt`.
 
 ## Consequences
 
 ### Positive
 
-- **Comments in `keel.toml`**: users can write
+- **Comments in `kolt.toml`**: users can write
   `# pinned for netty compatibility, do not upgrade` next to a
   dependency, or comment a line out while debugging.
 - **Clean human syntax**: dependency tables are one line per entry,
   quote-free keys where possible, no trailing-comma trap.
 - **Familiar to users**: Cargo, Poetry, uv, and many others use TOML
-  for the same role. The learning curve for `keel.toml` is zero for
+  for the same role. The learning curve for `kolt.toml` is zero for
   anyone who has touched those tools.
 - **Lockfile diffs remain reviewable**: two-space-indented JSON is
   stable across runs (kotlinx-serialization orders fields by the data
@@ -103,19 +103,19 @@ in `ConfigTest.kt`; tests for the lockfile live in `LockfileTest.kt`.
 - **ktoml quirks**: the quoted-map-key workaround is ugly, and
   `parseConfig` has to know about it. Any future ktoml upgrade has to
   re-verify the behaviour.
-- **No single `keel.*` serialiser helper**: config and lockfile go
+- **No single `kolt.*` serialiser helper**: config and lockfile go
   through different code paths, so there is no shared "write this data
   class to disk" primitive. Each side has its own read/write pair.
 - **TOML is less expressive than JSON in some corners**: deeply nested
   heterogeneous arrays (e.g. `[[plugins.options]]` tables within tables)
-  are awkward to express. keel's schema is flat enough that this has
+  are awkward to express. kolt's schema is flat enough that this has
   not bitten us, but it constrains future extensions.
 
 ### Neutral
 
 - **Neither format is binary**: both are diffable, grep-able, and
   editable if something goes wrong. This was a hard requirement.
-- **ktoml supports a subset of TOML v1.0.0**: enough for `keel.toml`'s
+- **ktoml supports a subset of TOML v1.0.0**: enough for `kolt.toml`'s
   schema. No feature we rely on sits in the unsupported set.
 
 ## Alternatives Considered
@@ -128,20 +128,20 @@ in `ConfigTest.kt`; tests for the lockfile live in `LockfileTest.kt`.
    buy us nothing, because nobody edits the lockfile by hand anyway.
 2. **JSON for everything (keep Phase 1 as-is)** — rejected for the
    ergonomics reasons above. Users already disliked the prototype's
-   `keel.json` in informal feedback.
-3. **YAML for `keel.toml`** — rejected. YAML has comments, but it also
+   `kolt.json` in informal feedback.
+3. **YAML for `kolt.toml`** — rejected. YAML has comments, but it also
    has significant-whitespace pitfalls, the Norway problem (`no` →
    `false`), and no established Kotlin/Native parser. The combination
    of "requires a large parser port" and "known footguns" was a clear
    no.
-4. **A custom mini-format parsed by keel itself** — rejected. Every
+4. **A custom mini-format parsed by kolt itself** — rejected. Every
    build tool that rolls its own config language eventually regrets it.
    TOML is standardised, documented, and has external tooling.
 
 ## Related
 
-- `src/nativeMain/kotlin/keel/config/Config.kt` — `parseConfig` and
+- `src/nativeMain/kotlin/kolt/config/Config.kt` — `parseConfig` and
   the quoted-key workaround
-- `src/nativeMain/kotlin/keel/resolve/Lockfile.kt` — v1/v2 schemas,
+- `src/nativeMain/kotlin/kolt/resolve/Lockfile.kt` — v1/v2 schemas,
   JSON writer
-- Commit `3325d37` (migration from `keel.json` to `keel.toml`)
+- Commit `3325d37` (migration from `kolt.json` to `kolt.toml`)

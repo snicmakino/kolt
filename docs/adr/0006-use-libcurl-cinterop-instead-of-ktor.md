@@ -6,7 +6,7 @@ Accepted (2026-04-09)
 
 ## Context
 
-keel uses HTTP to download JAR files and POM metadata from Maven Central.
+kolt uses HTTP to download JAR files and POM metadata from Maven Central.
 The original implementation used Ktor Client with the Curl engine (`ktor-client-curl`).
 
 Ktor brought significant transitive dependencies into the build:
@@ -19,7 +19,7 @@ Ktor brought significant transitive dependencies into the build:
 - Full coroutine runtime (`kotlinx-coroutines-core`, 864 KB) required just to wrap
   synchronous libcurl calls in `runBlocking`
 
-keel's HTTP needs are minimal: synchronous GET requests to download files. Features
+kolt's HTTP needs are minimal: synchronous GET requests to download files. Features
 provided by Ktor (WebSocket, SSE, CIO engine, HTTP/2, content negotiation) are unused.
 
 Kotlin/Native build times are inherently slow due to LLVM compilation. With Ktor, a
@@ -56,7 +56,7 @@ Replace Ktor Client with direct libcurl cinterop.
 - **Platform-specific include paths**: the `.def` file contains
   `-I/usr/include/x86_64-linux-gnu` which may need adjustment for other architectures
   (aarch64, macOS)
-- **No JVM target compatibility**: cinterop is Kotlin/Native only. If keel ever needs a
+- **No JVM target compatibility**: cinterop is Kotlin/Native only. If kolt ever needs a
   JVM build variant, HTTP would require a separate implementation (e.g., `java.net.URL`)
 - **Lower-level error handling**: must manually check `curl_easy_perform` return codes and
   `CURLINFO_RESPONSE_CODE` instead of Ktor's typed `HttpResponse`
