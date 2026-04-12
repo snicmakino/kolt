@@ -147,3 +147,5 @@ Stored at `~/.keel/toolchains/kotlinc/{version}/`. Used automatically when avail
 | 4 | Test error |
 | 5 | Format error |
 | 127 | Command not found |
+
+Note: `keel test` can exit with codes other than 0 or 4. Dependency resolution failures (e.g. a klib that cannot be fetched during native test) exit with `3`, test source compilation failures exit with `1`. Only actual test-runner failures (non-zero exit from the test binary) produce `4`. CI pipelines that branch on "tests failed vs other error" should check `== 4` rather than `!= 0`.
