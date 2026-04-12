@@ -1,4 +1,4 @@
-# ADR 0005: Compile native tests in a single konanc invocation
+# ADR 0013: Compile native tests in a single konanc invocation
 
 ## Status
 
@@ -71,7 +71,7 @@ Two details follow from this choice:
 
 1. **Omit `-e`.** The `-generate-test-runner` lowering synthesises a
    `main()` that calls `testLauncherEntryPoint(args)`. Passing `-e` in
-   addition would conflict with it. (See also ADR 0004, which notes
+   addition would conflict with it. (See also ADR 0012, which notes
    that the test path does not use `nativeEntryPoint`.)
 
 2. **Bypass `doNativeBuild`.** `doTest` dispatches on target, and the
@@ -197,5 +197,5 @@ in konanc, there is nothing to resolve.
 - PR #58 (Phase D implementation)
 - #59 (follow-up: incremental test build cache — where the main β
   argument lives)
-- ADR 0004 (native entry point derivation — notes that the test path
+- ADR 0012 (native entry point derivation — notes that the test path
   deliberately omits `-e`)

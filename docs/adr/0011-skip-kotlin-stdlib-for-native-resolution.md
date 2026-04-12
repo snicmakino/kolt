@@ -1,4 +1,4 @@
-# ADR 0003: Skip kotlin-stdlib in Kotlin/Native dependency resolution
+# ADR 0011: Skip kotlin-stdlib in Kotlin/Native dependency resolution
 
 ## Status
 
@@ -148,5 +148,5 @@ stdlib against the bundled konanc release.
 
 - #16 (Kotlin/Native target support — parent issue)
 - PR #55 (Phase B-2, where the skip was introduced)
-- ADR 0002 (Gradle Module Metadata for native resolution — provides
+- ADR 0010 (Gradle Module Metadata for native resolution — provides
   the resolver context this skip lives inside)

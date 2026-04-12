@@ -1,4 +1,4 @@
-# ADR 0001: Use libcurl cinterop instead of Ktor Client
+# ADR 0006: Use libcurl cinterop instead of Ktor Client
 
 ## Status
 

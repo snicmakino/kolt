@@ -152,7 +152,7 @@ sources = ["src"]
 
 ### Phase 2 — 依存解決（直接依存） ✅
 
-- Maven Centralからjarをフェッチ（libcurl cinterop — [ADR 0001](adr/0001-use-libcurl-cinterop-instead-of-ktor.md)）
+- Maven Centralからjarをフェッチ（libcurl cinterop — [ADR 0006](adr/0006-use-libcurl-cinterop-instead-of-ktor.md)）
 - `~/.keel/cache/` にキャッシュ（sha256で検証、kotlincrypto sha2-256）
 - `keel.lock` の生成・読み込み
 - クラスパスを自動組み立て

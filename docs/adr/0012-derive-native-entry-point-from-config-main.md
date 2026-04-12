@@ -1,4 +1,4 @@
-# ADR 0004: Derive the Kotlin/Native entry point from `config.main`
+# ADR 0012: Derive the Kotlin/Native entry point from `config.main`
 
 ## Status
 

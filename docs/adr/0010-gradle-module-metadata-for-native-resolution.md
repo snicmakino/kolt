@@ -1,4 +1,4 @@
-# ADR 0002: Use Gradle Module Metadata for Kotlin/Native dependency resolution
+# ADR 0010: Use Gradle Module Metadata for Kotlin/Native dependency resolution
 
 ## Status
 
@@ -150,5 +150,5 @@ The two resolvers are not unified. They share `ResolverDeps`,
 - #16 (Kotlin/Native target support — parent issue)
 - PR #53 (Phase B-1, parser-only)
 - PR #55 (Phase B-2, native resolver wired into `Resolver.resolve`)
-- ADR 0003 (kotlin-stdlib skip — load-bearing assumption that depends
+- ADR 0011 (kotlin-stdlib skip — load-bearing assumption that depends
   on this resolver design)
