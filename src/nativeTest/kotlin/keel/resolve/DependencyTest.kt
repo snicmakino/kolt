@@ -158,4 +158,16 @@ class DependencyTest {
             path
         )
     }
+
+    // --- klib helpers ---
+
+    @Test
+    fun buildKlibCachePathProducesRelativePath() {
+        val coord = Coordinate("org.jetbrains.kotlinx", "atomicfu-linuxx64", "0.25.0")
+        val path = buildKlibCachePath(coord)
+        assertEquals(
+            "org/jetbrains/kotlinx/atomicfu-linuxx64/0.25.0/atomicfu-linuxx64-0.25.0.klib",
+            path
+        )
+    }
 }

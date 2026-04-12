@@ -46,4 +46,6 @@ fun buildModuleDownloadUrl(coord: Coordinate, baseUrl: String): String = buildMa
 
 fun buildModuleCachePath(coord: Coordinate): String = buildRelativePath(coord, "module")
 
+fun buildKlibCachePath(coord: Coordinate): String = buildRelativePath(coord, "klib")
+
 fun buildClasspath(paths: List<String>): String = paths.joinToString(":")
