@@ -127,6 +127,42 @@ class KeelPathsTest {
         assertEquals("/root/.keel/toolchains/jdk/17/bin/jar", paths.jarBin("17"))
     }
 
+    // --- konancPath ---
+
+    @Test
+    fun konancPathBuildsVersionedDirectory() {
+        val paths = KeelPaths("/home/user")
+
+        val path = paths.konancPath("2.3.20")
+
+        assertEquals("/home/user/.keel/toolchains/konanc/2.3.20", path)
+    }
+
+    @Test
+    fun konancPathDifferentVersion() {
+        val paths = KeelPaths("/home/alice")
+
+        assertEquals("/home/alice/.keel/toolchains/konanc/2.1.0", paths.konancPath("2.1.0"))
+    }
+
+    // --- konancBin ---
+
+    @Test
+    fun konancBinBuildsVersionedBinPath() {
+        val paths = KeelPaths("/home/user")
+
+        val bin = paths.konancBin("2.3.20")
+
+        assertEquals("/home/user/.keel/toolchains/konanc/2.3.20/bin/konanc", bin)
+    }
+
+    @Test
+    fun konancBinDifferentHome() {
+        val paths = KeelPaths("/root")
+
+        assertEquals("/root/.keel/toolchains/konanc/2.3.20/bin/konanc", paths.konancBin("2.3.20"))
+    }
+
     @Test
     fun jdkJavaBinAndJarBinShareSameVersionedDirectory() {
         // Given: jdkPath, javaBin, and jarBin for the same version

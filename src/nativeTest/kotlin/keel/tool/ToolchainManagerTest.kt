@@ -473,6 +473,113 @@ class ToolchainManagerTest {
         }
     }
 
+    // --- konancDownloadUrl ---
+
+    @Test
+    fun konancDownloadUrlHasVersionInTagAndFilename() {
+        val url = konancDownloadUrl("2.1.0")
+
+        assertEquals(
+            "https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-native-prebuilt-linux-x86_64-2.1.0.tar.gz",
+            url
+        )
+    }
+
+    @Test
+    fun konancDownloadUrlDifferentVersion() {
+        val url = konancDownloadUrl("2.3.20")
+
+        assertEquals(
+            "https://github.com/JetBrains/kotlin/releases/download/v2.3.20/kotlin-native-prebuilt-linux-x86_64-2.3.20.tar.gz",
+            url
+        )
+    }
+
+    // --- konancSha256Url ---
+
+    @Test
+    fun konancSha256UrlIsTarGzUrlWithSha256Suffix() {
+        val url = konancSha256Url("2.1.0")
+
+        assertEquals(
+            "https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-native-prebuilt-linux-x86_64-2.1.0.tar.gz.sha256",
+            url
+        )
+    }
+
+    // --- resolveKonancPath ---
+
+    @Test
+    fun resolveKonancPathReturnsBinPathWhenManagedVersionInstalled() {
+        val paths = KeelPaths("/tmp/keel_tc_konanc_resolve_installed")
+        val binDir = "${paths.toolchainsDir}/konanc/2.1.0/bin"
+        val binPath = "$binDir/konanc"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString(binPath, "#!/bin/sh")
+        try {
+            val result = resolveKonancPath("2.1.0", paths)
+
+            assertEquals(paths.konancBin("2.1.0"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveKonancPathReturnsNullWhenToolchainsDirAbsent() {
+        val paths = KeelPaths("/tmp/keel_tc_konanc_resolve_no_dir")
+
+        val result = resolveKonancPath("2.1.0", paths)
+
+        assertNull(result)
+    }
+
+    @Test
+    fun resolveKonancPathReturnsNullWhenVersionDirExistsButBinMissing() {
+        val paths = KeelPaths("/tmp/keel_tc_konanc_resolve_no_bin")
+        val versionDir = "${paths.toolchainsDir}/konanc/2.1.0"
+        ensureDirectoryRecursive(versionDir)
+        try {
+            val result = resolveKonancPath("2.1.0", paths)
+
+            assertNull(result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun resolveKonancPathReturnsNullForDifferentInstalledVersion() {
+        val paths = KeelPaths("/tmp/keel_tc_konanc_resolve_version_isolation")
+        val binDir = "${paths.toolchainsDir}/konanc/2.3.0/bin"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString("$binDir/konanc", "#!/bin/sh")
+        try {
+            val result = resolveKonancPath("2.1.0", paths)
+
+            assertNull(result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    // --- ensureKonancBin ---
+
+    @Test
+    fun ensureKonancBinReturnsPathWhenAlreadyInstalled() {
+        val paths = KeelPaths("/tmp/keel_tc_ensure_konanc_installed")
+        val binDir = "${paths.toolchainsDir}/konanc/2.1.0/bin"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString("$binDir/konanc", "#!/bin/sh")
+        try {
+            val result = ensureKonancBin("2.1.0", paths, 1)
+
+            assertEquals(paths.konancBin("2.1.0"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
     // --- ensureJdkBins ---
 
     @Test

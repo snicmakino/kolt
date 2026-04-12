@@ -8,10 +8,11 @@ import keel.config.KeelPaths
 import keel.config.resolveKeelPaths
 import keel.infra.*
 import keel.tool.installJdkToolchain
+import keel.tool.installKonancToolchain
 import keel.tool.installKotlincToolchain
 import kotlin.system.exitProcess
 
-private val KNOWN_TOOLCHAINS = listOf("kotlinc", "jdk")
+private val KNOWN_TOOLCHAINS = listOf("kotlinc", "jdk", "konanc")
 
 internal fun doToolchain(args: List<String>) {
     if (args.isEmpty()) {
@@ -45,13 +46,17 @@ private fun doToolchainInstall() {
     if (config.jdk != null) {
         installJdkToolchain(config.jdk, paths, EXIT_BUILD_ERROR)
     }
+    if (config.target == "native") {
+        installKonancToolchain(config.kotlin, paths, EXIT_BUILD_ERROR)
+    }
 }
 
 private fun doToolchainList() {
     val paths = resolveKeelPaths(EXIT_CONFIG_ERROR)
     val kotlincVersions = listInstalledVersions("${paths.toolchainsDir}/kotlinc")
     val jdkVersions = listInstalledVersions("${paths.toolchainsDir}/jdk")
-    println(formatToolchainList(kotlincVersions, jdkVersions))
+    val konancVersions = listInstalledVersions("${paths.toolchainsDir}/konanc")
+    println(formatToolchainList(kotlincVersions, jdkVersions, konancVersions))
 }
 
 private fun listInstalledVersions(dir: String): List<String> {
@@ -59,16 +64,23 @@ private fun listInstalledVersions(dir: String): List<String> {
     return listSubdirectories(dir).getOrElse { emptyList() }
 }
 
-internal fun formatToolchainList(kotlincVersions: List<String>, jdkVersions: List<String>): String {
-    if (kotlincVersions.isEmpty() && jdkVersions.isEmpty()) {
+internal fun formatToolchainList(
+    kotlincVersions: List<String>,
+    jdkVersions: List<String>,
+    konancVersions: List<String>
+): String {
+    if (kotlincVersions.isEmpty() && jdkVersions.isEmpty() && konancVersions.isEmpty()) {
         return "no toolchains installed"
     }
     val sections = mutableListOf<String>()
     if (kotlincVersions.isNotEmpty()) {
-        sections.add("kotlinc:\n" + kotlincVersions.joinToString("\n") { "  $it" })
+        sections.add("kotlinc (Kotlin compiler):\n" + kotlincVersions.joinToString("\n") { "  $it" })
     }
     if (jdkVersions.isNotEmpty()) {
-        sections.add("jdk:\n" + jdkVersions.joinToString("\n") { "  $it" })
+        sections.add("jdk (Java Development Kit):\n" + jdkVersions.joinToString("\n") { "  $it" })
+    }
+    if (konancVersions.isNotEmpty()) {
+        sections.add("konanc (Kotlin/Native compiler):\n" + konancVersions.joinToString("\n") { "  $it" })
     }
     return sections.joinToString("\n\n")
 }
@@ -90,6 +102,7 @@ internal fun resolveToolchainPathForRemove(name: String, version: String, paths:
     val dir = when (name) {
         "kotlinc" -> paths.kotlincPath(version)
         "jdk" -> paths.jdkPath(version)
+        "konanc" -> paths.konancPath(version)
         else -> return null
     }
     return if (fileExists(dir)) dir else null

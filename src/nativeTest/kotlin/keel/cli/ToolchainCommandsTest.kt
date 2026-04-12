@@ -20,7 +20,7 @@ class FormatToolchainListTest {
         val jdkVersions = emptyList<String>()
 
         // When: formatting the list
-        val result = formatToolchainList(kotlincVersions, jdkVersions)
+        val result = formatToolchainList(kotlincVersions, jdkVersions, emptyList())
 
         // Then: returns "no toolchains installed" message
         assertEquals("no toolchains installed", result)
@@ -33,11 +33,11 @@ class FormatToolchainListTest {
         val jdkVersions = emptyList<String>()
 
         // When: formatting the list
-        val result = formatToolchainList(kotlincVersions, jdkVersions)
+        val result = formatToolchainList(kotlincVersions, jdkVersions, emptyList())
 
-        // Then: shows kotlinc section only
+        // Then: shows kotlinc section only with description
         val expected = """
-            kotlinc:
+            kotlinc (Kotlin compiler):
               2.1.0
               2.3.0
         """.trimIndent()
@@ -51,11 +51,11 @@ class FormatToolchainListTest {
         val jdkVersions = listOf("21")
 
         // When: formatting the list
-        val result = formatToolchainList(kotlincVersions, jdkVersions)
+        val result = formatToolchainList(kotlincVersions, jdkVersions, emptyList())
 
-        // Then: shows jdk section only
+        // Then: shows jdk section only with description
         val expected = """
-            jdk:
+            jdk (Java Development Kit):
               21
         """.trimIndent()
         assertEquals(expected, result)
@@ -68,16 +68,50 @@ class FormatToolchainListTest {
         val jdkVersions = listOf("17", "21")
 
         // When: formatting the list
-        val result = formatToolchainList(kotlincVersions, jdkVersions)
+        val result = formatToolchainList(kotlincVersions, jdkVersions, emptyList())
 
-        // Then: shows both sections separated by blank line
+        // Then: shows both sections separated by blank line, with descriptions
         val expected = """
-            kotlinc:
+            kotlinc (Kotlin compiler):
               2.1.0
 
-            jdk:
+            jdk (Java Development Kit):
               17
               21
+        """.trimIndent()
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun onlyKonancInstalled() {
+        // Given: konanc versions installed
+        val result = formatToolchainList(emptyList(), emptyList(), listOf("2.3.20"))
+
+        val expected = """
+            konanc (Kotlin/Native compiler):
+              2.3.20
+        """.trimIndent()
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun allThreeToolchainsInstalled() {
+        // Given: kotlinc, jdk, konanc all installed
+        val result = formatToolchainList(
+            listOf("2.1.0"),
+            listOf("21"),
+            listOf("2.1.0")
+        )
+
+        val expected = """
+            kotlinc (Kotlin compiler):
+              2.1.0
+
+            jdk (Java Development Kit):
+              21
+
+            konanc (Kotlin/Native compiler):
+              2.1.0
         """.trimIndent()
         assertEquals(expected, result)
     }
@@ -108,13 +142,24 @@ class ValidateToolchainRemoveArgsTest {
     }
 
     @Test
+    fun validKonancArgs() {
+        // Given: valid konanc remove args
+        val result = validateToolchainRemoveArgs(listOf("konanc", "2.3.20"))
+
+        // Then: returns Ok with parsed args
+        val args = assertNotNull(result.get())
+        assertEquals("konanc", args.name)
+        assertEquals("2.3.20", args.version)
+    }
+
+    @Test
     fun unknownToolchainNameReturnsError() {
         // Given: unknown toolchain name
         val result = validateToolchainRemoveArgs(listOf("foo", "1.0"))
 
         // Then: returns Err with message
         assertNull(result.get())
-        assertEquals("error: unknown toolchain 'foo' (available: kotlinc, jdk)", result.getError())
+        assertEquals("error: unknown toolchain 'foo' (available: kotlinc, jdk, konanc)", result.getError())
     }
 
     @Test
@@ -171,6 +216,22 @@ class ResolveToolchainPathForRemoveTest {
 
             // Then: returns the path from KeelPaths.jdkPath()
             assertEquals(paths.jdkPath("21"), result)
+        } finally {
+            removeDirectoryRecursive(paths.home + "/.keel")
+        }
+    }
+
+    @Test
+    fun konancInstalledReturnsKeelPathsPath() {
+        // Given: konanc 2.3.20 is installed
+        val paths = KeelPaths("/tmp/keel_tc_remove_konanc")
+        val binDir = "${paths.toolchainsDir}/konanc/2.3.20/bin"
+        ensureDirectoryRecursive(binDir)
+        writeFileAsString("$binDir/konanc", "#!/bin/sh")
+        try {
+            val result = resolveToolchainPathForRemove("konanc", "2.3.20", paths)
+
+            assertEquals(paths.konancPath("2.3.20"), result)
         } finally {
             removeDirectoryRecursive(paths.home + "/.keel")
         }

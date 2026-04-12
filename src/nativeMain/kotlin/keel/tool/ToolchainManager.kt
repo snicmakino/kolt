@@ -294,3 +294,121 @@ internal fun installKotlincToolchain(version: String, paths: KeelPaths, exitCode
 
     println("installed kotlinc $version at $finalPath")
 }
+
+internal fun konancDownloadUrl(version: String): String =
+    "https://github.com/JetBrains/kotlin/releases/download/v$version/kotlin-native-prebuilt-linux-x86_64-$version.tar.gz"
+
+internal fun konancSha256Url(version: String): String =
+    "${konancDownloadUrl(version)}.sha256"
+
+internal fun resolveKonancPath(version: String, paths: KeelPaths): String? {
+    val binPath = paths.konancBin(version)
+    return if (fileExists(binPath)) binPath else null
+}
+
+internal fun ensureKonancBin(version: String, paths: KeelPaths, exitCode: Int): String {
+    resolveKonancPath(version, paths)?.let { return it }
+    installKonancToolchain(version, paths, exitCode)
+    return resolveKonancPath(version, paths)
+        ?: run {
+            eprintln("error: konanc $version not found after installation")
+            exitProcess(exitCode)
+        }
+}
+
+internal fun installKonancToolchain(version: String, paths: KeelPaths, exitCode: Int) {
+    val finalPath = paths.konancPath(version)
+    val binPath = paths.konancBin(version)
+
+    if (fileExists(binPath)) {
+        println("konanc $version is already installed at $finalPath")
+        return
+    }
+
+    val konancBaseDir = "${paths.toolchainsDir}/konanc"
+    ensureDirectoryRecursive(konancBaseDir).getOrElse { error ->
+        eprintln("error: could not create directory ${error.path}")
+        exitProcess(exitCode)
+    }
+
+    val tarPath = "$konancBaseDir/$version.tar.gz"
+    val sha256Path = "$konancBaseDir/$version.tar.gz.sha256"
+    val extractTempDir = "$konancBaseDir/${version}_extract"
+    val archiveTopLevelDir = "kotlin-native-prebuilt-linux-x86_64-$version"
+
+    println("downloading konanc $version...")
+    downloadFile(konancDownloadUrl(version), tarPath).getOrElse { error ->
+        when (error) {
+            is DownloadError.HttpFailed -> eprintln("error: failed to download konanc $version (HTTP ${error.statusCode})")
+            is DownloadError.WriteFailed -> eprintln("error: could not write $tarPath")
+            is DownloadError.NetworkError -> eprintln("error: network error downloading konanc $version: ${error.message}")
+        }
+        exitProcess(exitCode)
+    }
+
+    downloadFile(konancSha256Url(version), sha256Path).getOrElse { error ->
+        deleteFile(tarPath)
+        when (error) {
+            is DownloadError.HttpFailed -> eprintln("error: failed to download sha256 for konanc $version (HTTP ${error.statusCode})")
+            is DownloadError.WriteFailed -> eprintln("error: could not write $sha256Path")
+            is DownloadError.NetworkError -> eprintln("error: network error downloading sha256: ${error.message}")
+        }
+        exitProcess(exitCode)
+    }
+
+    val sha256Content = readFileAsString(sha256Path).getOrElse { error ->
+        deleteFile(tarPath)
+        deleteFile(sha256Path)
+        eprintln("error: could not read ${error.path}")
+        exitProcess(exitCode)
+    }
+    val expectedHash = sha256Content.trim().split(Regex("\\s+")).first()
+    deleteFile(sha256Path)
+
+    val actualHash = computeSha256(tarPath).getOrElse { _ ->
+        deleteFile(tarPath)
+        eprintln("error: could not compute sha256 for $tarPath")
+        exitProcess(exitCode)
+    }
+
+    if (actualHash != expectedHash) {
+        deleteFile(tarPath)
+        eprintln("error: sha256 mismatch for konanc $version (expected $expectedHash, got $actualHash)")
+        exitProcess(exitCode)
+    }
+
+    ensureDirectoryRecursive(extractTempDir).getOrElse { error ->
+        deleteFile(tarPath)
+        eprintln("error: could not create directory ${error.path}")
+        exitProcess(exitCode)
+    }
+
+    println("extracting konanc $version...")
+    executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir)).getOrElse { error ->
+        deleteFile(tarPath)
+        removeDirectoryRecursive(extractTempDir).getOrElse { e ->
+            eprintln("warning: could not remove temp directory ${e.path}")
+        }
+        eprintln(formatProcessError(error, "tar"))
+        exitProcess(exitCode)
+    }
+    deleteFile(tarPath)
+
+    executeCommand(listOf("mv", "$extractTempDir/$archiveTopLevelDir", finalPath)).getOrElse { error ->
+        removeDirectoryRecursive(extractTempDir).getOrElse { e ->
+            eprintln("warning: could not remove temp directory ${e.path}")
+        }
+        eprintln(formatProcessError(error, "mv"))
+        exitProcess(exitCode)
+    }
+    removeDirectoryRecursive(extractTempDir).getOrElse { e ->
+        eprintln("warning: could not remove temp directory ${e.path}")
+    }
+
+    if (!fileExists(binPath)) {
+        eprintln("error: konanc binary not found at $binPath after installation")
+        exitProcess(exitCode)
+    }
+
+    println("installed konanc $version at $finalPath")
+}
