@@ -100,7 +100,7 @@ keel add --test io.kotest:kotest-runner-junit5:5.8.0      # test dependency
 
 ## Testing
 
-keel auto-injects `kotlin-test-junit5` matching the Kotlin version. Just use `kotlin.test`:
+Just use `kotlin.test`:
 
 ```kotlin
 import kotlin.test.Test
@@ -114,12 +114,14 @@ class MyTest {
 }
 ```
 
-Runs via JUnit Platform Console Standalone. Supports kotlin.test, JUnit 5, and Kotest.
-
 ```sh
 keel test
-keel test -- --include-classname ".*IntegrationTest"
+keel test -- <extra runner args>
 ```
+
+**JVM target (`target = "jvm"`):** keel auto-injects `kotlin-test-junit5` matching the Kotlin version and runs via JUnit Platform Console Standalone. Supports kotlin.test, JUnit 5, and Kotest. Extra args are forwarded to the console launcher, e.g. `keel test -- --include-classname ".*IntegrationTest"`.
+
+**Native target (`target = "native"`):** keel compiles main + test sources in a single `konanc -generate-test-runner` invocation and executes the resulting `build/<name>-test.kexe`. `kotlin.test` is provided by the bundled Kotlin/Native stdlib — no test dependency needs to be declared. Extra args are forwarded to the native test runner, e.g. `keel test -- --ktest_filter=MyTest.*` or `--ktest_logger=SIMPLE`. The test executable exits non-zero on any failed test.
 
 ## Toolchain Management
 
@@ -145,3 +147,5 @@ Stored at `~/.keel/toolchains/kotlinc/{version}/`. Used automatically when avail
 | 4 | Test error |
 | 5 | Format error |
 | 127 | Command not found |
+
+Note: `keel test` can exit with codes other than 0 or 4. Dependency resolution failures (e.g. a klib that cannot be fetched during native test) exit with `3`, test source compilation failures exit with `1`. Only actual test-runner failures (non-zero exit from the test binary) produce `4`. CI pipelines that branch on "tests failed vs other error" should check `== 4` rather than `!= 0`.

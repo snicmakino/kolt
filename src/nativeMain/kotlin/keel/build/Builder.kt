@@ -9,6 +9,8 @@ internal fun outputJarPath(config: KeelConfig): String = "$BUILD_DIR/${config.na
 
 internal fun outputKexePath(config: KeelConfig): String = "$BUILD_DIR/${config.name}.kexe"
 
+internal fun outputNativeTestKexePath(config: KeelConfig): String = "$BUILD_DIR/${config.name}-test.kexe"
+
 // Derives the Kotlin/Native entry point FQN from config.main.
 //
 // config.main is a JVM-style class name (e.g. "com.example.MainKt"). For
@@ -106,6 +108,35 @@ fun nativeBuildCommand(
         add("-o")
         add(outputBase)
         addAll(pluginArgs)
+    }
+    return BuildCommand(args = args, outputPath = outputPath)
+}
+
+// Builds a konanc command that compiles main + test sources together and
+// asks the compiler to synthesize a test runner main() via -generate-test-runner.
+// The resulting kexe exits non-zero on any test failure. Unlike nativeBuildCommand
+// we intentionally omit -e: the synthesized runner provides the entry point, and
+// passing -e in addition would conflict with it.
+fun nativeTestBuildCommand(
+    config: KeelConfig,
+    konancPath: String? = null,
+    klibs: List<String> = emptyList()
+): BuildCommand {
+    val outputPath = outputNativeTestKexePath(config)
+    val outputBase = "$BUILD_DIR/${config.name}-test"
+    val args = buildList {
+        add(konancPath ?: "konanc")
+        addAll(config.sources)
+        addAll(config.testSources)
+        add("-p")
+        add("program")
+        add("-generate-test-runner")
+        for (klib in klibs) {
+            add("-l")
+            add(klib)
+        }
+        add("-o")
+        add(outputBase)
     }
     return BuildCommand(args = args, outputPath = outputPath)
 }

@@ -468,6 +468,129 @@ class BuilderTest {
         assertTrue(needsNativeEntryPointWarning(testConfig().copy(main = "Main")))
     }
 
+    // --- nativeTestBuildCommand ---
+
+    @Test
+    fun nativeTestBuildCommandCompilesMainAndTestSourcesWithGeneratedRunner() {
+        val cmd = nativeTestBuildCommand(testConfig(target = "native"))
+
+        assertEquals(
+            listOf(
+                "konanc",
+                "src", "test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-o", "build/my-app-test"
+            ),
+            cmd.args
+        )
+        assertEquals("build/my-app-test.kexe", cmd.outputPath)
+    }
+
+    @Test
+    fun nativeTestBuildCommandDoesNotEmitEntryPointFlag() {
+        // -generate-test-runner makes the compiler synthesize main(); -e would conflict.
+        val cmd = nativeTestBuildCommand(testConfig(target = "native"))
+
+        assertFalse(cmd.args.contains("-e"))
+    }
+
+    @Test
+    fun nativeTestBuildCommandMultipleSourcesAndTestSources() {
+        val cmd = nativeTestBuildCommand(
+            testConfig(
+                sources = listOf("src", "generated"),
+                testSources = listOf("test", "integration-test"),
+                target = "native"
+            )
+        )
+
+        assertEquals(
+            listOf(
+                "konanc",
+                "src", "generated", "test", "integration-test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-o", "build/my-app-test"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun nativeTestBuildCommandWithProjectName() {
+        val cmd = nativeTestBuildCommand(testConfig(name = "hello", target = "native"))
+
+        assertEquals("build/hello-test.kexe", cmd.outputPath)
+        assertEquals(
+            listOf(
+                "konanc",
+                "src", "test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-o", "build/hello-test"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun nativeTestBuildCommandWithManagedKonancPath() {
+        val managedKonanc = "/home/user/.keel/toolchains/konanc/2.1.0/bin/konanc"
+        val cmd = nativeTestBuildCommand(testConfig(target = "native"), konancPath = managedKonanc)
+
+        assertEquals(managedKonanc, cmd.args.first())
+    }
+
+    @Test
+    fun nativeTestBuildCommandWithSingleKlib() {
+        val cmd = nativeTestBuildCommand(
+            testConfig(target = "native"),
+            klibs = listOf("/cache/lib.klib")
+        )
+
+        assertEquals(
+            listOf(
+                "konanc",
+                "src", "test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-l", "/cache/lib.klib",
+                "-o", "build/my-app-test"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun nativeTestBuildCommandWithMultipleKlibsRepeatsLFlag() {
+        val cmd = nativeTestBuildCommand(
+            testConfig(target = "native"),
+            klibs = listOf("/cache/a.klib", "/cache/b.klib", "/cache/c.klib")
+        )
+
+        assertEquals(
+            listOf(
+                "konanc",
+                "src", "test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-l", "/cache/a.klib",
+                "-l", "/cache/b.klib",
+                "-l", "/cache/c.klib",
+                "-o", "build/my-app-test"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
+    fun nativeTestBuildCommandEmptyKlibsOmitsLibraryFlag() {
+        val cmd = nativeTestBuildCommand(testConfig(target = "native"), klibs = emptyList())
+
+        assertFalse(cmd.args.contains("-l"))
+    }
+
     @Test
     fun jarCommandWithManagedJarPathPreservesOutputPath() {
         // Given: a managed jar binary path

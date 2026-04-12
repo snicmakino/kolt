@@ -251,13 +251,14 @@ internal fun doRun(config: KeelConfig, classpath: String?, appArgs: List<String>
 }
 
 internal fun doTest(testArgs: List<String> = emptyList()) {
-    // Load the config once up front to fail fast on unsupported targets
-    // before entering doBuild. doBuild will load it again for the jvm path;
-    // this is the cost of keeping the native guard here.
+    // Load the config once up front so we can dispatch on target before doing
+    // any compilation work. The native path compiles main + test in a single
+    // konanc invocation and therefore bypasses doBuild() entirely, unlike the
+    // jvm path which reuses the build artifacts from doBuild().
     val config = loadProjectConfig()
     if (config.target == "native") {
-        eprintln("error: 'keel test' is not yet supported for target = \"native\" (tracked in #16)")
-        exitProcess(EXIT_TEST_ERROR)
+        doNativeTest(config, testArgs)
+        return
     }
     val (_, classpath, pArgs, javaPath) = doBuild()
 
@@ -291,6 +292,54 @@ internal fun doTest(testArgs: List<String> = emptyList()) {
         testArgs = testArgs,
         javaPath = javaPath
     )
+    println("running tests...")
+    executeCommand(runCmd.args).getOrElse { error ->
+        when (error) {
+            is ProcessError.NonZeroExit -> {
+                val elapsed = testStartMark.elapsedNow()
+                eprintln("tests failed in ${formatDuration(elapsed)}")
+            }
+            else -> eprintln("error: failed to run tests")
+        }
+        exitProcess(EXIT_TEST_ERROR)
+    }
+    val elapsed = testStartMark.elapsedNow()
+    println("tests passed in ${formatDuration(elapsed)}")
+}
+
+private fun doNativeTest(config: KeelConfig, testArgs: List<String>) {
+    val existingTestSources = config.testSources.filter { fileExists(it) }
+    if (existingTestSources.isEmpty()) {
+        eprintln("error: no test sources found in ${config.testSources}")
+        exitProcess(EXIT_TEST_ERROR)
+    }
+
+    val testStartMark = TimeSource.Monotonic.markNow()
+
+    val paths = resolveKeelPaths(EXIT_TEST_ERROR)
+    val managedKonancBin = ensureKonancBin(config.kotlin, paths, EXIT_TEST_ERROR)
+
+    val klibs = resolveNativeDependencies(config, paths)
+
+    ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+        eprintln("error: could not create directory ${error.path}")
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    val testConfig = config.copy(testSources = existingTestSources)
+    val buildCmd = nativeTestBuildCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+    println("compiling tests (native)...")
+    executeCommand(buildCmd.args).getOrElse { error ->
+        eprintln(formatProcessError(error, "test compilation"))
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    if (!fileExists(buildCmd.outputPath)) {
+        eprintln("error: ${buildCmd.outputPath} not produced by konanc")
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    val runCmd = nativeTestRunCommand(testConfig, testArgs)
     println("running tests...")
     executeCommand(runCmd.args).getOrElse { error ->
         when (error) {
