@@ -162,26 +162,6 @@ class DependencyTest {
     // --- klib helpers ---
 
     @Test
-    fun buildKlibDownloadUrlProducesCorrectMavenCentralUrl() {
-        val coord = Coordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core-linuxx64", "1.9.0")
-        val url = buildKlibDownloadUrl(coord, MAVEN_CENTRAL_BASE)
-        assertEquals(
-            "https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-linuxx64/1.9.0/kotlinx-coroutines-core-linuxx64-1.9.0.klib",
-            url
-        )
-    }
-
-    @Test
-    fun buildKlibDownloadUrlWithCustomBaseUrl() {
-        val coord = Coordinate("com.example", "lib-linuxx64", "1.0.0")
-        val url = buildKlibDownloadUrl(coord, "https://nexus.example.com/repository/maven-public")
-        assertEquals(
-            "https://nexus.example.com/repository/maven-public/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.klib",
-            url
-        )
-    }
-
-    @Test
     fun buildKlibCachePathProducesRelativePath() {
         val coord = Coordinate("org.jetbrains.kotlinx", "atomicfu-linuxx64", "0.25.0")
         val path = buildKlibCachePath(coord)

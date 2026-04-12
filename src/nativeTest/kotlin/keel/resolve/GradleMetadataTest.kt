@@ -361,8 +361,8 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectRequiresKotlinApiUsage() {
-        // RuntimeElements should also be acceptable per research findings;
-        // but metadata-only usage should not match.
+        // Non-api usages (e.g. kotlin-metadata, kotlin-runtime) must be
+        // skipped so we only resolve compile-time klibs.
         val json = """
         {
           "formatVersion": "1.1",

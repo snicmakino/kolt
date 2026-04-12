@@ -81,14 +81,19 @@ data class NativeDependency(
 /**
  * Parses a Gradle Module Metadata JSON and extracts the available-at redirect
  * for the given Kotlin/Native target (e.g. "linux_x64"). Returns null when the
- * JSON is invalid, no matching variant exists, or the matching variant has no
- * available-at redirect.
+ * JSON is invalid, no matching variant exists, or matching variants exist but
+ * none have an available-at redirect.
  *
  * A variant matches when ALL of these attributes are present:
  * - `org.jetbrains.kotlin.platform.type` == "native"
  * - `org.jetbrains.kotlin.native.target` == <nativeTarget>
  * - `org.gradle.usage` == "kotlin-api"
  * - `org.gradle.category` == "library"
+ *
+ * Unlike [parseJvmRedirect], a matching variant without `available-at` is
+ * skipped rather than aborting: native modules list many targets in parallel,
+ * and an earlier target with no redirect does not imply the requested target
+ * is missing.
  */
 fun parseNativeRedirect(moduleJson: String, nativeTarget: String): NativeRedirect? {
     val metadata = try {
