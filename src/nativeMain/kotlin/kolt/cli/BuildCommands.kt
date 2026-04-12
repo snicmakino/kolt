@@ -156,6 +156,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
 
     val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
     val managedKonancBin = ensureKonancBin(config.kotlin, paths, EXIT_BUILD_ERROR)
+    val pArgs = resolveNativePluginArgs(config, paths, EXIT_BUILD_ERROR)
 
     val klibs = resolveNativeDependencies(config, paths)
 
@@ -173,7 +174,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, classpath = null, pluginArgs = emptyList(), javaPath = null)
+        return BuildResult(config, classpath = null, pluginArgs = pArgs, javaPath = null)
     }
 
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
@@ -181,7 +182,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    val buildCmd = nativeBuildCommand(config, konancPath = managedKonancBin, klibs = klibs)
+    val buildCmd = nativeBuildCommand(config, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling ${config.name} (native)...")
     executeCommand(buildCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "compilation"))
@@ -200,7 +201,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built $kexePath in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath = null, pluginArgs = emptyList(), javaPath = null)
+    return BuildResult(config, classpath = null, pluginArgs = pArgs, javaPath = null)
 }
 
 /**
@@ -318,6 +319,7 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
 
     val paths = resolveKoltPaths(EXIT_TEST_ERROR)
     val managedKonancBin = ensureKonancBin(config.kotlin, paths, EXIT_TEST_ERROR)
+    val pArgs = resolveNativePluginArgs(config, paths, EXIT_TEST_ERROR)
 
     val klibs = resolveNativeDependencies(config, paths)
 
@@ -327,7 +329,7 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
     }
 
     val testConfig = config.copy(testSources = existingTestSources)
-    val buildCmd = nativeTestBuildCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+    val buildCmd = nativeTestBuildCommand(testConfig, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling tests (native)...")
     executeCommand(buildCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "test compilation"))

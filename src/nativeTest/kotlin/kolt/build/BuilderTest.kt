@@ -592,6 +592,25 @@ class BuilderTest {
     }
 
     @Test
+    fun nativeTestBuildCommandWithPluginArgs() {
+        val cmd = nativeTestBuildCommand(
+            testConfig(target = "native"),
+            pluginArgs = listOf("-Xplugin=foo.jar", "-Xplugin=bar.jar")
+        )
+
+        assertEquals(
+            listOf(
+                "konanc", "src", "test",
+                "-p", "program",
+                "-generate-test-runner",
+                "-o", "build/my-app-test",
+                "-Xplugin=foo.jar", "-Xplugin=bar.jar"
+            ),
+            cmd.args
+        )
+    }
+
+    @Test
     fun jarCommandWithManagedJarPathPreservesOutputPath() {
         // Given: a managed jar binary path
         val managedJarBin = "/home/user/.kolt/toolchains/jdk/21/bin/jar"

@@ -119,6 +119,7 @@ fun nativeBuildCommand(
 // passing -e in addition would conflict with it.
 fun nativeTestBuildCommand(
     config: KoltConfig,
+    pluginArgs: List<String> = emptyList(),
     konancPath: String? = null,
     klibs: List<String> = emptyList()
 ): BuildCommand {
@@ -137,6 +138,7 @@ fun nativeTestBuildCommand(
         }
         add("-o")
         add(outputBase)
+        addAll(pluginArgs)
     }
     return BuildCommand(args = args, outputPath = outputPath)
 }
