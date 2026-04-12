@@ -49,7 +49,7 @@ bytes to answer that question".
 ## Decision
 
 Adopt the same pure-core / I/O-shell split for every non-trivial
-subsystem in keel. The two halves live in separate files and
+subsystem in kolt. The two halves live in separate files and
 communicate only through **function parameters**.
 
 For the resolver specifically:
@@ -100,17 +100,17 @@ thin `*Commands.kt` orchestrator under `cli/`.
   a `Map` literal. Every BFS corner case — diamonds, parent POM
   chains, version intervals, exclusion propagation, cycles — is a
   table-driven unit test with no filesystem, no network, no temp
-  directories. This is the single biggest reason keel has a large
+  directories. This is the single biggest reason kolt has a large
   unit-test suite despite being a build tool with heavy I/O.
 - **Algorithms are reviewable top-to-bottom**: `Resolution.kt` reads
   as a specification of the rules. The reader never has to keep two
   concerns in their head at once.
 - **I/O is swappable**: because the pure core takes a `pomLookup`
   function, a caller can substitute an offline lookup (e.g. build a
-  lookup from `keel.lock` directly), or a recording lookup for
+  lookup from `kolt.lock` directly), or a recording lookup for
   debugging, without touching the resolver logic. `DepsTree.kt`
   actually does this — it reuses the same `pomLookup` signature to
-  walk the graph for the `keel tree` command.
+  walk the graph for the `kolt tree` command.
 - **Parallel development**: the two native resolvers
   (`TransitiveResolver` for jvm, `NativeResolver` for native) share
   `Resolution.kt`'s style but not its state. They were built
@@ -143,7 +143,7 @@ thin `*Commands.kt` orchestrator under `cli/`.
 
 ### Neutral
 
-- **Convention shared with Coursier, not copied verbatim**: keel does
+- **Convention shared with Coursier, not copied verbatim**: kolt does
   not implement Coursier's explicit `Done / Missing / Continue` state
   machine. `resolveGraph` is a loop that terminates when the queue is
   empty. The *separation* is what we borrowed, not the specific
@@ -174,15 +174,15 @@ thin `*Commands.kt` orchestrator under `cli/`.
 4. **Port Coursier's full state-machine resolution verbatim** —
    rejected. Coursier's state machine handles concurrent fetching,
    conflict back-propagation, and a much richer conflict model
-   (forced versions, reconciliation strategies). keel does not need
+   (forced versions, reconciliation strategies). kolt does not need
    any of that yet. The simpler BFS with highest-version-wins is
    enough for the scope we support, and we can always tighten it
    later without rewriting the I/O shell.
 
 ## Related
 
-- `src/nativeMain/kotlin/keel/resolve/Resolution.kt` — the pure BFS
-- `src/nativeMain/kotlin/keel/resolve/TransitiveResolver.kt` — the
+- `src/nativeMain/kotlin/kolt/resolve/Resolution.kt` — the pure BFS
+- `src/nativeMain/kotlin/kolt/resolve/TransitiveResolver.kt` — the
   I/O orchestrator and `pomLookup` factory
 - Commit `91d77fd` (initial extraction of `resolveGraph` from
   `TransitiveResolver`)

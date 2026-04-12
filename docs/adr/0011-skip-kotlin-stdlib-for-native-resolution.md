@@ -45,7 +45,7 @@ This breaks for two independent reasons:
 A spike during Phase B research (PR #53) confirmed the konanc bundling
 behaviour: a Hello World native binary that calls `println` from
 `kotlin.io` builds and runs without any `-library` argument and without
-keel resolving any dependency.
+kolt resolving any dependency.
 
 ## Decision
 
@@ -61,7 +61,7 @@ private fun isKotlinStdlib(groupArtifact: String): Boolean =
 The check is applied in three places:
 
 1. **Direct-dependency validation loop** — even if the user writes
-   `"org.jetbrains.kotlin:kotlin-stdlib" = "..."` in `keel.toml`, it is
+   `"org.jetbrains.kotlin:kotlin-stdlib" = "..."` in `kolt.toml`, it is
    skipped before coordinate validation.
 2. **Direct-dependency seeding loop** — stdlib is not added to the BFS
    queue.
@@ -75,7 +75,7 @@ not a project-level mistake.
 
 `-nostdlib` is not passed to konanc. We rely on the default behaviour
 (stdlib auto-linked by konanc) rather than opting out and re-supplying
-stdlib ourselves. This keeps keel out of the business of versioning
+stdlib ourselves. This keeps kolt out of the business of versioning
 stdlib against the bundled konanc release.
 
 ## Consequences
@@ -86,20 +86,20 @@ stdlib against the bundled konanc release.
   on a Kotlin Multiplatform library would fail at the resolution stage
   (no native variant of `kotlin-stdlib` to be found via `available-at`)
   or at the link stage (double-linked stdlib).
-- **No version drift.** keel never has to decide which stdlib version
-  to fetch. The user's `kotlin = "<version>"` in `keel.toml` already
+- **No version drift.** kolt never has to decide which stdlib version
+  to fetch. The user's `kotlin = "<version>"` in `kolt.toml` already
   pins the konanc release, and the bundled stdlib is the right one for
   that release by construction.
-- **Cache cleanliness.** keel's `~/.keel/cache/` does not accumulate
+- **Cache cleanliness.** kolt's `~/.kolt/cache/` does not accumulate
   stdlib jars/klibs that would never be used.
 
 ### Negative
 
 - **Implicit coupling to konanc internals.** If a future Kotlin/Native
-  release stops bundling stdlib (very unlikely), keel will silently
+  release stops bundling stdlib (very unlikely), kolt will silently
   break — the skip would still drop stdlib from resolution, but konanc
   would no longer auto-link it. This would surface as a link-time
-  "unresolved reference" error from konanc, not as a clean keel error.
+  "unresolved reference" error from konanc, not as a clean kolt error.
 - **The skip is invisible to users.** A user who explicitly writes
   `kotlin-stdlib` in `[dependencies]` will see it disappear from the
   resolved set with no message. This is intentional (it would always
@@ -117,14 +117,14 @@ stdlib against the bundled konanc release.
   native pipeline.
 - **`-nostdlib` remains available** if a future user case ever needs it
   (e.g. building a freestanding klib that intentionally avoids the
-  bundled stdlib). It would require an explicit opt-in in `keel.toml`.
+  bundled stdlib). It would require an explicit opt-in in `kolt.toml`.
 
 ## Alternatives Considered
 
 1. **Pass `-nostdlib` to konanc and resolve `kotlin-stdlib` from
    Maven Central ourselves** — rejected because there is no native
    `linux_x64` variant of `kotlin-stdlib` published in the way the
-   resolver expects. Even if there were, it would tie keel's release
+   resolver expects. Even if there were, it would tie kolt's release
    cadence to publishing a matching stdlib for every supported
    `kotlin = "<version>"`.
 2. **Filter stdlib only at the materialise step (after BFS)** —

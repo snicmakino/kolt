@@ -6,10 +6,10 @@ Accepted (2026-04-09)
 
 ## Context
 
-keel's job is to build and run projects without pulling in Gradle or
+kolt's job is to build and run projects without pulling in Gradle or
 Maven. That's fine for the build itself, but it creates a gap the
 moment the user opens their editor. Kotlin Language Servers don't
-know how to read `keel.toml`. They need to be told where the source
+know how to read `kolt.toml`. They need to be told where the source
 directories are and, critically, which JARs are on the classpath.
 Without that, every import from a dependency shows up as
 "unresolved reference" and autocomplete goes dark.
@@ -29,12 +29,12 @@ Two language servers matter in practice:
   line or colon-separated.
 
 Both servers already know how to talk to Gradle and Maven. Neither
-has an adapter for keel. The options were:
+has an adapter for kolt. The options were:
 
 1. Write a Gradle-compatible project descriptor and rely on the
    existing adapters.
 2. Generate each server's native project format directly.
-3. Require the user to invoke a separate tool (`keel lsp export` or
+3. Require the user to invoke a separate tool (`kolt lsp export` or
    similar) before opening the editor.
 
 Option 1 means pretending to be Gradle, which is a large surface to
@@ -44,13 +44,13 @@ squiggles everywhere, and not know what to run to fix it. That
 leaves option 2, and the question becomes *when* to generate the
 files.
 
-There's one more constraint specific to keel: the dependency graph
+There's one more constraint specific to kolt: the dependency graph
 is produced by `Resolver.resolve()` and lives, in effect, in
-`keel.lock`. The LSP files are a projection of that same graph. If
+`kolt.lock`. The LSP files are a projection of that same graph. If
 we regenerate on every build, we pay a small serialisation cost on
-every run. If we regenerate only on `keel install` / `keel update`,
+every run. If we regenerate only on `kolt install` / `kolt update`,
 the files go stale when the lockfile is rewritten by some other
-path (a resolver change, a `keel add` that bypasses `install`).
+path (a resolver change, a `kolt add` that bypasses `install`).
 
 ## Decision
 
@@ -72,7 +72,7 @@ changes), the LSP layer costs two `stat` calls and nothing else.
 Generation is a pure function in `build/Workspace.kt`:
 
 ```kotlin
-fun generateWorkspaceJson(config: KeelConfig, resolvedDeps: List<ResolvedDep>): String
+fun generateWorkspaceJson(config: KoltConfig, resolvedDeps: List<ResolvedDep>): String
 fun generateKlsClasspath(resolvedDeps: List<ResolvedDep>): String
 ```
 
@@ -87,21 +87,21 @@ fun generateKlsClasspath(resolvedDeps: List<ResolvedDep>): String
   paths for every resolved dependency, one JAR per entry.
 
 Both files are written to the project root with ordinary filesystem
-operations. Neither goes into `build/` or `~/.keel/`; both are
-expected to sit next to `keel.toml` so that the LSP can find them
+operations. Neither goes into `build/` or `~/.kolt/`; both are
+expected to sit next to `kolt.toml` so that the LSP can find them
 by looking at the working directory.
 
 `workspace.json` and `kls-classpath` are **generated artefacts**.
-The project's `.gitignore` should exclude them; the `keel init`
-template does so by default. They are reproducible from `keel.toml`
-+ `keel.lock` + the cache contents.
+The project's `.gitignore` should exclude them; the `kolt init`
+template does so by default. They are reproducible from `kolt.toml`
++ `kolt.lock` + the cache contents.
 
 ## Consequences
 
 ### Positive
 
-- **IDE integration works out of the box**: open a keel project in
-  Zed or Neovim, run `keel build` once, and both language servers
+- **IDE integration works out of the box**: open a kolt project in
+  Zed or Neovim, run `kolt build` once, and both language servers
   light up. No Gradle, no Maven, no per-editor configuration hand
   written by the user.
 - **Two editors supported from one code path**: one traversal over
@@ -121,7 +121,7 @@ template does so by default. They are reproducible from `keel.toml`
   in `build/`. The I/O is a thin wrapper in `BuildCommands.kt`.
 - **Classpath is authoritative**: the LSP sees exactly the same JARs
   kotlinc does, because both read from the same resolved graph.
-  There is no way for the editor view to drift from what `keel build`
+  There is no way for the editor view to drift from what `kolt build`
   would actually do.
 
 ### Negative
@@ -141,17 +141,17 @@ template does so by default. They are reproducible from `keel.toml`
   themselves.
 - **Generated files in the working directory**: users who forget
   to gitignore `workspace.json` and `kls-classpath` will commit
-  machine-specific absolute paths from `~/.keel/cache/`. The
-  `keel init` template excludes them, but older projects or
+  machine-specific absolute paths from `~/.kolt/cache/`. The
+  `kolt init` template excludes them, but older projects or
   hand-started ones need to add the entries.
 - **Nullable fields that "should" be filled**: the SDK entry's
-  `homePath` is `JsonNull` because keel does not know, at the
+  `homePath` is `JsonNull` because kolt does not know, at the
   generation site, which JDK the toolchain manager will pick.
   kotlin-lsp currently tolerates this, but "currently tolerates"
   is the caveat.
 - **No per-module configuration**: `workspace.json` treats the
   whole project as one main module plus an optional test module.
-  Multi-module projects (which keel does not yet support anyway)
+  Multi-module projects (which kolt does not yet support anyway)
   would need a richer generator.
 
 ### Neutral
@@ -170,10 +170,10 @@ template does so by default. They are reproducible from `keel.toml`
 1. **Emit a fake Gradle project and let existing LSP adapters read
    it** — rejected. Gradle's project model is enormous, version-
    dependent, and contains a lot of dynamic evaluation (scripts
-   running in a Groovy or Kotlin VM) that keel does not and should
+   running in a Groovy or Kotlin VM) that kolt does not and should
    not execute. Faking enough of it to satisfy an LSP is a much
    larger surface than emitting two JSON files directly.
-2. **Require a separate `keel lsp export` command** — rejected. It
+2. **Require a separate `kolt lsp export` command** — rejected. It
    puts a discoverability barrier in front of IDE integration and
    creates a class of "I edited my deps but the LSP is still red"
    bugs. Generation belongs in the same pipeline that writes the
@@ -188,15 +188,15 @@ template does so by default. They are reproducible from `keel.toml`
    changes, and there is no shared "LSP project model" standard
    across the Kotlin ecosystem. Emitting what each server already
    understands is the only path that works today.
-5. **Regenerate on every `keel build`** — rejected as wasteful in
+5. **Regenerate on every `kolt build`** — rejected as wasteful in
    the hot path. The lockfile-change gate is slightly more
    complicated but keeps no-op builds clean.
 
 ## Related
 
-- `src/nativeMain/kotlin/keel/build/Workspace.kt` —
+- `src/nativeMain/kotlin/kolt/build/Workspace.kt` —
   `generateWorkspaceJson`, `generateKlsClasspath`
-- `src/nativeMain/kotlin/keel/cli/BuildCommands.kt` — regeneration
+- `src/nativeMain/kotlin/kolt/cli/BuildCommands.kt` — regeneration
   trigger (lockfile-change / missing-file condition)
 - Commit `a5af50f` (initial LSP workspace integration, v0.7.0)
 - ADR 0004 (pure/IO separation — `Workspace.kt` generators are
