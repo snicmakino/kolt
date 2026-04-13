@@ -182,10 +182,17 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    val buildCmd = nativeBuildCommand(config, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
+    val libraryCmd = nativeLibraryCommand(config, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling ${config.name} (native)...")
-    executeCommand(buildCmd.args).getOrElse { error ->
+    executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "compilation"))
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
+    println("linking ${config.name} (native)...")
+    executeCommand(linkCmd.args).getOrElse { error ->
+        eprintln(formatProcessError(error, "linking"))
         exitProcess(EXIT_BUILD_ERROR)
     }
 
@@ -329,15 +336,22 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
     }
 
     val testConfig = config.copy(testSources = existingTestSources)
-    val buildCmd = nativeTestBuildCommand(testConfig, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
+    val libraryCmd = nativeTestLibraryCommand(testConfig, pluginArgs = pArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling tests (native)...")
-    executeCommand(buildCmd.args).getOrElse { error ->
+    executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "test compilation"))
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    if (!fileExists(buildCmd.outputPath)) {
-        eprintln("error: ${buildCmd.outputPath} not produced by konanc")
+    val linkCmd = nativeTestLinkCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+    println("linking tests (native)...")
+    executeCommand(linkCmd.args).getOrElse { error ->
+        eprintln(formatProcessError(error, "test linking"))
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    if (!fileExists(linkCmd.outputPath)) {
+        eprintln("error: ${linkCmd.outputPath} not produced by konanc")
         exitProcess(EXIT_BUILD_ERROR)
     }
 
