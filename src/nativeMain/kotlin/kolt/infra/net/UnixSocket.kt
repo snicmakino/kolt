@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.get
@@ -13,12 +14,17 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
 import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.toKString
+import kotlinx.cinterop.usePinned
 import platform.linux.sockaddr_un
 import platform.posix.AF_UNIX
 import platform.posix.ENAMETOOLONG
+import platform.posix.SHUT_WR
 import platform.posix.SOCK_STREAM
 import platform.posix.errno
 import platform.posix.memset
+import platform.posix.recv
+import platform.posix.send
+import platform.posix.shutdown
 import platform.posix.sockaddr
 import platform.posix.socket
 import platform.posix.socklen_t
@@ -36,8 +42,92 @@ import platform.posix.strerror
  * hit an unrelated fd. Callers must confine a `UnixSocket` instance to
  * a single thread, or synchronize externally.
  */
-class UnixSocket internal constructor(internal val fd: Int) : AutoCloseable {
+class UnixSocket internal constructor(private val fd: Int) : AutoCloseable {
     private var closed = false
+
+    /**
+     * Write all of `bytes` to the socket, looping over partial sends.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    fun sendAll(bytes: ByteArray): Result<Unit, UnixSocketError> {
+        if (bytes.isEmpty()) return Ok(Unit)
+        var offset = 0
+        bytes.usePinned { pinned ->
+            while (offset < bytes.size) {
+                val n = send(
+                    fd,
+                    pinned.addressOf(offset),
+                    (bytes.size - offset).convert(),
+                    0,
+                )
+                if (n < 0) {
+                    val e = errno
+                    return Err(UnixSocketError.SendFailed(e, strerrorMessage(e)))
+                }
+                if (n == 0L) {
+                    return Err(
+                        UnixSocketError.SendFailed(
+                            errno = 0,
+                            message = "send() returned 0 after $offset of ${bytes.size} bytes",
+                        ),
+                    )
+                }
+                offset += n.toInt()
+            }
+        }
+        return Ok(Unit)
+    }
+
+    /**
+     * Read exactly `n` bytes from the socket. A premature EOF surfaces
+     * as `UnexpectedEof` with the count of bytes received so far.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    fun recvExact(n: Int): Result<ByteArray, UnixSocketError> {
+        if (n < 0) {
+            return Err(
+                UnixSocketError.RecvFailed(
+                    errno = 0,
+                    message = "recvExact length must be non-negative, was $n",
+                ),
+            )
+        }
+        val buf = ByteArray(n)
+        if (n == 0) return Ok(buf)
+        var offset = 0
+        buf.usePinned { pinned ->
+            while (offset < n) {
+                val got = recv(
+                    fd,
+                    pinned.addressOf(offset),
+                    (n - offset).convert(),
+                    0,
+                )
+                if (got < 0) {
+                    val e = errno
+                    return Err(UnixSocketError.RecvFailed(e, strerrorMessage(e)))
+                }
+                if (got == 0L) {
+                    return Err(UnixSocketError.UnexpectedEof(received = offset, expected = n))
+                }
+                offset += got.toInt()
+            }
+        }
+        return Ok(buf)
+    }
+
+    /**
+     * Half-close the write side of the socket, signalling EOF to the
+     * peer while still allowing incoming bytes to be read.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    fun shutdownWrite(): Result<Unit, UnixSocketError> {
+        if (shutdown(fd, SHUT_WR) != 0) {
+            val e = errno
+            return Err(UnixSocketError.ShutdownFailed(e, strerrorMessage(e)))
+        }
+        return Ok(Unit)
+    }
 
     @OptIn(ExperimentalForeignApi::class)
     override fun close() {
@@ -111,6 +201,26 @@ class UnixSocket internal constructor(internal val fd: Int) : AutoCloseable {
 sealed interface UnixSocketError {
     data class ConnectFailed(
         val path: String,
+        val errno: Int,
+        val message: String,
+    ) : UnixSocketError
+
+    data class SendFailed(
+        val errno: Int,
+        val message: String,
+    ) : UnixSocketError
+
+    data class RecvFailed(
+        val errno: Int,
+        val message: String,
+    ) : UnixSocketError
+
+    data class UnexpectedEof(
+        val received: Int,
+        val expected: Int,
+    ) : UnixSocketError
+
+    data class ShutdownFailed(
         val errno: Int,
         val message: String,
     ) : UnixSocketError
