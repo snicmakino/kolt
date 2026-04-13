@@ -86,7 +86,14 @@ A native client that wants to talk to the daemon without reading
   configured with `Json { classDiscriminator = "type" }`.
 - **Maximum body size**: `FrameCodec.MAX_BODY_BYTES = 64 MiB`. Frames
   larger than this are rejected as `FrameError.Malformed` on both the
-  write and read paths.
+  write and read paths. A client that receives a frame longer than
+  its own limit should treat it symmetrically (reject and close the
+  connection), not truncate.
+- **Concurrency**: the daemon serialises connections — `serve()`
+  accepts one client at a time and runs `handleConnection` to
+  completion before the next `accept()`. A client must not assume
+  multiple in-flight compiles on a single daemon will overlap. See
+  Consequences / Negative for the Phase B plan.
 
 #### Socket path lifecycle
 
@@ -114,11 +121,24 @@ clean shutdown apart from an init failure:
 | 70   | Init failure: `SharedCompilerHost.create` returned `LoaderInitFailed` (usually a wrong compiler-jars path) |
 | 71   | Serve failure: `DaemonServer.serve()` returned `DaemonError` (bind or socket cleanup) |
 
-The native client uses these to decide whether to retry (init/serve
-failure → fall back to subprocess compile path for this build), drop
-the cached daemon state (init failure → wrong jar path, rerun kolt
-with a fresh jar set), or simply spawn a new daemon on the next build
-(clean exit).
+Client action per exit code:
+
+- **0** — daemon finished cleanly. The next `kolt build --daemon`
+  should spawn a fresh daemon (same `--compiler-jars`, same socket
+  path); no user-visible error.
+- **64** — the native client mis-wrote the CLI. This is a kolt bug,
+  not a user bug; report it and fall back to the subprocess compile
+  path for this build.
+- **70** — the compiler jars path is wrong or the jars are corrupt.
+  The native client must not retry the daemon with the same
+  `--compiler-jars` argument; it should fall back to the subprocess
+  path for this build and surface a warning so the user can rerun
+  `kolt install` or update the toolchain.
+- **71** — bind or socket cleanup failed (stale socket, permission
+  denied, unwritable parent). The native client should fall back to
+  subprocess for this build; a fresh daemon will be attempted next
+  build after the native client has had a chance to scrub
+  `~/.kolt/daemon/<projectHash>/`.
 
 ### 4. Periodic restart as a leak safety net, not classloader isolation
 

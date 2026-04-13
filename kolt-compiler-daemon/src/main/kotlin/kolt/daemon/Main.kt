@@ -1,5 +1,8 @@
 package kolt.daemon
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.mapBoth
 import kolt.daemon.host.SharedCompilerHost
 import kolt.daemon.server.DaemonConfig
@@ -40,8 +43,7 @@ fun main(args: Array<String>) {
     )
 
     val server = DaemonServer(cli.socketPath, host, DaemonConfig())
-    val serveResult = server.serve()
-    val reason = serveResult.mapBoth(
+    val reason = server.serve().mapBoth(
         success = { it },
         failure = { err ->
             System.err.println("kolt-compiler-daemon: serve failed: $err")
@@ -52,7 +54,7 @@ fun main(args: Array<String>) {
     exitProcess(0)
 }
 
-private fun parseArgs(args: Array<String>): com.github.michaelbull.result.Result<CliArgs, CliError> {
+private fun parseArgs(args: Array<String>): Result<CliArgs, CliError> {
     var socketPath: String? = null
     var compilerJars: String? = null
     var i = 0
@@ -60,14 +62,14 @@ private fun parseArgs(args: Array<String>): com.github.michaelbull.result.Result
         when (args[i]) {
             "--socket" -> { socketPath = args.getOrNull(i + 1); i += 2 }
             "--compiler-jars" -> { compilerJars = args.getOrNull(i + 1); i += 2 }
-            else -> return com.github.michaelbull.result.Err(CliError.UnknownFlag(args[i]))
+            else -> return Err(CliError.UnknownFlag(args[i]))
         }
     }
-    if (socketPath == null) return com.github.michaelbull.result.Err(CliError.MissingSocket)
-    if (compilerJars == null) return com.github.michaelbull.result.Err(CliError.MissingCompilerJars)
+    if (socketPath == null) return Err(CliError.MissingSocket)
+    if (compilerJars == null) return Err(CliError.MissingCompilerJars)
     val jars = compilerJars.split(File.pathSeparator).filter { it.isNotBlank() }.map { File(it) }
-    if (jars.isEmpty()) return com.github.michaelbull.result.Err(CliError.EmptyCompilerJars)
-    return com.github.michaelbull.result.Ok(CliArgs(Path.of(socketPath), jars))
+    if (jars.isEmpty()) return Err(CliError.EmptyCompilerJars)
+    return Ok(CliArgs(Path.of(socketPath), jars))
 }
 
 private fun formatCliError(err: CliError): String = when (err) {

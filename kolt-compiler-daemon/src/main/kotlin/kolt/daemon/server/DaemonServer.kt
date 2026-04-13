@@ -3,7 +3,7 @@ package kolt.daemon.server
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
-import com.github.michaelbull.result.getError
+import com.github.michaelbull.result.getOrElse
 import com.github.michaelbull.result.mapBoth
 import kolt.daemon.host.CompileRequest
 import kolt.daemon.host.CompilerHost
@@ -129,34 +129,22 @@ class DaemonServer(
         val input = Channels.newInputStream(client)
         val output = Channels.newOutputStream(client)
         while (!stopRequested.get()) {
-            val frame = FrameCodec.readFrame(input)
-            val message = frame.mapBoth(
-                success = { it },
-                failure = { err ->
-                    if (err !is FrameError.Eof) {
-                        FrameCodec.writeFrame(
-                            output,
-                            Message.CompileResult(
-                                exitCode = 2,
-                                diagnostics = emptyList(),
-                                stdout = "",
-                                stderr = "protocol error: $err",
-                            ),
-                        )
-                    }
-                    return
-                },
-            )
+            val message = FrameCodec.readFrame(input).getOrElse { err ->
+                if (err !is FrameError.Eof) {
+                    writeProtocolError(output, "protocol error: $err")
+                }
+                return
+            }
             when (message) {
                 is Message.Ping -> {
-                    if (FrameCodec.writeFrame(output, Message.Pong).getError() != null) return
+                    if (FrameCodec.writeFrame(output, Message.Pong).isErr) return
                 }
                 is Message.Shutdown -> {
                     requestExit(ExitReason.Shutdown)
                     return
                 }
                 is Message.Compile -> {
-                    if (handleCompile(message, output).getError() != null) return
+                    if (handleCompile(message, output).isErr) return
                     val served = compilesServed.incrementAndGet()
                     if (served >= config.maxCompiles) {
                         requestExit(ExitReason.MaxCompilesReached)
@@ -168,19 +156,26 @@ class DaemonServer(
                     }
                 }
                 is Message.Pong, is Message.CompileResult -> {
-                    FrameCodec.writeFrame(
+                    writeProtocolError(
                         output,
-                        Message.CompileResult(
-                            exitCode = 2,
-                            diagnostics = emptyList(),
-                            stdout = "",
-                            stderr = "protocol error: client sent server-only message ${message::class.simpleName}",
-                        ),
+                        "protocol error: client sent server-only message ${message::class.simpleName}",
                     )
                     return
                 }
             }
         }
+    }
+
+    private fun writeProtocolError(output: OutputStream, stderr: String) {
+        FrameCodec.writeFrame(
+            output,
+            Message.CompileResult(
+                exitCode = 2,
+                diagnostics = emptyList(),
+                stdout = "",
+                stderr = stderr,
+            ),
+        )
     }
 
     private fun handleCompile(
