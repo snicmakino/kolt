@@ -31,8 +31,8 @@ private data class NativeResolved(val redirect: NativeRedirect, val artifact: Na
  *    the current native target (linux_x64 in Phase B).
  * 2. Fetch the redirect target's `.module` file and extract the `.klib`
  *    file reference (url + sha256) and the variant's `dependencies[]`.
- * 3. Enqueue each transitive dependency (except `kotlin-stdlib`, which
- *    konanc bundles).
+ * 3. Enqueue each transitive dependency (except the stdlib artifacts
+ *    covered by [isKotlinStdlib], which konanc bundles).
  *
  * After BFS, each resolved `(groupArtifact, version)` has its `.klib`
  * downloaded and hashed; the sha256 is verified against the metadata.

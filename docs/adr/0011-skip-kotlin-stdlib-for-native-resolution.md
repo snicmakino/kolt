@@ -50,12 +50,13 @@ kolt resolving any dependency.
 ## Decision
 
 `NativeResolver` explicitly skips `org.jetbrains.kotlin:kotlin-stdlib`
-at every entry point. The skip is implemented as a single predicate at
-the top of the file:
+and `org.jetbrains.kotlin:kotlin-stdlib-common` at every entry point.
+The skip is implemented as a single predicate at the top of the file:
 
 ```kotlin
 private fun isKotlinStdlib(groupArtifact: String): Boolean =
-    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib"
+    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib" ||
+        groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib-common"
 ```
 
 The check is applied in three places:
