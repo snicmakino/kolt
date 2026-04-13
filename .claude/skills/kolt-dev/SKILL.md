@@ -42,6 +42,8 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 | config | Main.kt | Validate `main` field as Kotlin function FQN; derive JVM facade class name for JVM builds; see ADR 0015 |
 | config | Version.kt | Kolt version string |
 | build | Builder.kt | Build kotlinc / konanc command args (pure function). Native builds are a library → link two-stage split (ADR 0014); link stage emits `-e config.main` and every konanc / cinterop call carries `-target linux_x64` (ADR 0015) |
+| build | CompilerBackend.kt | `CompilerBackend` interface + `CompileRequest` / `CompileOutcome` / `CompileError` types. Seam for swapping between subprocess and warm daemon compilation (ADR 0016) |
+| build | SubprocessCompilerBackend.kt | `CompilerBackend` implementation that shells out to kotlinc via `Process.executeCommand` |
 | build | BuildCache.kt | Build state tracking via mtime comparison |
 | build | Runner.kt | Build java -jar command args (pure function) |
 | build | TestBuilder.kt | Build kotlinc command for test compilation (pure function) |
@@ -65,6 +67,7 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 | infra | Downloader.kt | HTTP file download via libcurl cinterop |
 | infra | Sha256.kt | SHA256 hash computation |
 | infra | Format.kt | Duration formatting utility |
+| infra.net | UnixSocket.kt | AF_UNIX stream socket client (`connect` / `sendAll` / `recvExact` / `shutdownWrite` / `close`). Raw cinterop types stay confined to this file; all entry points return `Result<_, UnixSocketError>`. Used by the warm daemon native client (ADR 0016) |
 | tool | ToolManager.kt | External tool download and caching (ktfmt, JUnit Console Launcher) |
 | tool | ToolchainManager.kt | Kotlinc/JDK toolchain download, verification, auto-install, and path resolution |
 
