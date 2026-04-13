@@ -157,6 +157,51 @@ fun resolveNative(
 }
 
 /**
+ * Builds a lookup function for [buildNativeDependencyTree]. For each
+ * (groupArtifact, version), fetches and parses the Gradle module metadata
+ * twice (root + redirect target) and returns a [NativeNodeInfo] containing
+ * the redirected display coordinate and the transitive dependencies from
+ * the linux_x64 variant. Returns null on any fetch or parse failure so the
+ * tree walker can render a partial graph instead of aborting.
+ *
+ * Results are memoized by (groupArtifact, version) so diamond dependencies
+ * don't re-fetch and re-parse the same `.module` files on every occurrence,
+ * matching [createPomLookup]'s caching behaviour.
+ */
+fun createNativeLookup(
+    repos: List<String>,
+    cacheBase: String,
+    deps: ResolverDeps,
+    nativeTarget: String = NATIVE_TARGET_LINUX_X64
+): (String, String) -> NativeNodeInfo? {
+    val cache = mutableMapOf<String, NativeNodeInfo?>()
+
+    return { groupArtifact, version ->
+        val cacheKey = "$groupArtifact:$version"
+        cache.getOrPut(cacheKey) {
+            val resolved = fetchNativeMetadata(
+                groupArtifact = groupArtifact,
+                version = version,
+                nativeTarget = nativeTarget,
+                cacheBase = cacheBase,
+                repos = repos,
+                deps = deps
+            ).getOrElse { null }
+
+            resolved?.let {
+                NativeNodeInfo(
+                    displayGroupArtifact = "${it.redirect.group}:${it.redirect.module}",
+                    displayVersion = it.redirect.version,
+                    dependencies = it.artifact.dependencies.map { dep ->
+                        "${dep.group}:${dep.module}" to dep.version
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
  * Fetches and parses both the root `.module` (for the available-at redirect)
  * and the platform-specific `.module` (for the klib file + dependencies) for
  * a single coordinate.
