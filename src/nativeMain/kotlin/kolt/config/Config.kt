@@ -5,6 +5,7 @@ import com.akuleshov7.ktoml.TomlInputConfig
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getError
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -57,6 +58,7 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
                 "invalid target '${config.target}' (valid targets: ${VALID_TARGETS.joinToString(", ")})"
             ))
         }
+        validateMainFqn(config.main).getError()?.let { return Err(it) }
         // ktoml preserves quotes in map keys; strip them
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }

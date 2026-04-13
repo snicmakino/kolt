@@ -18,35 +18,6 @@ internal fun outputNativeKlibPath(config: KoltConfig): String = "$BUILD_DIR/${co
 
 internal fun outputNativeTestKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test-klib"
 
-// Derives the Kotlin/Native entry point FQN from config.main.
-//
-// config.main is a JVM-style class name (e.g. "com.example.MainKt"). For
-// Kotlin/Native, konanc needs the fully-qualified function name instead. We
-// take the package portion (everything before the last dot) and append
-// ".main". The class-name suffix itself is discarded.
-//
-// Limitations (Phase A): we assume the entry function is a top-level `fun main`
-// in the same package as the JVM facade class. Non-standard entry points
-// (custom function name, `@JvmStatic` on a companion, etc.) are not supported
-// and will produce a konanc "entry point not found" error. Callers should
-// prefer top-level `fun main()` and a `*Kt` facade class name. See
-// needsNativeEntryPointWarning for the heuristic used to flag likely issues.
-internal fun nativeEntryPoint(config: KoltConfig): String {
-    val lastDot = config.main.lastIndexOf('.')
-    val pkg = if (lastDot >= 0) config.main.substring(0, lastDot) else ""
-    return if (pkg.isEmpty()) "main" else "$pkg.main"
-}
-
-// Returns true when config.main's class-name segment does not end with "Kt",
-// which is the conventional suffix kotlinc generates for top-level functions
-// in file Foo.kt. A non-Kt class name suggests the user may have pointed main
-// at a non-top-level entry, and nativeEntryPoint's derivation will likely not
-// match their intent.
-internal fun needsNativeEntryPointWarning(config: KoltConfig): Boolean {
-    val lastSegment = config.main.substringAfterLast('.')
-    return lastSegment.isNotEmpty() && !lastSegment.endsWith("Kt")
-}
-
 data class BuildCommand(
     val args: List<String>,
     val outputPath: String
@@ -125,8 +96,11 @@ fun nativeLibraryCommand(
 // Stage 2 consumes the klib produced by nativeLibraryCommand via -Xinclude,
 // which pulls the klib's IR (including the main() function) into the final
 // program. The plugin flag is not needed here — the IR is already transformed.
-// We intentionally omit -e: -Xinclude brings the compiled entry point with it,
-// and passing -e risks conflicting with the linked-in main().
+//
+// -e points konanc at the entry function. config.main holds the Kotlin
+// function FQN verbatim, so we forward it as-is. Without this, konanc looks
+// for a function named `main` in the root package and fails when main lives
+// in a named package (e.g. `kolt.cli.main`).
 fun nativeLinkCommand(
     config: KoltConfig,
     konancPath: String? = null,
@@ -139,6 +113,8 @@ fun nativeLinkCommand(
         add(konancPath ?: "konanc")
         add("-p")
         add("program")
+        add("-e")
+        add(config.main)
         for (klib in klibs) {
             add("-l")
             add(klib)

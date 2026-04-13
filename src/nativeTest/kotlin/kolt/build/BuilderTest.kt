@@ -431,6 +431,7 @@ class BuilderTest {
             listOf(
                 "konanc",
                 "-p", "program",
+                "-e", "com.example.main",
                 "-Xinclude=build/my-app-klib",
                 "-o", "build/my-app"
             ),
@@ -448,6 +449,7 @@ class BuilderTest {
             listOf(
                 "konanc",
                 "-p", "program",
+                "-e", "com.example.main",
                 "-Xinclude=build/hello-klib",
                 "-o", "build/hello"
             ),
@@ -478,6 +480,7 @@ class BuilderTest {
             listOf(
                 "konanc",
                 "-p", "program",
+                "-e", "com.example.main",
                 "-l", "/cache/a.klib",
                 "-l", "/cache/b.klib",
                 "-Xinclude=build/my-app-klib",
@@ -495,51 +498,24 @@ class BuilderTest {
     }
 
     @Test
-    fun nativeLinkCommandDoesNotEmitEntryPointFlag() {
-        // -Xinclude pulls in the compiled main() from the klib. -e would be
-        // redundant and risks conflicting with what the klib already declares.
+    fun nativeLinkCommandEmitsEntryPointFromConfigMain() {
+        // config.main is already a Kotlin function FQN (validated by parseConfig),
+        // so konanc -e consumes it verbatim. Without -e, konanc looks for `main`
+        // in the root package and fails when the function lives in a named package.
         val cmd = nativeLinkCommand(testConfig(target = "native"))
 
-        assertFalse(cmd.args.contains("-e"))
+        val eIndex = cmd.args.indexOf("-e")
+        assertTrue(eIndex >= 0, "Expected -e in: ${cmd.args}")
+        assertEquals("com.example.main", cmd.args[eIndex + 1])
     }
 
     @Test
-    fun nativeEntryPointStripsClassNameAndAppendsMain() {
-        assertEquals("com.example.main", nativeEntryPoint(testConfig()))
-    }
+    fun nativeLinkCommandEmitsRootPackageEntryPoint() {
+        val cmd = nativeLinkCommand(testConfig(target = "native").copy(main = "main"))
 
-    @Test
-    fun nativeEntryPointRootPackage() {
-        val config = testConfig().copy(main = "MainKt")
-        assertEquals("main", nativeEntryPoint(config))
-    }
-
-    @Test
-    fun nativeEntryPointDeepPackage() {
-        val config = testConfig().copy(main = "foo.bar.baz.AppKt")
-        assertEquals("foo.bar.baz.main", nativeEntryPoint(config))
-    }
-
-    // --- needsNativeEntryPointWarning ---
-
-    @Test
-    fun needsNativeEntryPointWarningFalseForKtSuffix() {
-        assertFalse(needsNativeEntryPointWarning(testConfig()))
-    }
-
-    @Test
-    fun needsNativeEntryPointWarningFalseForRootKtSuffix() {
-        assertFalse(needsNativeEntryPointWarning(testConfig().copy(main = "MainKt")))
-    }
-
-    @Test
-    fun needsNativeEntryPointWarningTrueForNonKtClass() {
-        assertTrue(needsNativeEntryPointWarning(testConfig().copy(main = "com.example.App")))
-    }
-
-    @Test
-    fun needsNativeEntryPointWarningTrueForRootNonKt() {
-        assertTrue(needsNativeEntryPointWarning(testConfig().copy(main = "Main")))
+        val eIndex = cmd.args.indexOf("-e")
+        assertTrue(eIndex >= 0)
+        assertEquals("main", cmd.args[eIndex + 1])
     }
 
     // --- nativeTestLibraryCommand (Stage 1: main+test sources -> klib) ---

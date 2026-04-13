@@ -17,7 +17,7 @@ class AddDependencyTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "MainKt"
+            main = "main"
             sources = ["src"]
 
             [dependencies]
@@ -37,7 +37,7 @@ class AddDependencyTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "MainKt"
+            main = "main"
             sources = ["src"]
         """.trimIndent()
 
@@ -54,7 +54,7 @@ class AddDependencyTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "MainKt"
+            main = "main"
             sources = ["src"]
 
             [dependencies]
@@ -74,7 +74,7 @@ class AddDependencyTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "MainKt"
+            main = "main"
             sources = ["src"]
 
             [dependencies]
@@ -92,7 +92,7 @@ class AddDependencyTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "MainKt"
+            main = "main"
             sources = ["src"]
 
             [dependencies]

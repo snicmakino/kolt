@@ -74,7 +74,7 @@ version = "0.1.0"
 kotlin = "2.1.0"
 target = "jvm"
 jvm_target = "17"
-main = "MainKt"
+main = "main"
 sources = ["src"]
 resources = ["resources"]
 test_resources = ["test-resources"]
@@ -99,7 +99,7 @@ jitpack = "https://jitpack.io"
 | `kotlin` | Kotlin compiler version | (required) |
 | `target` | `"jvm"` | (required) |
 | `jvm_target` | JVM bytecode target | `"17"` |
-| `main` | Entry point class | (required) |
+| `main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
 | `sources` | Source directories | (required) |
 | `test_sources` | Test source directories | `["test"]` |
 | `resources` | Resource directories to include in build output | `[]` |

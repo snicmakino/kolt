@@ -146,15 +146,6 @@ internal fun doBuild(): BuildResult {
 private fun doNativeBuild(config: KoltConfig): BuildResult {
     val startMark = TimeSource.Monotonic.markNow()
 
-    if (needsNativeEntryPointWarning(config)) {
-        eprintln(
-            "warning: main = \"${config.main}\" does not end with 'Kt'; " +
-                "native build assumes a top-level 'fun main' in package " +
-                "'${nativeEntryPoint(config).substringBeforeLast('.', "")}' " +
-                "(derived entry point: ${nativeEntryPoint(config)})"
-        )
-    }
-
     val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
     val managedKonancBin = ensureKonancBin(config.kotlin, paths, EXIT_BUILD_ERROR)
 

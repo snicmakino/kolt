@@ -2,7 +2,13 @@
 
 ## Status
 
-Accepted (2026-04-13)
+Superseded by ADR 0015 (2026-04-13).
+
+The direction described here — `config.main` holds a JVM facade class
+name and kolt derives the native entry point from it — was reversed
+once `target = "native"` became a first-class target. See ADR 0015 for
+the new scheme: `config.main` holds a Kotlin function FQN, and kolt
+derives the JVM Main-Class from it instead.
 
 ## Context
 

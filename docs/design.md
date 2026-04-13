@@ -45,7 +45,7 @@ version = "0.1.0"
 kotlin = "2.1.0"
 target = "jvm"
 jvm_target = "17"
-main = "com.example.MainKt"
+main = "com.example.main"
 sources = ["src"]
 
 [dependencies]

@@ -4,6 +4,13 @@
 
 Accepted (2026-04-13). Supersedes [ADR 0013](0013-native-test-single-step-compile.md).
 
+> **Note (2026-04-13, ADR 0015):** This ADR's discussion still references
+> `nativeEntryPoint()` / `needsNativeEntryPointWarning()` as live code.
+> Those helpers were deleted by [ADR 0015](0015-main-field-is-kotlin-function-fqn.md)
+> when `config.main` was redefined as a Kotlin function FQN. `nativeLinkCommand`
+> now emits `-e config.main` on the link stage. The core decision of this ADR
+> (two-stage library → link) is unaffected.
+
 ## Context
 
 Issue #62 added Kotlin compiler plugin support (`serialization`, `allopen`,

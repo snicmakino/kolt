@@ -6,7 +6,7 @@ fun generateKoltToml(projectName: String): String = buildString {
     appendLine("""kotlin = "2.1.0"""")
     appendLine("""target = "jvm"""")
     appendLine("""jvm_target = "17"""")
-    appendLine("""main = "MainKt"""")
+    appendLine("""main = "main"""")
     appendLine("""sources = ["src"]""")
 }
 

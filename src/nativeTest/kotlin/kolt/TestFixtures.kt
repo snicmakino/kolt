@@ -22,7 +22,7 @@ fun testConfig(
     kotlin = "2.1.0",
     target = target,
     jvmTarget = jvmTarget,
-    main = "com.example.MainKt",
+    main = "com.example.main",
     sources = sources,
     dependencies = dependencies,
     testSources = testSources,

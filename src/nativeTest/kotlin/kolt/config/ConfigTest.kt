@@ -15,7 +15,7 @@ class ConfigTest {
         version = "0.1.0"
         kotlin = "2.1.0"
         target = "jvm"
-        main = "com.example.MainKt"
+        main = "com.example.main"
         sources = ["src"]
     """.trimIndent()
 
@@ -28,7 +28,7 @@ class ConfigTest {
         assertEquals("0.1.0", config.version)
         assertEquals("2.1.0", config.kotlin)
         assertEquals("jvm", config.target)
-        assertEquals("com.example.MainKt", config.main)
+        assertEquals("com.example.main", config.main)
         assertEquals(listOf("src"), config.sources)
         assertEquals("17", config.jvmTarget)
         assertEquals(emptyMap(), config.dependencies)
@@ -42,7 +42,7 @@ class ConfigTest {
             kotlin = "2.1.0"
             target = "jvm"
             jvm_target = "21"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -57,7 +57,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
@@ -78,7 +78,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src", "generated"]
         """.trimIndent()
 
@@ -92,7 +92,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -117,7 +117,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = []
         """.trimIndent()
 
@@ -132,7 +132,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -149,7 +149,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
@@ -169,7 +169,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "native"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -184,7 +184,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "wasm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -205,7 +205,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             unknown_field = "value"
         """.trimIndent()
@@ -228,7 +228,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             test_sources = ["test", "integration-test"]
         """.trimIndent()
@@ -244,7 +244,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [test-dependencies]
@@ -263,7 +263,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
@@ -291,7 +291,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             fmt_style = "kotlinlang"
         """.trimIndent()
@@ -313,7 +313,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [plugins]
@@ -332,7 +332,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [plugins]
@@ -355,7 +355,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
@@ -388,7 +388,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [repositories]
@@ -408,7 +408,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [repositories]
@@ -433,7 +433,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
@@ -457,7 +457,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [repositories]
@@ -489,7 +489,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             resources = ["resources"]
         """.trimIndent()
@@ -505,7 +505,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             resources = ["resources", "assets"]
         """.trimIndent()
@@ -521,7 +521,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             test_resources = ["test-resources"]
         """.trimIndent()
@@ -537,7 +537,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             resources = ["resources"]
             test_resources = ["test-resources"]
@@ -555,7 +555,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
             resources = []
         """.trimIndent()
@@ -572,7 +572,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "jvm"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"] # main source directory
         """.trimIndent()
 
@@ -610,7 +610,7 @@ class ConfigTest {
             kotlin = "2.1.0"
             target = "jvm"
             jdk = "21"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -631,7 +631,7 @@ class ConfigTest {
             target = "jvm"
             jdk = "21"
             jvm_target = "17"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
@@ -663,7 +663,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "native"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [[cinterop]]
@@ -690,7 +690,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "native"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [[cinterop]]
@@ -718,7 +718,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "native"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [[cinterop]]
@@ -750,7 +750,7 @@ class ConfigTest {
             version = "0.1.0"
             kotlin = "2.1.0"
             target = "native"
-            main = "com.example.MainKt"
+            main = "com.example.main"
             sources = ["src"]
 
             [dependencies]

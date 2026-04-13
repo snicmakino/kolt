@@ -23,9 +23,11 @@ class InitTest {
     }
 
     @Test
-    fun generateTomlMainMatchesProjectName() {
+    fun generateTomlUsesKotlinFunctionFqnForMain() {
+        // Init writes the bare function FQN "main" (root package) rather than
+        // a JVM facade class name. See ADR 0015.
         val toml = generateKoltToml("my-app")
-        assertTrue(toml.contains("main = \"MainKt\""))
+        assertTrue(toml.contains("main = \"main\""))
     }
 
     @Test
