@@ -139,6 +139,68 @@ class NativeResolverTest {
     }
 
     @Test
+    fun skipsKotlinStdlibCommonFromTransitives() {
+        // kotlin-stdlib-common has no Gradle module metadata (pre-GMM artifact),
+        // so the resolver must skip it alongside kotlin-stdlib. Appears in the
+        // transitive closure of e.g. org.kotlincrypto.hash:sha2-256.
+        val config = testConfig(target = "native").copy(
+            dependencies = mapOf("com.example:lib" to "1.0.0")
+        )
+
+        val libRoot = rootModuleJson("com.example", "lib-linuxx64", "1.0.0")
+        val libPlatform = platformModuleJson(
+            klibFileName = "lib-linuxx64-1.0.0.klib",
+            klibSha256 = "h",
+            dependencies = listOf(
+                NativeDependency("org.jetbrains.kotlin", "kotlin-stdlib-common", "1.8.21")
+            )
+        )
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/lib/1.0.0/lib-1.0.0.module" to libRoot,
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.module" to libPlatform
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.klib" to "h"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        assertEquals(1, resolved.deps.size)
+        assertEquals("com.example:lib", resolved.deps[0].groupArtifact)
+    }
+
+    @Test
+    fun skipsKotlinStdlibCommonAsDirectDependencyToo() {
+        val config = testConfig(target = "native").copy(
+            dependencies = mapOf(
+                "com.example:lib" to "1.0.0",
+                "org.jetbrains.kotlin:kotlin-stdlib-common" to "1.8.21"
+            )
+        )
+
+        val libRoot = rootModuleJson("com.example", "lib-linuxx64", "1.0.0")
+        val libPlatform = platformModuleJson("lib-linuxx64-1.0.0.klib", "h", emptyList())
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/lib/1.0.0/lib-1.0.0.module" to libRoot,
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.module" to libPlatform
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.klib" to "h"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        assertEquals(1, resolved.deps.size)
+        assertEquals("com.example:lib", resolved.deps[0].groupArtifact)
+    }
+
+    @Test
     fun skipsKotlinStdlibAsDirectDependencyToo() {
         val config = testConfig(target = "native").copy(
             dependencies = mapOf(

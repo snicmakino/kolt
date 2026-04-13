@@ -50,12 +50,13 @@ kolt resolving any dependency.
 ## Decision
 
 `NativeResolver` explicitly skips `org.jetbrains.kotlin:kotlin-stdlib`
-at every entry point. The skip is implemented as a single predicate at
-the top of the file:
+and `org.jetbrains.kotlin:kotlin-stdlib-common` at every entry point.
+The skip is implemented as a single predicate at the top of the file:
 
 ```kotlin
 private fun isKotlinStdlib(groupArtifact: String): Boolean =
-    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib"
+    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib" ||
+        groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib-common"
 ```
 
 The check is applied in three places:
@@ -104,11 +105,16 @@ stdlib against the bundled konanc release.
   `kotlin-stdlib` in `[dependencies]` will see it disappear from the
   resolved set with no message. This is intentional (it would always
   be wrong to include) but may confuse users porting a JVM project.
-- **The constant `"org.jetbrains.kotlin:kotlin-stdlib"` is hard-coded
-  in `NativeResolver.kt`.** Future related modules (`kotlin-stdlib-jdk8`,
-  `kotlin-stdlib-common`, etc.) would need explicit additions if they
-  ever appeared in a native variant's dependencies. As of Phase B, only
-  the bare `kotlin-stdlib` is observed in real-world `.module` files.
+- **The constants `"org.jetbrains.kotlin:kotlin-stdlib"` and
+  `"org.jetbrains.kotlin:kotlin-stdlib-common"` are hard-coded in
+  `NativeResolver.kt`.** Future related modules (`kotlin-stdlib-jdk8`
+  etc.) would need explicit additions if they ever appeared in a
+  native variant's dependencies. `kotlin-stdlib-common` was added
+  alongside the original `kotlin-stdlib` skip after observing it in the
+  transitive closure of `org.kotlincrypto.hash:sha2-256:0.2.7`, which
+  pins `kotlin-stdlib-common:1.8.21` — a pre-Gradle-metadata artifact
+  that publishes only a `.pom`, causing the native resolver's `.module`
+  fetch to 404.
 
 ### Neutral
 

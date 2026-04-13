@@ -12,8 +12,14 @@ internal const val NATIVE_TARGET_LINUX_X64 = "linux_x64"
 // Kotlin/Native bundles the stdlib in the konanc distribution — it must be
 // skipped during dependency resolution even though Gradle module metadata
 // declares it as a dependency on every native variant.
+// kotlin-stdlib and kotlin-stdlib-common are both bundled by konanc and must
+// not be resolved from Maven: the former has no native variant published in
+// the shape our resolver expects, and the latter (a pre-Gradle-metadata
+// artifact from the 1.8-era split) publishes only a `.pom`, not a `.module`,
+// so the native resolver's `.module` fetch would 404. See ADR 0011.
 private fun isKotlinStdlib(groupArtifact: String): Boolean =
-    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib"
+    groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib" ||
+        groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib-common"
 
 private data class NativeResolved(val redirect: NativeRedirect, val artifact: NativeArtifact)
 
@@ -25,8 +31,8 @@ private data class NativeResolved(val redirect: NativeRedirect, val artifact: Na
  *    the current native target (linux_x64 in Phase B).
  * 2. Fetch the redirect target's `.module` file and extract the `.klib`
  *    file reference (url + sha256) and the variant's `dependencies[]`.
- * 3. Enqueue each transitive dependency (except `kotlin-stdlib`, which
- *    konanc bundles).
+ * 3. Enqueue each transitive dependency (except the stdlib artifacts
+ *    covered by [isKotlinStdlib], which konanc bundles).
  *
  * After BFS, each resolved `(groupArtifact, version)` has its `.klib`
  * downloaded and hashed; the sha256 is verified against the metadata.
