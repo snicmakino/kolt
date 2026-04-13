@@ -111,8 +111,13 @@ internal fun doBuild(): BuildResult {
     val backend: CompilerBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
     val request = CompileRequest(
         workingDir = "",
-        sources = config.sources,
+        // TODO(#14 S5+): resolveDependencies currently returns a ':'-joined
+        // String for legacy reasons, so we split it here to hand the backend a
+        // List<String>. When the daemon path lands and the legacy string form
+        // is no longer needed, teach resolveDependencies to return List<String>
+        // directly and delete this split.
         classpath = if (classpath.isNullOrEmpty()) emptyList() else classpath.split(":").filter { it.isNotEmpty() },
+        sources = config.sources,
         outputPath = CLASSES_DIR,
         moduleName = config.name,
         extraArgs = buildList {

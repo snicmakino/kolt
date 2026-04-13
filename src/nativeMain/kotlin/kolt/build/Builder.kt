@@ -47,6 +47,10 @@ fun checkCommand(
     addAll(pluginArgs)
 }
 
+// TODO(#14 S5): remove after DaemonCompilerBackend proves the daemon path end
+// to end. Kept here only as the S1 cross-check oracle for subprocessArgv —
+// see SubprocessCompilerBackendLegacyCrossCheckTest. doBuild() no longer calls
+// this function; its only live callers are tests.
 fun buildCommand(
     config: KoltConfig,
     classpath: String? = null,

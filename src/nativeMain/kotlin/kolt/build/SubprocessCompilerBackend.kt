@@ -46,10 +46,10 @@ internal fun subprocessArgv(kotlincBin: String, request: CompileRequest): List<S
 }
 
 internal fun mapProcessErrorToCompileError(error: ProcessError): CompileError = when (error) {
-    is ProcessError.EmptyArgs -> CompileError.InternalMisuse("empty argv passed to executeCommand")
-    is ProcessError.ForkFailed -> CompileError.BackendUnavailable("fork failed")
-    is ProcessError.WaitFailed -> CompileError.BackendUnavailable("waitpid failed")
-    is ProcessError.PopenFailed -> CompileError.BackendUnavailable("popen failed")
+    is ProcessError.EmptyArgs -> CompileError.NoCommand
+    is ProcessError.ForkFailed -> CompileError.BackendUnavailable.ForkFailed
+    is ProcessError.WaitFailed -> CompileError.BackendUnavailable.WaitFailed
+    is ProcessError.PopenFailed -> CompileError.BackendUnavailable.PopenFailed
     // execvp() failure in the child surfaces as _exit(127), which arrives here
     // as NonZeroExit(127) — indistinguishable from a kotlinc that legitimately
     // exited with 127. We treat the whole NonZeroExit family as a user-level
@@ -59,5 +59,5 @@ internal fun mapProcessErrorToCompileError(error: ProcessError): CompileError = 
         stdout = "",
         stderr = "",
     )
-    is ProcessError.SignalKilled -> CompileError.BackendUnavailable("compiler killed by signal")
+    is ProcessError.SignalKilled -> CompileError.BackendUnavailable.SignalKilled
 }
