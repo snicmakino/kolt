@@ -1,10 +1,15 @@
 # kolt
 
-> v0.9.0 — Early-stage project. Expect breaking changes.
+[![Unit tests](https://github.com/snicmakino/kolt/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/snicmakino/kolt/actions/workflows/unit-tests.yml)
+[![Self-host smoke test](https://github.com/snicmakino/kolt/actions/workflows/self-host-smoke.yml/badge.svg)](https://github.com/snicmakino/kolt/actions/workflows/self-host-smoke.yml)
 
-A lightweight build tool for Kotlin. Compiles with `kotlinc` directly — no Gradle, no JVM startup tax.
+> v0.10.0 — Early-stage project. Expect breaking changes.
 
-Written in Kotlin/Native. Single binary, instant startup. Incremental builds via mtime-based caching — unchanged sources skip compilation entirely.
+A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
+
+The tool itself starts instantly. Actual compilation delegates to `kotlinc` / `konanc`, so build times track the Kotlin compiler directly. Incremental builds via mtime-based caching skip unchanged sources entirely.
+
+A `kotlinc` daemon integration is planned for an upcoming release to amortize JVM startup across successive builds.
 
 ## Installation
 
@@ -21,6 +26,8 @@ The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy i
 ```sh
 cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
 ```
+
+Gradle is the bootstrap path only. Once you have a kolt binary on PATH, kolt builds itself from its own `kolt.toml` — `kolt build` from the repo root produces an equivalent `build/kolt.kexe` without Gradle. A CI smoke test keeps this loop green on every commit.
 
 ## Quick Start
 

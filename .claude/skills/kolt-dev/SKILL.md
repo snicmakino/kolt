@@ -39,8 +39,9 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 | config | Config.kt | Parse kolt.toml, KoltConfig data class |
 | config | KoltPaths.kt | ~/.kolt/ path resolution (cache, tools, toolchains) |
 | config | Init.kt | Project template generation (kolt.toml, Main.kt) |
+| config | Main.kt | Validate `main` field as Kotlin function FQN; derive JVM facade class name for JVM builds; see ADR 0015 |
 | config | Version.kt | Kolt version string |
-| build | Builder.kt | Build kotlinc / konanc command args (pure function). Native builds are a library → link two-stage split; see ADR 0014 |
+| build | Builder.kt | Build kotlinc / konanc command args (pure function). Native builds are a library → link two-stage split (ADR 0014); link stage emits `-e config.main` and every konanc / cinterop call carries `-target linux_x64` (ADR 0015) |
 | build | BuildCache.kt | Build state tracking via mtime comparison |
 | build | Runner.kt | Build java -jar command args (pure function) |
 | build | TestBuilder.kt | Build kotlinc command for test compilation (pure function) |
