@@ -1,0 +1,231 @@
+# ADR 0016: Warm JVM compiler daemon with shared URLClassLoader
+
+## Status
+
+Accepted (2026-04-13). Phase A implementation in progress: the daemon
+subproject (`kolt-compiler-daemon/`) and its wire protocol are landed;
+native-side client and the `--daemon` opt-in flag are still to come
+(tracked under #14 / #86).
+
+## Context
+
+A clean `kolt build` of a small project currently takes about 8 seconds
+end-to-end. Profiling shows roughly 2.5 of those seconds are spent
+**starting a fresh JVM, loading `kotlin-compiler-embeddable`, and
+warming `K2JVMCompiler` to the point where it can emit a single class
+file**. Every invocation of `kolt build` pays that cost from scratch,
+because kolt today shells out to `java -jar kotlin-compiler.jar` via a
+short-lived subprocess. For a tool whose pitch is "lightweight Kotlin
+builds", a 2.5 s fixed tax on the happy path is unacceptable.
+
+The target for #14 Phase A is: **clean build ~8 s → ~3 s, with any
+subsequent `kolt build` completing in under a second once the daemon is
+warm**. Hitting that target required resolving four design questions:
+
+1. **Where does the compiler run?** In the kolt native process (via
+   JNI), in a sidecar JVM we own, or in the JetBrains-provided Kotlin
+   compiler daemon?
+2. **Within the sidecar, how do we reuse the compiler safely?** Recreate
+   it per compile (isolation), or hold one compiler instance across
+   every compile (reuse)?
+3. **How does the native client talk to the sidecar?** What transport,
+   what framing, what message shape?
+4. **How do we protect against long-running leaks?** Kotlin compiler
+   instances are famous for retaining PSI caches, CoreEnvironment
+   state, and ClassLoader roots. A daemon that runs for days must not
+   grow unbounded.
+
+The answers shape every piece of `kolt-compiler-daemon/` and the native
+`CompilerBackend` interface that will sit in front of it. They are not
+derivable from the code: the benchmark numbers that justify them live
+only in #86, and without a written record the next person (or the next
+Claude session) will relitigate them.
+
+## Decision
+
+### 1. Helper JVM + `kotlin-compiler-embeddable`, loaded directly
+
+kolt ships a small sidecar JVM (`kolt-compiler-daemon`) that the native
+process spawns on demand. The sidecar `implementation` classpath does
+**not** include `kotlin-compiler-embeddable`; instead, the compiler jars
+are passed on the CLI (`--compiler-jars <path>`) and loaded into a
+dedicated `URLClassLoader` at daemon startup. `K2JVMCompiler` is
+instantiated reflectively and held for the daemon's lifetime. The
+daemon process never links the compiler against its own classloader.
+
+### 2. One shared `URLClassLoader`, reused across every compile
+
+A single `URLClassLoader` is created once at daemon startup and reused
+for every `Compile` frame. `K2JVMCompiler` is instantiated once, held
+in `SharedCompilerHost`, and its `exec(PrintStream, String...)` method
+is invoked reflectively for each request. There is no per-compile
+classloader churn and no per-compile `K2JVMCompiler` construction.
+
+### 3. Length-prefix + JSON body over a Unix domain socket
+
+The wire protocol is a stream of frames, each a big-endian u32 length
+followed by a UTF-8 JSON body serialised by `kotlinx.serialization`.
+The message types are `Compile`, `CompileResult`, `Ping`, `Pong`, and
+`Shutdown`. Transport is a Unix domain socket
+(`java.net.UnixDomainSocketAddress`, JDK 16+), one socket per project
+under `~/.kolt/daemon/<projectHash>/daemon.sock`. Diagnostics are
+serialised as `{severity, file, line, column, message}` inside
+`CompileResult`.
+
+### 4. Periodic restart as a leak safety net, not classloader isolation
+
+The daemon tracks `compilesServed`, idle time since the last activity,
+and heap-used bytes. When any of the thresholds in `DaemonConfig`
+(default: 1000 compiles, 30 minutes idle, 1.5 GiB heap) are exceeded,
+the daemon exits cleanly with an `ExitReason` indicating the cause. The
+native client is expected to notice the closed socket and spawn a fresh
+daemon on the next build. This bounds any leak without paying the
+per-compile cost of discarding the compiler instance.
+
+### 5. Opt-in only in Phase A
+
+The daemon is enabled per invocation with `kolt build --daemon` and is
+not the default. Phase B will flip the default after the follow-up
+spikes on rotating fixtures, multi-module workloads, long-run leak
+behaviour, and concurrent-compile thread safety confirm the bounds
+measured in the PoC (tracked as #88–#91). Any daemon error at the
+native client returns the build to the existing subprocess compile
+path — the daemon is never load-bearing for correctness.
+
+## Consequences
+
+### Positive
+
+- **Warm compiles drop to ~85–250 ms.** The spike measured 85 ms late
+  warm average and 123 ms total warm average across 50 iterations on
+  the shared-loader configuration (benchmark table below). That is
+  firmly inside the 1 s budget stated in the Phase A target.
+- **Cold-start cost is paid once.** The first compile after a daemon
+  spawn still pays roughly 2.6 s to initialise the compiler, but every
+  subsequent compile amortises that cost to zero. The second and later
+  `kolt build` invocations are the ones users notice.
+- **Honest error boundaries.** `SharedCompilerHost.compile` returns
+  `Result<CompileOutcome, CompileHostError>`; `FrameCodec.readFrame`
+  returns `Result<Message, FrameError>`; the native client's eventual
+  `DaemonCompilerBackend` will return `Result<Unit, CompileError>`.
+  Exceptions never cross the process boundary, in keeping with
+  ADR 0001.
+- **Leak bounds are explicit.** `DaemonConfig` is the one place that
+  describes when a daemon must die, and `ExitReason` tags the cause on
+  the way out. Tuning the thresholds in a later phase is a single-file
+  change, not an architecture change.
+- **The daemon is disposable.** Because the native client always has a
+  subprocess fallback and any daemon error forces a clean restart, a
+  broken daemon is never a broken build. The worst case is that a user
+  sees the old 8-second build time.
+
+### Negative
+
+- **Reflection everywhere in the hot path.** `SharedCompilerHost` finds
+  `K2JVMCompiler` and `CLICompiler.exec` by string name and invokes
+  them through `java.lang.reflect.Method`. When Kotlin 2.4 or 3.0
+  renames, reorders, or changes the signature of those APIs, the
+  daemon will break at runtime, not at compile time. We mitigate by
+  pinning the compiler jar version and by the integration test in
+  `SharedCompilerHostTest` that actually compiles Hello.kt end-to-end
+  on every build.
+- **Structured diagnostics are not captured yet.** The Phase A host
+  pipes compiler output through a captured `PrintStream` and returns
+  `diagnostics = emptyList()` with the stderr text as a single blob.
+  Hooking into `MessageCollector` to produce real `{severity, file,
+  line, col}` records is deferred. Until that lands, users see the
+  compiler's human-readable error lines, not structured diagnostics.
+- **One connection at a time.** `DaemonServer.serve()` handles one
+  connection sequentially. `kolt watch` and concurrent `kolt build`
+  invocations on the same project will serialise. That is acceptable
+  for Phase A (single CLI user, no watch mode yet) but must be
+  revisited before #15 lands.
+- **Socket path is global-ish.** `~/.kolt/daemon/<projectHash>/` uses a
+  hash of the absolute project path, so moving or renaming a project
+  directory invalidates the daemon. That is fine — the next build just
+  spawns a new one — but it means daemons accumulate under `~/.kolt/`
+  and the native client will need a reaper eventually.
+
+### Neutral
+
+- **No JetBrains Kotlin compiler daemon.** We do not link
+  `kotlin-daemon-client`, and we do not ship the JetBrains daemon
+  launcher. That reduces surface area and keeps the wire protocol
+  under our control, at the cost of giving up whatever future
+  optimisations JetBrains ships into that daemon.
+- **JSON, not a binary protocol.** At the message sizes involved
+  (source paths and classpath entries, not source file contents), the
+  encode/decode cost is in the microseconds. A binary protocol would
+  save bytes on the wire but would not measurably move the warm-build
+  number and would cost us debuggability (`od -c` on a frame shows
+  exactly what was sent).
+
+## Benchmark results (from the spike)
+
+Measured on OpenJDK 21.0.7 Corretto, Kotlin 2.3.20, compiling the
+same single-file fixture repeatedly. `n` is the number of iterations
+in the run; the cold column is the first compile's wall time.
+
+| Scenario | n | cold | warm median | warm avg | heap Δ |
+|---|---|---|---|---|---|
+| A — shared `URLClassLoader` | 10 | 3147 ms | 250 ms | 233 ms | — |
+| B — fresh `URLClassLoader` per compile | 10 | 2620 ms | 2645 ms | 2857 ms | — |
+| **C — shared loader, long run** | 50 | 2634 ms | 108 ms | **123 ms** | **+9 MB** |
+
+Late-warm average on scenario C is **85 ms** (JIT warmup improves
+times over the run; no upward drift). Scenario B fails the Phase A
+kill criterion by a factor of 2.6×. Scenario C passes cleanly and is
+the configuration adopted.
+
+## Alternatives Considered
+
+1. **JNI in-process compiler.** Link `kotlin-compiler-embeddable` into
+   the kolt Kotlin/Native binary via JNI or a GraalVM host. Rejected:
+   dragging a JVM and the full compiler into every native process
+   eliminates the "lightweight build tool" pitch, and the CoreEnvironment
+   / PSI cache leaks that the daemon addresses become unavoidable
+   because the kolt process itself must stay alive to keep the
+   compiler warm.
+2. **JetBrains `kotlin-daemon-client`.** Talk to the compiler daemon
+   that ships with the Kotlin distribution. Rejected: its wire protocol
+   is an internal-use Java RMI service, historically unstable across
+   Kotlin versions, and depends on a launcher process whose lifecycle
+   we do not control. We would trade our own bespoke protocol for a
+   larger upstream API surface with worse debuggability.
+3. **Fresh `URLClassLoader` per compile (classloader isolation).** The
+   original Phase A plan — discard and recreate the classloader between
+   compiles to guarantee no state leaks. Rejected on measurements:
+   2857 ms warm average vs a 1000 ms budget, as shown in scenario B
+   above. The cost of loading the compiler jars dominated every compile
+   and made the daemon strictly worse than the existing subprocess
+   path.
+4. **TCP socket instead of a Unix domain socket.** Rejected on two
+   grounds: TCP requires picking a port (racy against anything else on
+   the system) and leaks the daemon to anyone on the local network by
+   default, whereas UDS uses filesystem permissions for access control
+   and naturally scopes to the host. JDK 16+ makes UDS available in
+   `java.nio`, so the portability argument for TCP no longer applies
+   on the platforms we target.
+5. **Protobuf or a hand-rolled binary frame format.** Rejected. The
+   debugging value of plain-text JSON frames outweighs the handful of
+   bytes saved on each compile, and `kotlinx.serialization` already
+   ships with the daemon's other dependencies.
+6. **No daemon, just a warmer subprocess path.** Rejected. The cost we
+   are removing is entirely in JVM + compiler startup; there is no
+   further optimisation available to a short-lived subprocess that
+   does not amount to caching the JVM itself, which is what the daemon
+   does explicitly.
+
+## Related
+
+- #14 — parent issue (Kotlin Compiler Daemon integration)
+- #86 — Phase A scope and spike results
+- #87 (merged) — the compile-bench spike that produced the numbers
+  above
+- #88–#91 — follow-up spikes (rotating fixtures, multi-module,
+  long-run leak check, concurrent-compile thread safety) that must
+  land before the daemon becomes the default in Phase B
+- #3 — incremental compilation (Phase B, depends on this)
+- #15 — `kolt watch` (Phase C, depends on this)
+- ADR 0001 — `Result<V, E>` error handling discipline (applies to the
+  daemon protocol: all fallible paths return `Result`, never throw)
