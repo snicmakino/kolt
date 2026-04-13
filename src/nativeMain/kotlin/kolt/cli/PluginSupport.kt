@@ -6,6 +6,8 @@ import kolt.build.pluginArgs
 import kolt.config.KoltConfig
 import kolt.infra.eprintln
 import kolt.infra.executeAndCapture
+import kolt.config.KoltPaths
+import kolt.tool.ensureKotlincBin
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -36,4 +38,15 @@ internal fun resolvePluginArgs(config: KoltConfig, managedKotlincBin: String? = 
         eprintln("error: unknown plugin '${error.name}'")
         exitProcess(EXIT_CONFIG_ERROR)
     }
+}
+
+// Kotlin/Native path: konanc ships no compiler-plugin jars, so when a native
+// build needs plugins we provision the kotlinc distribution purely to borrow
+// them. Callers that have no enabled plugins should not call this at all
+// (short-circuit on the caller side) to avoid the kotlinc download entirely.
+internal fun resolveNativePluginArgs(config: KoltConfig, paths: KoltPaths, exitCode: Int): List<String> {
+    val hasEnabledPlugin = config.plugins.any { (_, enabled) -> enabled }
+    if (!hasEnabledPlugin) return emptyList()
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths, exitCode)
+    return resolvePluginArgs(config, managedKotlincBin)
 }

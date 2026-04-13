@@ -176,15 +176,25 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
         return BuildResult(config, classpath = null, pluginArgs = emptyList(), javaPath = null)
     }
 
+    // Resolved only on a real rebuild so cached builds don't provision kotlinc.
+    val nativePluginArgs = resolveNativePluginArgs(config, paths, EXIT_BUILD_ERROR)
+
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    val buildCmd = nativeBuildCommand(config, konancPath = managedKonancBin, klibs = klibs)
+    val libraryCmd = nativeLibraryCommand(config, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling ${config.name} (native)...")
-    executeCommand(buildCmd.args).getOrElse { error ->
+    executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "compilation"))
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
+    println("linking ${config.name} (native)...")
+    executeCommand(linkCmd.args).getOrElse { error ->
+        eprintln(formatProcessError(error, "linking"))
         exitProcess(EXIT_BUILD_ERROR)
     }
 
@@ -200,7 +210,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built $kexePath in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath = null, pluginArgs = emptyList(), javaPath = null)
+    return BuildResult(config, classpath = null, pluginArgs = nativePluginArgs, javaPath = null)
 }
 
 /**
@@ -318,6 +328,7 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
 
     val paths = resolveKoltPaths(EXIT_TEST_ERROR)
     val managedKonancBin = ensureKonancBin(config.kotlin, paths, EXIT_TEST_ERROR)
+    val nativePluginArgs = resolveNativePluginArgs(config, paths, EXIT_TEST_ERROR)
 
     val klibs = resolveNativeDependencies(config, paths)
 
@@ -327,15 +338,22 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
     }
 
     val testConfig = config.copy(testSources = existingTestSources)
-    val buildCmd = nativeTestBuildCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+    val libraryCmd = nativeTestLibraryCommand(testConfig, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling tests (native)...")
-    executeCommand(buildCmd.args).getOrElse { error ->
+    executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln(formatProcessError(error, "test compilation"))
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    if (!fileExists(buildCmd.outputPath)) {
-        eprintln("error: ${buildCmd.outputPath} not produced by konanc")
+    val linkCmd = nativeTestLinkCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+    println("linking tests (native)...")
+    executeCommand(linkCmd.args).getOrElse { error ->
+        eprintln(formatProcessError(error, "test linking"))
+        exitProcess(EXIT_BUILD_ERROR)
+    }
+
+    if (!fileExists(linkCmd.outputPath)) {
+        eprintln("error: ${linkCmd.outputPath} not produced by konanc")
         exitProcess(EXIT_BUILD_ERROR)
     }
 

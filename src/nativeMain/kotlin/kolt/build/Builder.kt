@@ -11,6 +11,12 @@ internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.n
 
 internal fun outputNativeTestKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test.kexe"
 
+// Stage 1 output: the unpacked klib directory produced by `konanc -p library -nopack`.
+// Using a `-klib` suffix keeps it distinct from the sibling `<name>.kexe` file.
+internal fun outputNativeKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-klib"
+
+internal fun outputNativeTestKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test-klib"
+
 // Derives the Kotlin/Native entry point FQN from config.main.
 //
 // config.main is a JVM-style class name (e.g. "com.example.MainKt"). For
@@ -84,23 +90,26 @@ fun buildCommand(
     return BuildCommand(args = args, outputPath = CLASSES_DIR)
 }
 
-fun nativeBuildCommand(
+// Native builds run in two stages because konanc silently no-ops compiler
+// plugins (e.g. kotlinx.serialization) on a single-step `-p program` invocation.
+// Stage 1 compiles sources into an unpacked klib with the plugin applied; Stage
+// 2 links that klib into a program binary. This matches what the Kotlin Gradle
+// plugin does: compileKotlinLinuxX64 produces a klib, linkDebugExecutableLinuxX64
+// produces the executable.
+
+fun nativeLibraryCommand(
     config: KoltConfig,
     pluginArgs: List<String> = emptyList(),
     konancPath: String? = null,
     klibs: List<String> = emptyList()
 ): BuildCommand {
-    val outputPath = outputKexePath(config)
-    // konanc -o takes the path without the .kexe extension
-    val outputBase = "$BUILD_DIR/${config.name}"
+    val outputBase = outputNativeKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
         addAll(config.sources)
         add("-p")
-        add("program")
-        add("-e")
-        add(nativeEntryPoint(config))
-        // -library / -l takes one library per flag; do not join with colons.
+        add("library")
+        add("-nopack")
         for (klib in klibs) {
             add("-l")
             add(klib)
@@ -109,25 +118,77 @@ fun nativeBuildCommand(
         add(outputBase)
         addAll(pluginArgs)
     }
+    return BuildCommand(args = args, outputPath = outputBase)
+}
+
+// Stage 2 consumes the klib produced by nativeLibraryCommand via -Xinclude,
+// which pulls the klib's IR (including the main() function) into the final
+// program. The plugin flag is not needed here — the IR is already transformed.
+// We intentionally omit -e: -Xinclude brings the compiled entry point with it,
+// and passing -e risks conflicting with the linked-in main().
+fun nativeLinkCommand(
+    config: KoltConfig,
+    konancPath: String? = null,
+    klibs: List<String> = emptyList()
+): BuildCommand {
+    val outputPath = outputKexePath(config)
+    val outputBase = "$BUILD_DIR/${config.name}"
+    val klibPath = outputNativeKlibPath(config)
+    val args = buildList {
+        add(konancPath ?: "konanc")
+        add("-p")
+        add("program")
+        for (klib in klibs) {
+            add("-l")
+            add(klib)
+        }
+        add("-Xinclude=$klibPath")
+        add("-o")
+        add(outputBase)
+    }
     return BuildCommand(args = args, outputPath = outputPath)
 }
 
-// Builds a konanc command that compiles main + test sources together and
-// asks the compiler to synthesize a test runner main() via -generate-test-runner.
-// The resulting kexe exits non-zero on any test failure. Unlike nativeBuildCommand
-// we intentionally omit -e: the synthesized runner provides the entry point, and
-// passing -e in addition would conflict with it.
-fun nativeTestBuildCommand(
+// Test Stage 1: compile main + test sources together into a klib. Kotlin/Native
+// test discovery needs the @Test classes to live in a klib so the runner can
+// synthesize a main() that iterates them in Stage 2.
+fun nativeTestLibraryCommand(
+    config: KoltConfig,
+    pluginArgs: List<String> = emptyList(),
+    konancPath: String? = null,
+    klibs: List<String> = emptyList()
+): BuildCommand {
+    val outputBase = outputNativeTestKlibPath(config)
+    val args = buildList {
+        add(konancPath ?: "konanc")
+        addAll(config.sources)
+        addAll(config.testSources)
+        add("-p")
+        add("library")
+        add("-nopack")
+        for (klib in klibs) {
+            add("-l")
+            add(klib)
+        }
+        add("-o")
+        add(outputBase)
+        addAll(pluginArgs)
+    }
+    return BuildCommand(args = args, outputPath = outputBase)
+}
+
+// Test Stage 2: -generate-test-runner asks the compiler to synthesize a main()
+// that discovers and runs @Test functions pulled in via -Xinclude from the klib.
+fun nativeTestLinkCommand(
     config: KoltConfig,
     konancPath: String? = null,
     klibs: List<String> = emptyList()
 ): BuildCommand {
     val outputPath = outputNativeTestKexePath(config)
     val outputBase = "$BUILD_DIR/${config.name}-test"
+    val klibPath = outputNativeTestKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
-        addAll(config.sources)
-        addAll(config.testSources)
         add("-p")
         add("program")
         add("-generate-test-runner")
@@ -135,6 +196,7 @@ fun nativeTestBuildCommand(
             add("-l")
             add(klib)
         }
+        add("-Xinclude=$klibPath")
         add("-o")
         add(outputBase)
     }

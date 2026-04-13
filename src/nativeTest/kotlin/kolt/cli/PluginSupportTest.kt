@@ -1,5 +1,6 @@
 package kolt.cli
 
+import kolt.config.KoltPaths
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -62,6 +63,36 @@ class PluginSupportTest {
         val managedBin = "/home/user/.kolt/toolchains/kotlinc/2.1.0/bin/kotlinc"
 
         val result = resolvePluginArgs(config, managedKotlincBin = managedBin)
+
+        assertTrue(result.isEmpty())
+    }
+
+    // --- resolveNativePluginArgs short-circuit ---
+    //
+    // These tests use a bogus KoltPaths home. If the short-circuit regresses
+    // and resolveNativePluginArgs starts provisioning kotlinc unconditionally,
+    // ensureKotlincBin will try to download under the bogus path and exit the
+    // test process, failing the test.
+
+    @Test
+    fun resolveNativePluginArgsNoPluginsSkipsKotlincProvisioning() {
+        val config = testConfig(plugins = emptyMap(), target = "native")
+        val bogusPaths = KoltPaths("/nonexistent-home-for-test")
+
+        val result = resolveNativePluginArgs(config, bogusPaths, exitCode = 999)
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun resolveNativePluginArgsAllPluginsDisabledSkipsKotlincProvisioning() {
+        val config = testConfig(
+            plugins = mapOf("serialization" to false, "allopen" to false),
+            target = "native"
+        )
+        val bogusPaths = KoltPaths("/nonexistent-home-for-test")
+
+        val result = resolveNativePluginArgs(config, bogusPaths, exitCode = 999)
 
         assertTrue(result.isEmpty())
     }
