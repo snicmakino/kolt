@@ -339,7 +339,7 @@ class BuilderTest {
         val cmd = nativeLibraryCommand(testConfig(target = "native"))
 
         assertEquals(
-            listOf("konanc", "src", "-p", "library", "-nopack", "-o", "build/my-app-klib"),
+            listOf("konanc", "-target", "linux_x64", "src", "-p", "library", "-nopack", "-o", "build/my-app-klib"),
             cmd.args
         )
         assertEquals("build/my-app-klib", cmd.outputPath)
@@ -352,7 +352,7 @@ class BuilderTest {
         )
 
         assertEquals(
-            listOf("konanc", "src", "generated", "-p", "library", "-nopack", "-o", "build/my-app-klib"),
+            listOf("konanc", "-target", "linux_x64", "src", "generated", "-p", "library", "-nopack", "-o", "build/my-app-klib"),
             cmd.args
         )
     }
@@ -363,7 +363,7 @@ class BuilderTest {
 
         assertEquals("build/hello-klib", cmd.outputPath)
         assertEquals(
-            listOf("konanc", "src", "-p", "library", "-nopack", "-o", "build/hello-klib"),
+            listOf("konanc", "-target", "linux_x64", "src", "-p", "library", "-nopack", "-o", "build/hello-klib"),
             cmd.args
         )
     }
@@ -385,7 +385,7 @@ class BuilderTest {
 
         assertEquals(
             listOf(
-                "konanc", "src",
+                "konanc", "-target", "linux_x64", "src",
                 "-p", "library", "-nopack",
                 "-o", "build/my-app-klib",
                 "-Xplugin=foo.jar"
@@ -403,7 +403,7 @@ class BuilderTest {
 
         assertEquals(
             listOf(
-                "konanc", "src",
+                "konanc", "-target", "linux_x64", "src",
                 "-p", "library", "-nopack",
                 "-l", "/cache/a.klib",
                 "-l", "/cache/b.klib",
@@ -430,6 +430,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-e", "com.example.main",
                 "-Xinclude=build/my-app-klib",
@@ -448,6 +449,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-e", "com.example.main",
                 "-Xinclude=build/hello-klib",
@@ -479,6 +481,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-e", "com.example.main",
                 "-l", "/cache/a.klib",
@@ -527,6 +530,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "src", "test",
                 "-p", "library", "-nopack",
                 "-o", "build/my-app-test-klib"
@@ -549,6 +553,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "src", "generated", "test", "integration-test",
                 "-p", "library", "-nopack",
                 "-o", "build/my-app-test-klib"
@@ -567,6 +572,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "src", "test",
                 "-p", "library", "-nopack",
                 "-o", "build/my-app-test-klib",
@@ -586,6 +592,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "src", "test",
                 "-p", "library", "-nopack",
                 "-l", "/cache/a.klib",
@@ -613,6 +620,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-generate-test-runner",
                 "-Xinclude=build/my-app-test-klib",
@@ -638,6 +646,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-generate-test-runner",
                 "-Xinclude=build/hello-test-klib",
@@ -657,6 +666,7 @@ class BuilderTest {
         assertEquals(
             listOf(
                 "konanc",
+                "-target", "linux_x64",
                 "-p", "program",
                 "-generate-test-runner",
                 "-l", "/cache/a.klib",

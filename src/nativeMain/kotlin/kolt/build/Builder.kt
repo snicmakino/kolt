@@ -6,6 +6,13 @@ import kolt.config.KoltConfig
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 
+// Kotlin/Native target triple. Currently linux_x64 is the only supported
+// target (see #61 non-goals). Passed explicitly on every konanc and cinterop
+// invocation so a future cross-build (e.g. running kolt on macOS targeting
+// linux_x64) cannot silently fall back to the host default and produce a
+// wrong-architecture klib. Mirrors what the Kotlin Gradle plugin does.
+internal const val NATIVE_TARGET = "linux_x64"
+
 internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
 
 internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.kexe"
@@ -78,6 +85,8 @@ fun nativeLibraryCommand(
     val outputBase = outputNativeKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
+        add("-target")
+        add(NATIVE_TARGET)
         addAll(config.sources)
         add("-p")
         add("library")
@@ -111,6 +120,8 @@ fun nativeLinkCommand(
     val klibPath = outputNativeKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
+        add("-target")
+        add(NATIVE_TARGET)
         add("-p")
         add("program")
         add("-e")
@@ -138,6 +149,8 @@ fun nativeTestLibraryCommand(
     val outputBase = outputNativeTestKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
+        add("-target")
+        add(NATIVE_TARGET)
         addAll(config.sources)
         addAll(config.testSources)
         add("-p")
@@ -166,6 +179,8 @@ fun nativeTestLinkCommand(
     val klibPath = outputNativeTestKlibPath(config)
     val args = buildList {
         add(konancPath ?: "konanc")
+        add("-target")
+        add(NATIVE_TARGET)
         add("-p")
         add("program")
         add("-generate-test-runner")
@@ -189,6 +204,8 @@ fun cinteropCommand(
     val outputBase = "$outputDir/${entry.name}"
     val args = buildList {
         add(cinteropPath ?: "cinterop")
+        add("-target")
+        add(NATIVE_TARGET)
         add("-def")
         add(entry.def)
         add("-o")

@@ -23,7 +23,7 @@ class CinteropTest {
 
         // Then: args contain cinterop binary, -def, and -o flags
         assertEquals(
-            listOf("cinterop", "-def", "src/nativeInterop/cinterop/libcurl.def", "-o", "build/libcurl"),
+            listOf("cinterop", "-target", "linux_x64", "-def", "src/nativeInterop/cinterop/libcurl.def", "-o", "build/libcurl"),
             cmd.args
         )
     }
@@ -86,6 +86,7 @@ class CinteropTest {
         assertEquals(
             listOf(
                 "cinterop",
+                "-target", "linux_x64",
                 "-def", "src/nativeInterop/cinterop/libcurl.def",
                 "-o", "build/libcurl",
                 "-pkg", "libcurl"
