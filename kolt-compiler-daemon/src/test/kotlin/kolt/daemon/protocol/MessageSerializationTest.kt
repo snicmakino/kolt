@@ -15,7 +15,7 @@ class MessageSerializationTest {
             workingDir = "/tmp/project",
             classpath = listOf("/lib/a.jar", "/lib/b.jar"),
             sources = listOf("src/Main.kt", "src/Util.kt"),
-            outputJar = "build/out.jar",
+            outputPath = "build/out.jar",
             moduleName = "main",
             extraArgs = listOf("-Xjsr305=strict"),
         )

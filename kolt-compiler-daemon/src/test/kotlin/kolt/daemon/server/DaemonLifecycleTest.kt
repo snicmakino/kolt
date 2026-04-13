@@ -1,6 +1,7 @@
 package kolt.daemon.server
 
 import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.getError
 import kolt.daemon.host.CompileOutcome
 import kolt.daemon.host.CompileRequest
 import kolt.daemon.host.CompilerHost
@@ -17,6 +18,8 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class DaemonLifecycleTest {
 
@@ -71,7 +74,7 @@ class DaemonLifecycleTest {
                         workingDir = "/w",
                         classpath = emptyList(),
                         sources = listOf("A.kt"),
-                        outputJar = "out.jar",
+                        outputPath = "out.jar",
                         moduleName = "m",
                     ),
                 )
@@ -93,7 +96,7 @@ class DaemonLifecycleTest {
             socketPath = socketPath,
             host = host,
             config = DaemonConfig(
-                idleTimeoutMillis = 300,
+                idleTimeoutMillis = 1_000,
                 maxCompiles = Int.MAX_VALUE,
                 heapWatermarkBytes = Long.MAX_VALUE,
             ),
@@ -104,8 +107,24 @@ class DaemonLifecycleTest {
         }
         waitForSocket()
 
-        serverThread.join(3_000)
+        serverThread.join(5_000)
         assertEquals(false, serverThread.isAlive, "server should have exited after idle timeout")
+    }
+
+    @Test
+    fun `serve returns BindFailed when the parent directory cannot be created`() {
+        val impossible = Path.of("/dev/null/kolt-daemon-impossible/daemon.sock")
+        val host = object : CompilerHost {
+            override fun compile(request: CompileRequest) =
+                Ok(CompileOutcome(0, "", ""))
+        }
+        server = DaemonServer(impossible, host, DaemonConfig())
+        serverThread = Thread({}, "noop").apply { start(); join() }
+
+        val result = server.serve()
+        val err = result.getError()
+        assertNotNull(err)
+        assertIs<DaemonError.BindFailed>(err)
     }
 
     private fun waitForSocket() {

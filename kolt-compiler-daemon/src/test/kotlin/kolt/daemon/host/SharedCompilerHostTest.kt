@@ -8,6 +8,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -50,7 +51,8 @@ class SharedCompilerHostTest {
         }
         val outDir = File(workDir, "out").apply { mkdirs() }
 
-        val host = SharedCompilerHost(compilerJars)
+        val host = SharedCompilerHost.create(compilerJars).get()
+        assertNotNull(host)
         val result = host.compile(
             CompileRequest(
                 sources = listOf(src.absolutePath),
@@ -82,7 +84,8 @@ class SharedCompilerHostTest {
         }
         val outDir = File(workDir, "out").apply { mkdirs() }
 
-        val host = SharedCompilerHost(compilerJars)
+        val host = SharedCompilerHost.create(compilerJars).get()
+        assertNotNull(host)
         val result = host.compile(
             CompileRequest(
                 sources = listOf(src.absolutePath),
@@ -99,8 +102,16 @@ class SharedCompilerHostTest {
     }
 
     @Test
+    fun `create returns LoaderInitFailed when compiler jars are empty`() {
+        val err = SharedCompilerHost.create(emptyList()).getError()
+        assertNotNull(err)
+        assertIs<CompileHostError.LoaderInitFailed>(err)
+    }
+
+    @Test
     fun `reuses a single URLClassLoader across multiple compiles`() {
-        val host = SharedCompilerHost(compilerJars)
+        val host = SharedCompilerHost.create(compilerJars).get()
+        assertNotNull(host)
 
         repeat(3) { i ->
             val src = File(workDir, "Loop$i.kt").apply {

@@ -1,5 +1,9 @@
 package kolt.daemon.server
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.mapBoth
 import kolt.daemon.host.CompileRequest
 import kolt.daemon.host.CompilerHost
@@ -7,6 +11,9 @@ import kolt.daemon.protocol.Diagnostic
 import kolt.daemon.protocol.FrameCodec
 import kolt.daemon.protocol.FrameError
 import kolt.daemon.protocol.Message
+import java.io.IOException
+import java.io.OutputStream
+import java.lang.management.ManagementFactory
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.channels.Channels
@@ -26,6 +33,11 @@ sealed interface ExitReason {
     data object HeapWatermarkReached : ExitReason
 }
 
+sealed interface DaemonError {
+    data class BindFailed(val reason: String) : DaemonError
+    data class SocketCleanupFailed(val reason: String) : DaemonError
+}
+
 class DaemonServer(
     private val socketPath: Path,
     private val host: CompilerHost,
@@ -37,14 +49,33 @@ class DaemonServer(
     @Volatile private var serverChannel: ServerSocketChannel? = null
     @Volatile private var exitReason: ExitReason? = null
 
-    fun serve(): ExitReason {
-        Files.deleteIfExists(socketPath)
-        val address = UnixDomainSocketAddress.of(socketPath)
+    fun serve(): Result<ExitReason, DaemonError> {
+        val parent = socketPath.parent
+        if (parent != null) {
+            try {
+                Files.createDirectories(parent)
+            } catch (e: IOException) {
+                return Err(DaemonError.BindFailed("createDirectories($parent) failed: ${e.message}"))
+            }
+        }
+        try {
+            Files.deleteIfExists(socketPath)
+        } catch (e: IOException) {
+            return Err(DaemonError.BindFailed("deleteIfExists($socketPath) failed: ${e.message}"))
+        }
+
+        val server = try {
+            ServerSocketChannel.open(StandardProtocolFamily.UNIX).also {
+                it.bind(UnixDomainSocketAddress.of(socketPath))
+            }
+        } catch (e: IOException) {
+            return Err(DaemonError.BindFailed("bind($socketPath) failed: ${e.message}"))
+        }
+
+        serverChannel = server
         val watchdog = startWatchdog()
         try {
-            ServerSocketChannel.open(StandardProtocolFamily.UNIX).use { server ->
-                server.bind(address)
-                serverChannel = server
+            server.use {
                 while (!stopRequested.get()) {
                     val client = try {
                         server.accept()
@@ -60,7 +91,7 @@ class DaemonServer(
             watchdog.interrupt()
             runCatching { Files.deleteIfExists(socketPath) }
         }
-        return exitReason ?: ExitReason.Shutdown
+        return Ok(exitReason ?: ExitReason.Shutdown)
     }
 
     fun stop() {
@@ -102,18 +133,30 @@ class DaemonServer(
             val message = frame.mapBoth(
                 success = { it },
                 failure = { err ->
-                    if (err is FrameError.Eof) return
+                    if (err !is FrameError.Eof) {
+                        FrameCodec.writeFrame(
+                            output,
+                            Message.CompileResult(
+                                exitCode = 2,
+                                diagnostics = emptyList(),
+                                stdout = "",
+                                stderr = "protocol error: $err",
+                            ),
+                        )
+                    }
                     return
                 },
             )
             when (message) {
-                is Message.Ping -> FrameCodec.writeFrame(output, Message.Pong)
+                is Message.Ping -> {
+                    if (FrameCodec.writeFrame(output, Message.Pong).getError() != null) return
+                }
                 is Message.Shutdown -> {
                     requestExit(ExitReason.Shutdown)
                     return
                 }
                 is Message.Compile -> {
-                    handleCompile(message, output)
+                    if (handleCompile(message, output).getError() != null) return
                     val served = compilesServed.incrementAndGet()
                     if (served >= config.maxCompiles) {
                         requestExit(ExitReason.MaxCompilesReached)
@@ -125,18 +168,30 @@ class DaemonServer(
                     }
                 }
                 is Message.Pong, is Message.CompileResult -> {
-                    // Clients should not send these; ignore and keep reading.
+                    FrameCodec.writeFrame(
+                        output,
+                        Message.CompileResult(
+                            exitCode = 2,
+                            diagnostics = emptyList(),
+                            stdout = "",
+                            stderr = "protocol error: client sent server-only message ${message::class.simpleName}",
+                        ),
+                    )
+                    return
                 }
             }
         }
     }
 
-    private fun handleCompile(request: Message.Compile, output: java.io.OutputStream) {
+    private fun handleCompile(
+        request: Message.Compile,
+        output: OutputStream,
+    ): Result<Unit, FrameError> {
         val result = host.compile(
             CompileRequest(
                 sources = request.sources,
                 classpath = request.classpath,
-                outputPath = request.outputJar,
+                outputPath = request.outputPath,
                 moduleName = request.moduleName,
                 extraArgs = request.extraArgs,
             ),
@@ -159,11 +214,9 @@ class DaemonServer(
                 )
             },
         )
-        FrameCodec.writeFrame(output, reply)
+        return FrameCodec.writeFrame(output, reply)
     }
 
-    private fun heapUsedBytes(): Long {
-        val rt = Runtime.getRuntime()
-        return rt.totalMemory() - rt.freeMemory()
-    }
+    private fun heapUsedBytes(): Long =
+        ManagementFactory.getMemoryMXBean().heapMemoryUsage.used
 }

@@ -33,33 +33,15 @@ interface CompilerHost {
     fun compile(request: CompileRequest): Result<CompileOutcome, CompileHostError>
 }
 
-class SharedCompilerHost(compilerJars: List<File>) : CompilerHost {
+class SharedCompilerHost private constructor(
+    private val loader: URLClassLoader,
+    private val compiler: Any,
+    private val execMethod: Method,
+) : CompilerHost {
 
-    private val loader: URLClassLoader
-    private val compiler: Any
-    private val execMethod: Method
-
-    init {
-        val urls = compilerJars.map { it.toURI().toURL() }.toTypedArray()
-        loader = URLClassLoader(urls, ClassLoader.getPlatformClassLoader())
-        val compilerClass = Class.forName(
-            "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-            true,
-            loader,
-        )
-        compiler = compilerClass.getDeclaredConstructor().newInstance()
-        val cliCompilerClass = Class.forName(
-            "org.jetbrains.kotlin.cli.common.CLICompiler",
-            true,
-            loader,
-        )
-        execMethod = cliCompilerClass.getMethod(
-            "exec",
-            PrintStream::class.java,
-            Array<String>::class.java,
-        )
-    }
-
+    // @Synchronized is a tripwire: DaemonServer serialises connections today, but a future
+    // concurrency change must not silently race the shared K2JVMCompiler instance. See #91.
+    @Synchronized
     override fun compile(request: CompileRequest): Result<CompileOutcome, CompileHostError> {
         val args = buildArgs(request)
         val captured = ByteArrayOutputStream()
@@ -105,5 +87,35 @@ class SharedCompilerHost(compilerJars: List<File>) : CompilerHost {
         "SCRIPT_EXECUTION_ERROR" -> 3
         "OOM_ERROR" -> 4
         else -> 5
+    }
+
+    companion object {
+        fun create(compilerJars: List<File>): Result<SharedCompilerHost, CompileHostError.LoaderInitFailed> {
+            return try {
+                val urls = compilerJars.map { it.toURI().toURL() }.toTypedArray()
+                val loader = URLClassLoader(urls, ClassLoader.getPlatformClassLoader())
+                val compilerClass = Class.forName(
+                    "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+                    true,
+                    loader,
+                )
+                val compiler = compilerClass.getDeclaredConstructor().newInstance()
+                val cliCompilerClass = Class.forName(
+                    "org.jetbrains.kotlin.cli.common.CLICompiler",
+                    true,
+                    loader,
+                )
+                val execMethod = cliCompilerClass.getMethod(
+                    "exec",
+                    PrintStream::class.java,
+                    Array<String>::class.java,
+                )
+                Ok(SharedCompilerHost(loader, compiler, execMethod))
+            } catch (e: ReflectiveOperationException) {
+                Err(CompileHostError.LoaderInitFailed(e.message ?: e.javaClass.name))
+            } catch (e: LinkageError) {
+                Err(CompileHostError.LoaderInitFailed(e.message ?: e.javaClass.name))
+            }
+        }
     }
 }

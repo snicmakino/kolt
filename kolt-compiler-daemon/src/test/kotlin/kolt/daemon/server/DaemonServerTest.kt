@@ -92,7 +92,7 @@ class DaemonServerTest {
                     workingDir = "/w",
                     classpath = emptyList(),
                     sources = listOf("A.kt"),
-                    outputJar = "out.jar",
+                    outputPath = "out.jar",
                     moduleName = "mod-a",
                     extraArgs = emptyList(),
                 ),
@@ -120,13 +120,30 @@ class DaemonServerTest {
     }
 
     @Test
-    fun `Shutdown message stops the server`() {
+    fun `Shutdown message stops the server and cleans up the socket file`() {
         startServer(FakeHost())
         connect().use { ch ->
             FrameCodec.writeFrame(Channels.newOutputStream(ch), Message.Shutdown)
         }
         serverThread.join(2_000)
         assertEquals(false, serverThread.isAlive, "server thread should have exited")
+        assertEquals(false, Files.exists(socketPath), "socket file should have been removed on exit")
+    }
+
+    @Test
+    fun `rejects server-only messages with a protocol error reply`() {
+        startServer(FakeHost())
+        connect().use { ch ->
+            val input = Channels.newInputStream(ch)
+            val output = Channels.newOutputStream(ch)
+            FrameCodec.writeFrame(output, Message.Pong)
+            val response = FrameCodec.readFrame(input).get() as Message.CompileResult
+            assertEquals(2, response.exitCode)
+            kotlin.test.assertTrue(
+                response.stderr.contains("protocol error"),
+                "expected protocol error in stderr, got: ${response.stderr}",
+            )
+        }
     }
 
     private class FakeHost(

@@ -4,6 +4,8 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -26,7 +28,7 @@ class FrameCodecTest {
             workingDir = "/w",
             classpath = listOf("a.jar"),
             sources = listOf("A.kt"),
-            outputJar = "out.jar",
+            outputPath = "out.jar",
             moduleName = "main",
             extraArgs = emptyList(),
         )
@@ -84,6 +86,16 @@ class FrameCodecTest {
         val err = FrameCodec.readFrame(ByteArrayInputStream(out.toByteArray())).getError()
         assertNotNull(err)
         assertIs<FrameError.Malformed>(err)
+    }
+
+    @Test
+    fun `writeFrame returns Io error when the stream throws`() {
+        val failing = object : OutputStream() {
+            override fun write(b: Int) { throw IOException("broken pipe") }
+        }
+        val err = FrameCodec.writeFrame(failing, Message.Ping).getError()
+        assertNotNull(err)
+        assertIs<FrameError.Io>(err)
     }
 
     @Test

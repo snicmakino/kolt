@@ -12,11 +12,15 @@ sealed interface Message {
         val workingDir: String,
         val classpath: List<String>,
         val sources: List<String>,
-        val outputJar: String,
+        val outputPath: String,
         val moduleName: String,
         val extraArgs: List<String> = emptyList(),
     ) : Message
 
+    // TODO(#14 Phase A): populate diagnostics via MessageCollector once the host
+    // hooks into org.jetbrains.kotlin.cli.common.messages.MessageCollector. For now
+    // the compiler's human-readable text is carried in `stderr` and diagnostics is
+    // always empty — see ADR 0016 "Consequences / Structured diagnostics".
     @Serializable
     @SerialName("CompileResult")
     data class CompileResult(

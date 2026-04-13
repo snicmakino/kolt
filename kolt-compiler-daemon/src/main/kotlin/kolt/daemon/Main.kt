@@ -1,5 +1,6 @@
 package kolt.daemon
 
+import com.github.michaelbull.result.mapBoth
 import kolt.daemon.host.SharedCompilerHost
 import kolt.daemon.server.DaemonConfig
 import kolt.daemon.server.DaemonServer
@@ -13,26 +14,45 @@ private data class CliArgs(
     val compilerJars: List<File>,
 )
 
-fun main(args: Array<String>) {
-    val cli = parseArgs(args) ?: run {
-        System.err.println("usage: kolt-compiler-daemon --socket <path> --compiler-jars <classpath>")
-        exitProcess(64)
-    }
-    val host = SharedCompilerHost(cli.compilerJars)
-    val server = DaemonServer(cli.socketPath, host, DaemonConfig())
-    val reason = server.serve()
-    System.err.println("kolt-compiler-daemon: exiting (${reason::class.simpleName})")
-    exitProcess(
-        when (reason) {
-            is ExitReason.Shutdown -> 0
-            is ExitReason.IdleTimeout -> 0
-            is ExitReason.MaxCompilesReached -> 0
-            is ExitReason.HeapWatermarkReached -> 0
-        },
-    )
+private sealed interface CliError {
+    data class UnknownFlag(val flag: String) : CliError
+    data object MissingSocket : CliError
+    data object MissingCompilerJars : CliError
+    data object EmptyCompilerJars : CliError
 }
 
-private fun parseArgs(args: Array<String>): CliArgs? {
+fun main(args: Array<String>) {
+    val cli = parseArgs(args).mapBoth(
+        success = { it },
+        failure = { err ->
+            System.err.println("kolt-compiler-daemon: ${formatCliError(err)}")
+            System.err.println("usage: kolt-compiler-daemon --socket <path> --compiler-jars <classpath>")
+            exitProcess(64)
+        },
+    )
+
+    val host = SharedCompilerHost.create(cli.compilerJars).mapBoth(
+        success = { it },
+        failure = { err ->
+            System.err.println("kolt-compiler-daemon: failed to initialise compiler host: ${err.reason}")
+            exitProcess(70)
+        },
+    )
+
+    val server = DaemonServer(cli.socketPath, host, DaemonConfig())
+    val serveResult = server.serve()
+    val reason = serveResult.mapBoth(
+        success = { it },
+        failure = { err ->
+            System.err.println("kolt-compiler-daemon: serve failed: $err")
+            exitProcess(71)
+        },
+    )
+    System.err.println("kolt-compiler-daemon: exiting (${reason::class.simpleName})")
+    exitProcess(0)
+}
+
+private fun parseArgs(args: Array<String>): com.github.michaelbull.result.Result<CliArgs, CliError> {
     var socketPath: String? = null
     var compilerJars: String? = null
     var i = 0
@@ -40,11 +60,19 @@ private fun parseArgs(args: Array<String>): CliArgs? {
         when (args[i]) {
             "--socket" -> { socketPath = args.getOrNull(i + 1); i += 2 }
             "--compiler-jars" -> { compilerJars = args.getOrNull(i + 1); i += 2 }
-            else -> return null
+            else -> return com.github.michaelbull.result.Err(CliError.UnknownFlag(args[i]))
         }
     }
-    if (socketPath == null || compilerJars == null) return null
+    if (socketPath == null) return com.github.michaelbull.result.Err(CliError.MissingSocket)
+    if (compilerJars == null) return com.github.michaelbull.result.Err(CliError.MissingCompilerJars)
     val jars = compilerJars.split(File.pathSeparator).filter { it.isNotBlank() }.map { File(it) }
-    if (jars.isEmpty()) return null
-    return CliArgs(Path.of(socketPath), jars)
+    if (jars.isEmpty()) return com.github.michaelbull.result.Err(CliError.EmptyCompilerJars)
+    return com.github.michaelbull.result.Ok(CliArgs(Path.of(socketPath), jars))
+}
+
+private fun formatCliError(err: CliError): String = when (err) {
+    is CliError.UnknownFlag -> "unknown flag: ${err.flag}"
+    CliError.MissingSocket -> "--socket is required"
+    CliError.MissingCompilerJars -> "--compiler-jars is required"
+    CliError.EmptyCompilerJars -> "--compiler-jars resolved to zero paths"
 }

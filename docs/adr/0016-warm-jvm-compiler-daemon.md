@@ -72,6 +72,54 @@ under `~/.kolt/daemon/<projectHash>/daemon.sock`. Diagnostics are
 serialised as `{severity, file, line, column, message}` inside
 `CompileResult`.
 
+#### Wire format (reproducible by a stranger)
+
+A native client that wants to talk to the daemon without reading
+`FrameCodec.kt` needs exactly these four facts:
+
+- **Length prefix**: 4 bytes, **big-endian unsigned int32**. The
+  prefix counts body bytes only.
+- **Body encoding**: UTF-8 JSON, `kotlinx.serialization` output.
+- **Sealed discriminator**: the JSON object carries a `"type"` field
+  whose value is the serial name of the variant — `"Compile"`,
+  `"CompileResult"`, `"Ping"`, `"Pong"`, `"Shutdown"`. The codec is
+  configured with `Json { classDiscriminator = "type" }`.
+- **Maximum body size**: `FrameCodec.MAX_BODY_BYTES = 64 MiB`. Frames
+  larger than this are rejected as `FrameError.Malformed` on both the
+  write and read paths.
+
+#### Socket path lifecycle
+
+- The native client is responsible for picking the socket path and
+  passing it to the daemon via `--socket <path>`.
+- The daemon itself creates any missing parent directories before
+  binding (`Files.createDirectories(socketPath.parent)`), removes any
+  stale socket file from a previous run, and deletes the socket on
+  clean exit.
+- If the parent path cannot be created (e.g. permission denied, a
+  component exists and is not a directory), `DaemonServer.serve()`
+  returns `Err(DaemonError.BindFailed)` before any watchdog or bind
+  work starts. No partial state is left behind.
+
+#### Exit codes (for the native client)
+
+The CLI `Main` translates the daemon's internal result into one of a
+small fixed set of POSIX exit codes so the native client can tell a
+clean shutdown apart from an init failure:
+
+| Code | Meaning                                                     |
+|------|-------------------------------------------------------------|
+| 0    | Clean exit: `Shutdown`, `IdleTimeout`, `MaxCompilesReached`, `HeapWatermarkReached` |
+| 64   | Usage error: unknown flag, missing `--socket`, missing or empty `--compiler-jars` |
+| 70   | Init failure: `SharedCompilerHost.create` returned `LoaderInitFailed` (usually a wrong compiler-jars path) |
+| 71   | Serve failure: `DaemonServer.serve()` returned `DaemonError` (bind or socket cleanup) |
+
+The native client uses these to decide whether to retry (init/serve
+failure → fall back to subprocess compile path for this build), drop
+the cached daemon state (init failure → wrong jar path, rerun kolt
+with a fresh jar set), or simply spawn a new daemon on the next build
+(clean exit).
+
 ### 4. Periodic restart as a leak safety net, not classloader isolation
 
 The daemon tracks `compilesServed`, idle time since the last activity,
@@ -104,16 +152,26 @@ path — the daemon is never load-bearing for correctness.
   spawn still pays roughly 2.6 s to initialise the compiler, but every
   subsequent compile amortises that cost to zero. The second and later
   `kolt build` invocations are the ones users notice.
-- **Honest error boundaries.** `SharedCompilerHost.compile` returns
-  `Result<CompileOutcome, CompileHostError>`; `FrameCodec.readFrame`
-  returns `Result<Message, FrameError>`; the native client's eventual
-  `DaemonCompilerBackend` will return `Result<Unit, CompileError>`.
-  Exceptions never cross the process boundary, in keeping with
-  ADR 0001.
+- **Honest error boundaries.** Every fallible daemon entry point
+  returns a `Result<V, E>`: `SharedCompilerHost.create` ->
+  `Result<_, CompileHostError.LoaderInitFailed>`,
+  `SharedCompilerHost.compile` -> `Result<CompileOutcome, CompileHostError>`,
+  `FrameCodec.readFrame` / `FrameCodec.writeFrame` ->
+  `Result<_, FrameError>`, `DaemonServer.serve` ->
+  `Result<ExitReason, DaemonError>`. Reflective, I/O, and bind
+  failures are caught at the boundary and converted to error variants;
+  no exception escapes into the accept loop or the CLI, and the native
+  client's eventual `DaemonCompilerBackend` will return
+  `Result<Unit, CompileError>` in the same style. This is a direct
+  application of ADR 0001.
 - **Leak bounds are explicit.** `DaemonConfig` is the one place that
   describes when a daemon must die, and `ExitReason` tags the cause on
   the way out. Tuning the thresholds in a later phase is a single-file
-  change, not an architecture change.
+  change, not an architecture change. The heap sample is taken via
+  `ManagementFactory.getMemoryMXBean().heapMemoryUsage.used`, which
+  reflects the live set after the most recent GC rather than the
+  "committed minus free" transient, so the watermark fires on actual
+  retention growth rather than on allocation spikes.
 - **The daemon is disposable.** Because the native client always has a
   subprocess fallback and any daemon error forces a clean restart, a
   broken daemon is never a broken build. The worst case is that a user
