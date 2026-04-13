@@ -1,5 +1,6 @@
 package kolt.cli
 
+import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getOrElse
 import kolt.build.*
 import kolt.config.*
@@ -227,19 +228,46 @@ private fun newestDefMtime(config: KoltConfig): Long? {
 
 /**
  * Runs `cinterop` for each [[cinterop]] entry in the config.
+ *
+ * Per-entry freshness check: if the previously generated klib and its sidecar
+ * `.klib.stamp` file both exist and the stamp matches the stamp that would be
+ * produced by the current entry + its .def mtime, the cinterop invocation is
+ * skipped and the cached klib is reused. The stamp observes every field of
+ * CinteropConfig, so editing compiler_options / linker_options in kolt.toml
+ * invalidates the cache even though the .def file is untouched.
+ *
  * Returns the list of generated .klib paths to pass to konanc via -l.
  */
 private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
     if (config.cinterop.isEmpty()) return emptyList()
     val managedCinteropBin = paths.cinteropBin(config.kotlin)
     return config.cinterop.map { entry ->
+        val klibPath = cinteropOutputKlibPath(entry)
+        val stampPath = cinteropStampPath(entry)
+        val defMtime = fileMtime(entry.def)
+        val currentStamp = defMtime?.let { cinteropStamp(entry, it) }
+
+        if (currentStamp != null && fileExists(klibPath) && fileExists(stampPath)) {
+            val previousStamp = readFileAsString(stampPath).get()
+            if (previousStamp == currentStamp) {
+                return@map klibPath
+            }
+        }
+
         val cmd = cinteropCommand(entry, cinteropPath = managedCinteropBin)
         println("generating cinterop klib for ${entry.name}...")
         executeCommand(cmd.args).getOrElse { error ->
             eprintln(formatProcessError(error, "cinterop (${entry.name})"))
             exitProcess(EXIT_BUILD_ERROR)
         }
-        cinteropOutputKlibPath(entry)
+        if (currentStamp != null) {
+            writeFileAsString(stampPath, currentStamp).getOrElse { error ->
+                // Stamp write failure is non-fatal: the next build will simply
+                // re-run cinterop instead of reusing the cached klib.
+                eprintln("warning: failed to write cinterop stamp ${error.path}")
+            }
+        }
+        klibPath
     }
 }
 

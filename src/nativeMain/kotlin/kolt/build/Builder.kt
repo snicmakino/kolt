@@ -236,6 +236,34 @@ fun cinteropCommand(
 fun cinteropOutputKlibPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): String =
     "$outputDir/${entry.name}.klib"
 
+// Path of the sidecar stamp file written next to a cinterop klib. The stamp
+// records a canonical serialization of every CinteropConfig field plus the
+// .def file's mtime. runCinterop reads it to decide whether a previously
+// generated klib can be reused without re-invoking the cinterop tool.
+fun cinteropStampPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): String =
+    "$outputDir/${entry.name}.klib.stamp"
+
+// Canonical freshness stamp for a cinterop entry. Two stamps compare equal
+// iff a re-run of cinterop would produce an equivalent klib for cache purposes.
+// We observe:
+//   - name / def path / package — rename or relocation must invalidate
+//   - compiler_options / linker_options — editing these must invalidate even
+//     though the .def file is untouched (this is the subtle failure mode
+//     called out in #68: a naive mtime-only check silently reuses a stale
+//     klib after a kolt.toml edit)
+//   - the .def file's mtime — the usual "contents changed" signal
+//
+// Order of compilerOption / linkerOption lines follows declaration order
+// so the stamp is sensitive to reordering.
+fun cinteropStamp(entry: CinteropConfig, defMtime: Long): String = buildString {
+    append("name=").append(entry.name).append('\n')
+    append("def=").append(entry.def).append('\n')
+    append("defMtime=").append(defMtime).append('\n')
+    append("package=").append(entry.packageName ?: "").append('\n')
+    for (opt in entry.compilerOptions) append("compilerOption=").append(opt).append('\n')
+    for (opt in entry.linkerOptions) append("linkerOption=").append(opt).append('\n')
+}
+
 fun jarCommand(config: KoltConfig, jarPath: String? = null): BuildCommand {
     val outputPath = outputJarPath(config)
     return BuildCommand(

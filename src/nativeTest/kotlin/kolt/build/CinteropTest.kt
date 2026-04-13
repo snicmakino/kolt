@@ -273,6 +273,105 @@ class CinteropTest {
         assertEquals("custom/build/libssl.klib", path)
     }
 
+    // --- cinteropStamp ---
+
+    @Test
+    fun cinteropStampIsStableForIdenticalInputs() {
+        val entry = CinteropConfig(
+            name = "libcurl",
+            def = "libcurl.def",
+            packageName = "libcurl",
+            compilerOptions = listOf("-I/usr/include"),
+            linkerOptions = listOf("-lcurl")
+        )
+        assertEquals(cinteropStamp(entry, 1000L), cinteropStamp(entry, 1000L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenDefMtimeChanges() {
+        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
+        assertFalse(cinteropStamp(entry, 1000L) == cinteropStamp(entry, 1001L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenNameChanges() {
+        val a = CinteropConfig(name = "libcurl", def = "libcurl.def")
+        val b = CinteropConfig(name = "libssl", def = "libcurl.def")
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenDefPathChanges() {
+        val a = CinteropConfig(name = "libcurl", def = "a/libcurl.def")
+        val b = CinteropConfig(name = "libcurl", def = "b/libcurl.def")
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenPackageChanges() {
+        val a = CinteropConfig(name = "libcurl", def = "libcurl.def", packageName = null)
+        val b = CinteropConfig(name = "libcurl", def = "libcurl.def", packageName = "libcurl")
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenCompilerOptionsChange() {
+        // This is the subtle case #68 calls out: .def untouched but
+        // compiler_options edited in kolt.toml — stamp MUST differ.
+        val a = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            compilerOptions = listOf("-I/foo")
+        )
+        val b = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            compilerOptions = listOf("-I/bar")
+        )
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenLinkerOptionsChange() {
+        val a = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            linkerOptions = listOf("-lcurl")
+        )
+        val b = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            linkerOptions = listOf("-lcurl-gnutls")
+        )
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    @Test
+    fun cinteropStampIsSensitiveToOptionOrder() {
+        // Reordering compiler options can change clang's include search order
+        // and therefore the resolved header set. Treat as a semantic change.
+        val a = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            compilerOptions = listOf("-I/foo", "-I/bar")
+        )
+        val b = CinteropConfig(
+            name = "libcurl", def = "libcurl.def",
+            compilerOptions = listOf("-I/bar", "-I/foo")
+        )
+        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+    }
+
+    // --- cinteropStampPath ---
+
+    @Test
+    fun cinteropStampPathIsKlibPathPlusStamp() {
+        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
+        assertEquals("build/libcurl.klib.stamp", cinteropStampPath(entry))
+        assertEquals("build/libcurl.klib", cinteropOutputKlibPath(entry))
+    }
+
+    @Test
+    fun cinteropStampPathHonorsCustomOutputDir() {
+        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
+        assertEquals("custom/build/libcurl.klib.stamp", cinteropStampPath(entry, "custom/build"))
+    }
+
     @Test
     fun cinteropOutputKlibPathUsesEntryName() {
         // Given: two entries with different names
