@@ -12,6 +12,7 @@ class IsolatingCompileDriverTest {
         val fixtureCp = classpathFromSystemProperty("fixture.classpath")
         val driver = IsolatingCompileDriver(jars, fixtureCp)
 
+        // Relative path: Gradle runs tests with working dir = spike/compile-bench/.
         val source = File("fixtures/Hello.kt").absoluteFile
         assertTrue(source.exists(), "fixture missing: ${source.path}")
 

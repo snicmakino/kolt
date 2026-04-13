@@ -79,7 +79,11 @@ private fun reportTimes(ms: List<Long>) {
     val cold = ms.first()
     val warm2 = ms.getOrNull(1) ?: -1L
     val sorted = ms.sorted()
-    val median = sorted[ms.size / 2]
+    val median = if (sorted.size % 2 == 1) {
+        sorted[sorted.size / 2]
+    } else {
+        (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
+    }
     val avgWarm = ms.drop(1).average().toLong()
     println("  cold   : $cold ms")
     println("  warm-2 : $warm2 ms")

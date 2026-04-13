@@ -4,11 +4,6 @@ import java.io.File
 import java.io.PrintStream
 import java.net.URLClassLoader
 
-sealed class CompileResult {
-    object Ok : CompileResult()
-    data class Failed(val exitCode: String, val messages: List<String>) : CompileResult()
-}
-
 class IsolatingCompileDriver(
     private val compilerJars: List<File>,
     private val compileClasspath: List<File> = emptyList(),
