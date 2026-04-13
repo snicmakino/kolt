@@ -623,4 +623,97 @@ class GradleMetadataTest {
         assertEquals("lib-jvm", redirect?.module)
         assertEquals("1.0", redirect?.version)
     }
+
+    // --- numeric attribute values ---
+    //
+    // kotlinx-datetime:0.7.1-0.6.x-compat emits `"org.gradle.jvm.version": 8`
+    // (integer, not string) on its JVM variants. Gradle Module Metadata does
+    // not require attribute values to be strings, so the resolver must accept
+    // numeric values — treating them as their string form is fine because all
+    // comparisons are against known string literals like "jvm" or "linux_x64".
+
+    @Test
+    fun parseNativeRedirectToleratesNumericAttributeValueOnUnrelatedVariant() {
+        // A JVM variant with an integer attribute sits alongside the native
+        // variant we actually want. Previously Map<String, String> deserialization
+        // threw on the integer and the whole document was rejected as invalid.
+        val json = """
+        {
+          "formatVersion": "1.1",
+          "variants": [
+            {
+              "name": "jvmApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.usage": "java-api",
+                "org.gradle.jvm.version": 8,
+                "org.jetbrains.kotlin.platform.type": "jvm"
+              },
+              "available-at": {
+                "url": "../../lib-jvm/1.0/lib-jvm-1.0.module",
+                "group": "com.example",
+                "module": "lib-jvm",
+                "version": "1.0"
+              }
+            },
+            {
+              "name": "linuxX64ApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.usage": "kotlin-api",
+                "org.jetbrains.kotlin.native.target": "linux_x64",
+                "org.jetbrains.kotlin.platform.type": "native"
+              },
+              "available-at": {
+                "url": "../../lib-linuxx64/1.0/lib-linuxx64-1.0.module",
+                "group": "com.example",
+                "module": "lib-linuxx64",
+                "version": "1.0"
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val redirect = parseNativeRedirect(json, "linux_x64")
+
+        assertEquals("com.example", redirect?.group)
+        assertEquals("lib-linuxx64", redirect?.module)
+        assertEquals("1.0", redirect?.version)
+    }
+
+    @Test
+    fun parseJvmRedirectToleratesNumericJvmVersionAttribute() {
+        // The JVM variant we actually want carries the integer attribute.
+        // `org.gradle.jvm.version` is checked nowhere, but its mere presence
+        // as a non-string broke decoding before the fix.
+        val json = """
+        {
+          "formatVersion": "1.1",
+          "variants": [
+            {
+              "name": "jvmApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.jvm.version": 8,
+                "org.gradle.usage": "java-api",
+                "org.jetbrains.kotlin.platform.type": "jvm"
+              },
+              "available-at": {
+                "url": "../../lib-jvm/1.0/lib-jvm-1.0.module",
+                "group": "com.example",
+                "module": "lib-jvm",
+                "version": "1.0"
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val redirect = parseJvmRedirect(json)
+
+        assertEquals("com.example", redirect?.group)
+        assertEquals("lib-jvm", redirect?.module)
+        assertEquals("1.0", redirect?.version)
+    }
 }

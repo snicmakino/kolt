@@ -3,6 +3,7 @@ package kolt.resolve
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Redirect target when a Kotlin Multiplatform module's .module file
@@ -30,7 +31,7 @@ fun parseJvmRedirect(moduleJson: String): JvmRedirect? {
 
     var redirect: JvmRedirect? = null
     for (variant in metadata.variants) {
-        val platformType = variant.attributes["org.jetbrains.kotlin.platform.type"]
+        val platformType = variant.attributes["org.jetbrains.kotlin.platform.type"]?.content
         if (platformType != "jvm") continue
 
         val availableAt = variant.availableAt
@@ -157,11 +158,11 @@ internal fun isValidGradleModuleJson(moduleJson: String): Boolean =
         false
     }
 
-private fun matchesNativeVariant(attrs: Map<String, String>, nativeTarget: String): Boolean =
-    attrs["org.jetbrains.kotlin.platform.type"] == "native" &&
-        attrs["org.jetbrains.kotlin.native.target"] == nativeTarget &&
-        attrs["org.gradle.usage"] == "kotlin-api" &&
-        attrs["org.gradle.category"] == "library"
+private fun matchesNativeVariant(attrs: Map<String, JsonPrimitive>, nativeTarget: String): Boolean =
+    attrs["org.jetbrains.kotlin.platform.type"]?.content == "native" &&
+        attrs["org.jetbrains.kotlin.native.target"]?.content == nativeTarget &&
+        attrs["org.gradle.usage"]?.content == "kotlin-api" &&
+        attrs["org.gradle.category"]?.content == "library"
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
 
@@ -170,9 +171,14 @@ private data class GradleModuleMetadata(
     val variants: List<GradleVariant> = emptyList()
 )
 
+// Attribute values use JsonPrimitive, not String, because Gradle Module Metadata
+// does not require attribute values to be strings. For example, kotlinx-datetime
+// emits `"org.gradle.jvm.version": 8` (integer) on its JVM variants. Callers read
+// the value via `.content`, which returns the stringified form for both strings
+// and numbers and is sufficient for the literal equality checks kolt performs.
 @Serializable
 private data class GradleVariant(
-    val attributes: Map<String, String> = emptyMap(),
+    val attributes: Map<String, JsonPrimitive> = emptyMap(),
     @SerialName("available-at")
     val availableAt: AvailableAt? = null,
     val files: List<GradleFile> = emptyList(),
