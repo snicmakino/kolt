@@ -284,34 +284,34 @@ class CinteropTest {
             compilerOptions = listOf("-I/usr/include"),
             linkerOptions = listOf("-lcurl")
         )
-        assertEquals(cinteropStamp(entry, 1000L), cinteropStamp(entry, 1000L))
+        assertEquals(cinteropStamp(entry, 1000L, "2.1.0"), cinteropStamp(entry, 1000L, "2.1.0"))
     }
 
     @Test
     fun cinteropStampChangesWhenDefMtimeChanges() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
-        assertFalse(cinteropStamp(entry, 1000L) == cinteropStamp(entry, 1001L))
+        assertFalse(cinteropStamp(entry, 1000L, "2.1.0") == cinteropStamp(entry, 1001L, "2.1.0"))
     }
 
     @Test
     fun cinteropStampChangesWhenNameChanges() {
         val a = CinteropConfig(name = "libcurl", def = "libcurl.def")
         val b = CinteropConfig(name = "libssl", def = "libcurl.def")
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     @Test
     fun cinteropStampChangesWhenDefPathChanges() {
         val a = CinteropConfig(name = "libcurl", def = "a/libcurl.def")
         val b = CinteropConfig(name = "libcurl", def = "b/libcurl.def")
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     @Test
     fun cinteropStampChangesWhenPackageChanges() {
         val a = CinteropConfig(name = "libcurl", def = "libcurl.def", packageName = null)
         val b = CinteropConfig(name = "libcurl", def = "libcurl.def", packageName = "libcurl")
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     @Test
@@ -326,7 +326,7 @@ class CinteropTest {
             name = "libcurl", def = "libcurl.def",
             compilerOptions = listOf("-I/bar")
         )
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     @Test
@@ -339,7 +339,17 @@ class CinteropTest {
             name = "libcurl", def = "libcurl.def",
             linkerOptions = listOf("-lcurl-gnutls")
         )
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
+    }
+
+    @Test
+    fun cinteropStampChangesWhenKotlinVersionChanges() {
+        // Bumping `kotlin = "..."` in kolt.toml switches the cinterop/konanc
+        // toolchain. Kotlin/Native klib format is not guaranteed compatible
+        // across versions, so a cached klib from a previous Kotlin must not
+        // be reused.
+        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
+        assertFalse(cinteropStamp(entry, 1000L, "2.1.0") == cinteropStamp(entry, 1000L, "2.3.20"))
     }
 
     @Test
@@ -354,7 +364,7 @@ class CinteropTest {
             name = "libcurl", def = "libcurl.def",
             compilerOptions = listOf("-I/bar", "-I/foo")
         )
-        assertFalse(cinteropStamp(a, 1000L) == cinteropStamp(b, 1000L))
+        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     // --- cinteropStampPath ---

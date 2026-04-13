@@ -252,10 +252,14 @@ fun cinteropStampPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): Str
 //     called out in #68: a naive mtime-only check silently reuses a stale
 //     klib after a kolt.toml edit)
 //   - the .def file's mtime — the usual "contents changed" signal
+//   - the Kotlin/Native version — bumping `kotlin = "..."` in kolt.toml
+//     switches the cinterop/konanc toolchain, and the klib format is not
+//     guaranteed to be compatible across Kotlin versions
 //
 // Order of compilerOption / linkerOption lines follows declaration order
 // so the stamp is sensitive to reordering.
-fun cinteropStamp(entry: CinteropConfig, defMtime: Long): String = buildString {
+fun cinteropStamp(entry: CinteropConfig, defMtime: Long, kotlinVersion: String): String = buildString {
+    append("kotlinVersion=").append(kotlinVersion).append('\n')
     append("name=").append(entry.name).append('\n')
     append("def=").append(entry.def).append('\n')
     append("defMtime=").append(defMtime).append('\n')

@@ -245,7 +245,7 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
         val klibPath = cinteropOutputKlibPath(entry)
         val stampPath = cinteropStampPath(entry)
         val defMtime = fileMtime(entry.def)
-        val currentStamp = defMtime?.let { cinteropStamp(entry, it) }
+        val currentStamp = defMtime?.let { cinteropStamp(entry, it, config.kotlin) }
 
         if (currentStamp != null && fileExists(klibPath) && fileExists(stampPath)) {
             val previousStamp = readFileAsString(stampPath).get()
