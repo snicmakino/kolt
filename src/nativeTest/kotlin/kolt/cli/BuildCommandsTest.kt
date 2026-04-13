@@ -128,8 +128,7 @@ class CinteropNativeBuildIntegrationTest {
         val libcurlEntry = CinteropConfig(
             name = "libcurl",
             def = "src/nativeInterop/cinterop/libcurl.def",
-            packageName = "libcurl",
-            linkerOptions = listOf("-lcurl")
+            packageName = "libcurl"
         )
         val config = testConfig(
             name = "myapp",

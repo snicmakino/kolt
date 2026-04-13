@@ -221,14 +221,6 @@ fun cinteropCommand(
             add("-pkg")
             add(entry.packageName)
         }
-        for (opt in entry.compilerOptions) {
-            add("-compiler-option")
-            add(opt)
-        }
-        for (opt in entry.linkerOptions) {
-            add("-linker-option")
-            add(opt)
-        }
     }
     return BuildCommand(args = args, outputPath = outputBase)
 }
@@ -247,25 +239,18 @@ fun cinteropStampPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): Str
 // iff a re-run of cinterop would produce an equivalent klib for cache purposes.
 // We observe:
 //   - name / def path / package — rename or relocation must invalidate
-//   - compiler_options / linker_options — editing these must invalidate even
-//     though the .def file is untouched (this is the subtle failure mode
-//     called out in #68: a naive mtime-only check silently reuses a stale
-//     klib after a kolt.toml edit)
-//   - the .def file's mtime — the usual "contents changed" signal
+//   - the .def file's mtime — the usual "contents changed" signal; since
+//     compilerOpts / linkerOpts live inside the .def file, editing them
+//     bumps mtime and invalidates the cache for free
 //   - the Kotlin/Native version — bumping `kotlin = "..."` in kolt.toml
 //     switches the cinterop/konanc toolchain, and the klib format is not
 //     guaranteed to be compatible across Kotlin versions
-//
-// Order of compilerOption / linkerOption lines follows declaration order
-// so the stamp is sensitive to reordering.
 fun cinteropStamp(entry: CinteropConfig, defMtime: Long, kotlinVersion: String): String = buildString {
     append("kotlinVersion=").append(kotlinVersion).append('\n')
     append("name=").append(entry.name).append('\n')
     append("def=").append(entry.def).append('\n')
     append("defMtime=").append(defMtime).append('\n')
     append("package=").append(entry.packageName ?: "").append('\n')
-    for (opt in entry.compilerOptions) append("compilerOption=").append(opt).append('\n')
-    for (opt in entry.linkerOptions) append("linkerOption=").append(opt).append('\n')
 }
 
 fun jarCommand(config: KoltConfig, jarPath: String? = null): BuildCommand {

@@ -165,8 +165,6 @@ For `target = "native"` projects that need to call C libraries, declare one `[[c
 name = "libcurl"
 def = "src/nativeInterop/cinterop/libcurl.def"
 package = "libcurl"
-compiler_options = ["-I/usr/include", "-I/usr/include/x86_64-linux-gnu"]
-linker_options = ["-L/usr/lib/x86_64-linux-gnu", "-lcurl"]
 ```
 
 | Field | Description | Default |
@@ -174,8 +172,14 @@ linker_options = ["-L/usr/lib/x86_64-linux-gnu", "-lcurl"]
 | `name` | Output klib base name (`build/<name>.klib`) | (required) |
 | `def` | Path to the `.def` file describing the binding | (required) |
 | `package` | Kotlin package for generated bindings | (derived from `.def`) |
-| `compiler_options` | Extra flags forwarded to clang as repeated `-compiler-option` | `[]` |
-| `linker_options` | Extra flags forwarded to the linker as repeated `-linker-option` | `[]` |
+
+Compiler and linker options belong inside the `.def` file itself, using the Kotlin/Native standard `compilerOpts.<platform>` / `linkerOpts.<platform>` keys. For example:
+
+```ini
+headers = curl/curl.h
+compilerOpts.linux = -I/usr/include -I/usr/include/x86_64-linux-gnu
+linkerOpts.linux = -L/usr/lib/x86_64-linux-gnu -lcurl
+```
 
 The `cinterop` klib is regenerated when the `.def` file's mtime changes; source-only edits reuse the cached klib. Multiple `[[cinterop]]` entries are allowed and are linked in declaration order.
 

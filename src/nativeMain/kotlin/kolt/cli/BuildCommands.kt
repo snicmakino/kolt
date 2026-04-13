@@ -232,9 +232,7 @@ private fun newestDefMtime(config: KoltConfig): Long? {
  * Per-entry freshness check: if the previously generated klib and its sidecar
  * `.klib.stamp` file both exist and the stamp matches the stamp that would be
  * produced by the current entry + its .def mtime, the cinterop invocation is
- * skipped and the cached klib is reused. The stamp observes every field of
- * CinteropConfig, so editing compiler_options / linker_options in kolt.toml
- * invalidates the cache even though the .def file is untouched.
+ * skipped and the cached klib is reused.
  *
  * Returns the list of generated .klib paths to pass to konanc via -l.
  */

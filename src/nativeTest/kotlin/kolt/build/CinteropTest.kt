@@ -71,127 +71,24 @@ class CinteropTest {
     }
 
     @Test
-    fun cinteropCommandWithSingleCompilerOptionEmitsOneCompilerOptionFlag() {
-        // Given: entry with one compilerOptions element
-        val entry = CinteropConfig(
-            name = "libcurl",
-            def = "libcurl.def",
-            compilerOptions = listOf("-I/usr/include")
-        )
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: a single -compiler-option flag is included with the value
-        assertEquals(1, cmd.args.count { it == "-compiler-option" })
-        val flagIndex = cmd.args.indexOf("-compiler-option")
-        assertEquals("-I/usr/include", cmd.args[flagIndex + 1])
-    }
-
-    @Test
-    fun cinteropCommandWithMultipleCompilerOptionsEmitsRepeatedCompilerOptionFlags() {
-        // Given: entry with multiple compilerOptions elements
-        val entry = CinteropConfig(
-            name = "libcurl",
-            def = "libcurl.def",
-            compilerOptions = listOf("-I/usr/include", "-I/usr/include/x86_64-linux-gnu", "-DFOO=1")
-        )
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: -compiler-option is repeated once per element, preserving order
-        val pairs = cmd.args.zipWithNext().filter { it.first == "-compiler-option" }.map { it.second }
-        assertEquals(
-            listOf("-I/usr/include", "-I/usr/include/x86_64-linux-gnu", "-DFOO=1"),
-            pairs
-        )
-    }
-
-    @Test
-    fun cinteropCommandWithEmptyCompilerOptionsOmitsFlag() {
-        // Given: entry with empty compilerOptions list (the default)
-        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: no -compiler-option flag is emitted
-        assertFalse(cmd.args.contains("-compiler-option"), "Unexpected -compiler-option flag in: ${cmd.args}")
-    }
-
-    @Test
-    fun cinteropCommandWithSingleLinkerOptionEmitsOneLinkerOptionFlag() {
-        // Given: entry with one linkerOptions element
-        val entry = CinteropConfig(
-            name = "libcurl",
-            def = "libcurl.def",
-            linkerOptions = listOf("-lcurl")
-        )
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: a single -linker-option flag is included with the value
-        assertEquals(1, cmd.args.count { it == "-linker-option" })
-        val flagIndex = cmd.args.indexOf("-linker-option")
-        assertEquals("-lcurl", cmd.args[flagIndex + 1])
-    }
-
-    @Test
-    fun cinteropCommandWithMultipleLinkerOptionsEmitsRepeatedLinkerOptionFlags() {
-        // Given: entry with multiple linkerOptions elements
-        val entry = CinteropConfig(
-            name = "libcurl",
-            def = "libcurl.def",
-            linkerOptions = listOf("-L/usr/lib/x86_64-linux-gnu", "-lcurl")
-        )
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: -linker-option is repeated once per element, preserving order
-        val pairs = cmd.args.zipWithNext().filter { it.first == "-linker-option" }.map { it.second }
-        assertEquals(listOf("-L/usr/lib/x86_64-linux-gnu", "-lcurl"), pairs)
-    }
-
-    @Test
-    fun cinteropCommandWithEmptyLinkerOptionsOmitsFlag() {
-        // Given: entry with empty linkerOptions list (the default)
-        val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
-
-        // When: command is constructed
-        val cmd = cinteropCommand(entry)
-
-        // Then: no -linker-option flag is emitted
-        assertFalse(cmd.args.contains("-linker-option"), "Unexpected -linker-option flag in: ${cmd.args}")
-    }
-
-    @Test
     fun cinteropCommandWithAllOptionsProducesFullArgs() {
         // Given: entry with all optional fields set
         val entry = CinteropConfig(
             name = "libcurl",
             def = "src/nativeInterop/cinterop/libcurl.def",
-            packageName = "libcurl",
-            compilerOptions = listOf("-I/usr/include", "-DFOO=1"),
-            linkerOptions = listOf("-L/usr/lib", "-lcurl")
+            packageName = "libcurl"
         )
 
         // When: command is constructed
         val cmd = cinteropCommand(entry)
 
-        // Then: full args in canonical order, with repeated singular flags
+        // Then: full args in canonical order
         assertEquals(
             listOf(
                 "cinterop",
                 "-def", "src/nativeInterop/cinterop/libcurl.def",
                 "-o", "build/libcurl",
-                "-pkg", "libcurl",
-                "-compiler-option", "-I/usr/include",
-                "-compiler-option", "-DFOO=1",
-                "-linker-option", "-L/usr/lib",
-                "-linker-option", "-lcurl"
+                "-pkg", "libcurl"
             ),
             cmd.args
         )
@@ -280,9 +177,7 @@ class CinteropTest {
         val entry = CinteropConfig(
             name = "libcurl",
             def = "libcurl.def",
-            packageName = "libcurl",
-            compilerOptions = listOf("-I/usr/include"),
-            linkerOptions = listOf("-lcurl")
+            packageName = "libcurl"
         )
         assertEquals(cinteropStamp(entry, 1000L, "2.1.0"), cinteropStamp(entry, 1000L, "2.1.0"))
     }
@@ -315,34 +210,6 @@ class CinteropTest {
     }
 
     @Test
-    fun cinteropStampChangesWhenCompilerOptionsChange() {
-        // This is the subtle case #68 calls out: .def untouched but
-        // compiler_options edited in kolt.toml — stamp MUST differ.
-        val a = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            compilerOptions = listOf("-I/foo")
-        )
-        val b = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            compilerOptions = listOf("-I/bar")
-        )
-        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
-    }
-
-    @Test
-    fun cinteropStampChangesWhenLinkerOptionsChange() {
-        val a = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            linkerOptions = listOf("-lcurl")
-        )
-        val b = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            linkerOptions = listOf("-lcurl-gnutls")
-        )
-        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
-    }
-
-    @Test
     fun cinteropStampChangesWhenKotlinVersionChanges() {
         // Bumping `kotlin = "..."` in kolt.toml switches the cinterop/konanc
         // toolchain. Kotlin/Native klib format is not guaranteed compatible
@@ -350,21 +217,6 @@ class CinteropTest {
         // be reused.
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
         assertFalse(cinteropStamp(entry, 1000L, "2.1.0") == cinteropStamp(entry, 1000L, "2.3.20"))
-    }
-
-    @Test
-    fun cinteropStampIsSensitiveToOptionOrder() {
-        // Reordering compiler options can change clang's include search order
-        // and therefore the resolved header set. Treat as a semantic change.
-        val a = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            compilerOptions = listOf("-I/foo", "-I/bar")
-        )
-        val b = CinteropConfig(
-            name = "libcurl", def = "libcurl.def",
-            compilerOptions = listOf("-I/bar", "-I/foo")
-        )
-        assertFalse(cinteropStamp(a, 1000L, "2.1.0") == cinteropStamp(b, 1000L, "2.1.0"))
     }
 
     // --- cinteropStampPath ---
