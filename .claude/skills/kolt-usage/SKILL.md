@@ -60,8 +60,6 @@ serialization = true
 name = "libcurl"
 def = "src/nativeInterop/cinterop/libcurl.def"
 package = "libcurl"
-compiler_options = ["-I/usr/include", "-I/usr/include/x86_64-linux-gnu"]
-linker_options = ["-L/usr/lib/x86_64-linux-gnu", "-lcurl"]
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
@@ -95,7 +93,7 @@ jitpack = "https://jitpack.io"
 
 ### C Interop
 
-For `target = "native"` projects, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool, caches `build/<name>.klib`, and links it via `konanc -l`. Fields: `name` (klib base), `def` (.def path), `package` (optional Kotlin package), `compiler_options` (list — emitted as repeated `-compiler-option`), `linker_options` (list — emitted as repeated `-linker-option`). Klibs are regenerated when the `.def` file's mtime changes.
+For `target = "native"` projects, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool, caches `build/<name>.klib`, and links it via `konanc -l`. Fields: `name` (klib base), `def` (.def path), `package` (optional Kotlin package). Compiler and linker flags belong inside the `.def` file itself via the Kotlin/Native standard `compilerOpts.<platform>` / `linkerOpts.<platform>` keys — kolt does not duplicate them in `kolt.toml`. Klibs are regenerated when the `.def` file's mtime changes.
 
 ## Dependencies
 
