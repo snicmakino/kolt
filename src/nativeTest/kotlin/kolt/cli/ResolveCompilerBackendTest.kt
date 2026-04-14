@@ -38,6 +38,7 @@ class ResolveCompilerBackendTest {
         javaBin = "/fake/java",
         daemonJarPath = "/fake/daemon.jar",
         compilerJars = listOf("/fake/kotlinc/lib/a.jar"),
+        btaImplJars = listOf("/fake/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
         daemonDir = "/fake/daemon/dir",
         socketPath = "/fake/daemon/dir/daemon.sock",
         logPath = "/fake/daemon/dir/daemon.log",

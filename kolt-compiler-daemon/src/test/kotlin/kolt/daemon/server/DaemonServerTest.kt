@@ -3,10 +3,11 @@ package kolt.daemon.server
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
-import kolt.daemon.host.CompileHostError
-import kolt.daemon.host.CompileOutcome
-import kolt.daemon.host.CompileRequest
-import kolt.daemon.host.CompilerHost
+import kolt.daemon.ic.IcError
+import kolt.daemon.ic.IcRequest
+import kolt.daemon.ic.IcResponse
+import kolt.daemon.ic.IncrementalCompiler
+import kolt.daemon.ic.Status
 import kolt.daemon.protocol.FrameCodec
 import kolt.daemon.protocol.Message
 import java.net.StandardProtocolFamily
@@ -43,8 +44,8 @@ class DaemonServerTest {
         runCatching { Files.deleteIfExists(socketDir) }
     }
 
-    private fun startServer(host: CompilerHost) {
-        server = DaemonServer(socketPath, host)
+    private fun startServer(compiler: IncrementalCompiler) {
+        server = DaemonServer(socketPath, compiler)
         serverThread = Thread({ server.serve() }, "daemon-server-test").apply {
             isDaemon = true
             start()
@@ -62,7 +63,7 @@ class DaemonServerTest {
 
     @Test
     fun `responds to Ping with Pong`() {
-        startServer(FakeHost())
+        startServer(FakeCompiler())
         connect().use { ch ->
             val input = Channels.newInputStream(ch)
             val output = Channels.newOutputStream(ch)
@@ -73,15 +74,17 @@ class DaemonServerTest {
     }
 
     @Test
-    fun `delegates Compile to the host and returns CompileResult`() {
+    fun `delegates Compile to the incremental compiler and returns CompileResult`() {
         val calls = AtomicInteger(0)
-        val host = FakeHost(
+        val observedRequests = mutableListOf<IcRequest>()
+        val compiler = FakeCompiler(
             onCompile = { req ->
                 calls.incrementAndGet()
-                Ok(CompileOutcome(exitCode = 0, stdout = "", stderr = "stderr:${req.moduleName}"))
+                observedRequests += req
+                Ok(IcResponse(wallMillis = 7, compiledFileCount = 1, status = Status.SUCCESS))
             },
         )
-        startServer(host)
+        startServer(compiler)
 
         connect().use { ch ->
             val input = Channels.newInputStream(ch)
@@ -92,7 +95,7 @@ class DaemonServerTest {
                     workingDir = "/w",
                     classpath = emptyList(),
                     sources = listOf("A.kt"),
-                    outputPath = "out.jar",
+                    outputPath = "build/classes",
                     moduleName = "mod-a",
                     extraArgs = emptyList(),
                 ),
@@ -101,14 +104,45 @@ class DaemonServerTest {
             assertNotNull(response)
             val result = response as Message.CompileResult
             assertEquals(0, result.exitCode)
-            assertEquals("stderr:mod-a", result.stderr)
             assertEquals(1, calls.get())
+            val observed = observedRequests.single()
+            assertEquals(Path.of("/w"), observed.projectRoot)
+            assertEquals(listOf(Path.of("A.kt")), observed.sources)
+            assertEquals(Path.of("build/classes"), observed.outputDir)
+        }
+    }
+
+    @Test
+    fun `CompilationFailed from the adapter becomes a non-zero CompileResult`() {
+        val compiler = FakeCompiler(
+            onCompile = { _ ->
+                com.github.michaelbull.result.Err(IcError.CompilationFailed(listOf("Main.kt: error: unresolved reference")))
+            },
+        )
+        startServer(compiler)
+
+        connect().use { ch ->
+            val input = Channels.newInputStream(ch)
+            val output = Channels.newOutputStream(ch)
+            FrameCodec.writeFrame(
+                output,
+                Message.Compile(
+                    workingDir = "/w",
+                    classpath = emptyList(),
+                    sources = listOf("Main.kt"),
+                    outputPath = "build/classes",
+                    moduleName = "m",
+                ),
+            )
+            val result = FrameCodec.readFrame(input).get() as Message.CompileResult
+            assertEquals(1, result.exitCode)
+            kotlin.test.assertTrue(result.stderr.contains("unresolved reference"))
         }
     }
 
     @Test
     fun `handles multiple frames on the same connection`() {
-        startServer(FakeHost())
+        startServer(FakeCompiler())
         connect().use { ch ->
             val input = Channels.newInputStream(ch)
             val output = Channels.newOutputStream(ch)
@@ -121,7 +155,7 @@ class DaemonServerTest {
 
     @Test
     fun `Shutdown message stops the server and cleans up the socket file`() {
-        startServer(FakeHost())
+        startServer(FakeCompiler())
         connect().use { ch ->
             FrameCodec.writeFrame(Channels.newOutputStream(ch), Message.Shutdown)
         }
@@ -132,7 +166,7 @@ class DaemonServerTest {
 
     @Test
     fun `rejects server-only messages with a protocol error reply`() {
-        startServer(FakeHost())
+        startServer(FakeCompiler())
         connect().use { ch ->
             val input = Channels.newInputStream(ch)
             val output = Channels.newOutputStream(ch)
@@ -146,11 +180,11 @@ class DaemonServerTest {
         }
     }
 
-    private class FakeHost(
-        private val onCompile: (CompileRequest) -> Result<CompileOutcome, CompileHostError> =
-            { Ok(CompileOutcome(0, "", "")) },
-    ) : CompilerHost {
-        override fun compile(request: CompileRequest): Result<CompileOutcome, CompileHostError> =
-            onCompile(request)
+    private class FakeCompiler(
+        private val onCompile: (IcRequest) -> Result<IcResponse, IcError> = { _ ->
+            Ok(IcResponse(wallMillis = 0, compiledFileCount = 0, status = Status.SUCCESS))
+        },
+    ) : IncrementalCompiler {
+        override fun compile(request: IcRequest): Result<IcResponse, IcError> = onCompile(request)
     }
 }

@@ -71,6 +71,7 @@ private fun newBackend(
     javaBin = "/opt/jdk/bin/java",
     daemonJarPath = "/opt/kolt/libexec/kolt-compiler-daemon-all.jar",
     compilerJars = listOf("/kt/lib/a.jar", "/kt/lib/b.jar"),
+    btaImplJars = listOf("/opt/kolt/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
     socketPath = "/tmp/kolt-daemon-test.sock",
     logPath = "/tmp/kolt-daemon-test.log",
     connector = connector,
@@ -208,6 +209,43 @@ class DaemonCompilerBackendConnectAndSpawnTest {
         )
         backend.compile(sampleRequest())
         assertEquals(0, spawnCalls, "daemon should not be spawned when already listening")
+    }
+
+    // Regression guard for issue #112: the Phase B daemon cannot initialise
+    // BtaIncrementalCompiler without the kotlin-build-tools-impl classpath,
+    // so `spawnArgv()` MUST include `--bta-impl-jars` alongside the existing
+    // `--compiler-jars`. If someone deletes the block in spawnArgv, every
+    // dev-fallback `kolt build` silently falls back to the subprocess
+    // compile path via `BtaImplJarsMissing` — green CI, quiet regression.
+    // Pinning the flag in argv catches that class of deletion at unit-test
+    // time instead of in a field bug report.
+    @Test
+    fun spawnArgvIncludesBtaImplJarsFlag() {
+        var captured: List<String>? = null
+        var attempt = 0
+        val connector: DaemonConnector = { path ->
+            attempt++
+            if (attempt == 1) {
+                Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+            } else {
+                Ok(FakeConnection())
+            }
+        }
+        val backend = newBackend(
+            connector = connector,
+            spawner = { argv, _ -> captured = argv; Ok(Unit) },
+        )
+
+        backend.compile(sampleRequest())
+
+        val argv = assertNotNull(captured, "spawner must have been invoked after ENOENT")
+        val flagIdx = argv.indexOf("--bta-impl-jars")
+        assertTrue(flagIdx >= 0, "spawnArgv must include --bta-impl-jars, got: $argv")
+        assertTrue(flagIdx + 1 < argv.size, "--bta-impl-jars must be followed by a classpath value")
+        assertTrue(
+            argv[flagIdx + 1].contains("kotlin-build-tools-impl"),
+            "--bta-impl-jars value must contain kotlin-build-tools-impl jar, got: ${argv[flagIdx + 1]}",
+        )
     }
 
     @Test

@@ -5,8 +5,11 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import com.github.michaelbull.result.mapBoth
-import kolt.daemon.host.CompileRequest
-import kolt.daemon.host.CompilerHost
+import kolt.daemon.ic.IcError
+import kolt.daemon.ic.IcRequest
+import kolt.daemon.ic.IcResponse
+import kolt.daemon.ic.IncrementalCompiler
+import kolt.daemon.ic.Status
 import kolt.daemon.protocol.Diagnostic
 import kolt.daemon.protocol.FrameCodec
 import kolt.daemon.protocol.FrameError
@@ -22,6 +25,7 @@ import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -40,7 +44,13 @@ sealed interface DaemonError {
 
 class DaemonServer(
     private val socketPath: Path,
-    private val host: CompilerHost,
+    // Daemon core talks to the incremental compiler adapter exclusively through
+    // this interface (defined in the :ic subproject). ADR 0019 §3 requires that
+    // no daemon-core file imports a type from `kotlin.build.tools.*`; the
+    // IncrementalCompiler / IcRequest / IcResponse / IcError surface is the sole
+    // contract we are permitted to see. If a future change adds a BTA-typed
+    // method here, that is the signal that the adapter has leaked.
+    private val compiler: IncrementalCompiler,
     private val config: DaemonConfig = DaemonConfig(),
 ) {
     private val stopRequested = AtomicBoolean(false)
@@ -182,34 +192,79 @@ class DaemonServer(
         request: Message.Compile,
         output: OutputStream,
     ): Result<Unit, FrameError> {
-        val result = host.compile(
-            CompileRequest(
-                sources = request.sources,
-                classpath = request.classpath,
-                outputPath = request.outputPath,
-                moduleName = request.moduleName,
-                extraArgs = request.extraArgs,
-            ),
-        )
-        val reply: Message = result.mapBoth(
-            success = { outcome ->
-                Message.CompileResult(
-                    exitCode = outcome.exitCode,
-                    diagnostics = emptyList<Diagnostic>(),
-                    stdout = outcome.stdout,
-                    stderr = outcome.stderr,
-                )
-            },
-            failure = { err ->
-                Message.CompileResult(
-                    exitCode = 2,
-                    diagnostics = emptyList(),
-                    stdout = "",
-                    stderr = "compile host error: $err",
-                )
-            },
+        val icRequest = toIcRequest(request)
+        val reply: Message = compiler.compile(icRequest).mapBoth(
+            success = { icResponse -> icResponseToReply(icResponse) },
+            failure = { icError -> icErrorToReply(icError) },
         )
         return FrameCodec.writeFrame(output, reply)
+    }
+
+    private fun toIcRequest(request: Message.Compile): IcRequest {
+        val projectRoot = Path.of(request.workingDir)
+        return IcRequest(
+            // ADR 0019 §5/§6: projectId is a stable sha256-of-projectRoot hash.
+            // Deriving it here keeps the wire protocol unchanged (Message.Compile
+            // stays the Phase A shape) while still letting the adapter key IC
+            // state by project. B-2a does not use IC state yet, but the id flows
+            // through into BTA's module name, so B-2b does not need to retrofit.
+            projectId = projectIdFor(request.workingDir),
+            projectRoot = projectRoot,
+            sources = request.sources.map { Path.of(it) },
+            classpath = request.classpath.map { Path.of(it) },
+            // The native client's `outputPath` is the `build/classes` directory
+            // (see `CLASSES_DIR` in BuildCommands.kt); BTA's jvmCompilationOperationBuilder
+            // expects a directory Path. The test fixture `out.jar` string in
+            // DaemonLifecycleTest was just a shape-only label and never reached
+            // a real compile.
+            outputDir = Path.of(request.outputPath),
+            // B-2a does not materialise IC state under workingDir — see ADR 0019 §5.
+            // A per-project directory under `~/.kolt/daemon/ic/<kotlin>/<hash>/`
+            // arrives in B-2b; until then, pass a placeholder that BTA would
+            // never touch because IC configuration is not attached (see
+            // BtaIncrementalCompiler.executeCompile). The placeholder must
+            // still be a valid Path to satisfy IcRequest's type, so we reuse
+            // projectRoot as a harmless non-null value.
+            workingDir = projectRoot,
+        )
+    }
+
+    private fun icResponseToReply(response: IcResponse): Message.CompileResult =
+        Message.CompileResult(
+            exitCode = if (response.status == Status.SUCCESS) 0 else 1,
+            diagnostics = emptyList<Diagnostic>(),
+            stdout = "",
+            stderr = "",
+        )
+
+    private fun icErrorToReply(error: IcError): Message.CompileResult = when (error) {
+        is IcError.CompilationFailed -> Message.CompileResult(
+            exitCode = 1,
+            diagnostics = emptyList(),
+            stdout = "",
+            stderr = error.messages.joinToString(separator = "\n"),
+        )
+        // ADR 0019 §7: InternalError is a daemon-internal concern — the user
+        // sees "failed to compile", not "the incremental cache was corrupt".
+        // B-2b's self-heal wipe+retry fires on this variant; B-2a does not
+        // retry, so we surface the cause message directly. The native client
+        // has its own FallbackCompilerBackend (ADR 0016 §5) for the
+        // "daemon JVM itself is broken" case.
+        is IcError.InternalError -> Message.CompileResult(
+            exitCode = 2,
+            diagnostics = emptyList(),
+            stdout = "",
+            stderr = "compile adapter error: ${error.cause.message ?: error.cause.javaClass.name}",
+        )
+    }
+
+    private fun projectIdFor(workingDir: String): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(workingDir.toByteArray(Charsets.UTF_8))
+        // Short hex prefix is enough: Gradle's Kotlin plugin also uses a short
+        // project id and the stability is what matters (same workingDir →
+        // same IC state under `~/.kolt/daemon/ic/...` once B-2b wires it).
+        return digest.take(16).joinToString("") { "%02x".format(it) }
     }
 
     private fun heapUsedBytes(): Long =

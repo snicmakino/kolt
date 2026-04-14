@@ -578,6 +578,7 @@ internal fun createDaemonBackend(setup: DaemonSetup): CompilerBackend = DaemonCo
     javaBin = setup.javaBin,
     daemonJarPath = setup.daemonJarPath,
     compilerJars = setup.compilerJars,
+    btaImplJars = setup.btaImplJars,
     socketPath = setup.socketPath,
     logPath = setup.logPath,
 )

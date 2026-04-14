@@ -19,6 +19,8 @@ class DaemonPreconditionsTest {
     private val absProject = "/fake/project"
     private val okJar = DaemonJarResolution.Resolved("/fake/libexec/daemon.jar", DaemonJarResolution.Source.Libexec)
     private val fakeJars = listOf("/fake/home/.kolt/toolchains/kotlinc/2.1.0/lib/a.jar")
+    private val fakeBtaJars = listOf("/fake/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar")
+    private val okBtaImpl = BtaImplJarsResolution.Resolved(fakeBtaJars, BtaImplJarsResolution.Source.Libexec)
 
     @Test
     fun resolveReturnsCompleteSetupWhenAllInputsPresent() {
@@ -29,12 +31,14 @@ class DaemonPreconditionsTest {
             ensureJavaBin = { Ok("/fake/home/.kolt/toolchains/jdk/21/bin/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { fakeJars },
+            resolveBtaImplJars = { okBtaImpl },
         )
 
         val setup = assertNotNull(result.get())
         assertEquals("/fake/home/.kolt/toolchains/jdk/21/bin/java", setup.javaBin)
         assertEquals("/fake/libexec/daemon.jar", setup.daemonJarPath)
         assertEquals(fakeJars, setup.compilerJars)
+        assertEquals(fakeBtaJars, setup.btaImplJars)
         val expectedHash = projectHashOf(absProject)
         assertEquals("/fake/home/.kolt/daemon/$expectedHash", setup.daemonDir)
         assertEquals("/fake/home/.kolt/daemon/$expectedHash/daemon.sock", setup.socketPath)
@@ -53,6 +57,7 @@ class DaemonPreconditionsTest {
             },
             resolveDaemonJar = { error("must not run after BootstrapJdkInstallFailed") },
             listCompilerJars = { error("must not run after BootstrapJdkInstallFailed") },
+            resolveBtaImplJars = { error("must not run after BootstrapJdkInstallFailed") },
         )
 
         assertNull(result.get())
@@ -70,6 +75,7 @@ class DaemonPreconditionsTest {
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { DaemonJarResolution.NotFound },
             listCompilerJars = { error("must not run after DaemonJarMissing") },
+            resolveBtaImplJars = { error("must not run after DaemonJarMissing") },
         )
 
         assertEquals(DaemonPreconditionError.DaemonJarMissing, result.getError())
@@ -84,6 +90,7 @@ class DaemonPreconditionsTest {
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { null },
+            resolveBtaImplJars = { error("must not run after CompilerJarsMissing") },
         )
 
         val err = assertIs<DaemonPreconditionError.CompilerJarsMissing>(result.getError())
@@ -99,9 +106,26 @@ class DaemonPreconditionsTest {
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { emptyList() },
+            resolveBtaImplJars = { error("must not run after CompilerJarsMissing") },
         )
 
         assertIs<DaemonPreconditionError.CompilerJarsMissing>(result.getError())
+    }
+
+    @Test
+    fun btaImplJarsMissingShortCircuitsAfterCompilerJarsPass() {
+        val result = resolveDaemonPreconditions(
+            paths = paths,
+            kotlincVersion = kotlincVersion,
+            absProjectPath = absProject,
+            ensureJavaBin = { Ok("/fake/java") },
+            resolveDaemonJar = { okJar },
+            listCompilerJars = { fakeJars },
+            resolveBtaImplJars = { BtaImplJarsResolution.NotFound("/fake/libexec/kolt-bta-impl") },
+        )
+
+        val err = assertIs<DaemonPreconditionError.BtaImplJarsMissing>(result.getError())
+        assertEquals("/fake/libexec/kolt-bta-impl", err.probedDir)
     }
 
     @Test
@@ -119,6 +143,12 @@ class DaemonPreconditionsTest {
         assertEquals(
             "warning: no compiler jars found in /x/lib — falling back to subprocess compile",
             formatDaemonPreconditionWarning(DaemonPreconditionError.CompilerJarsMissing("/x/lib")),
+        )
+        assertEquals(
+            "warning: kotlin-build-tools-impl jars not found in /x/libexec/kolt-bta-impl — falling back to subprocess compile",
+            formatDaemonPreconditionWarning(
+                DaemonPreconditionError.BtaImplJarsMissing("/x/libexec/kolt-bta-impl"),
+            ),
         )
     }
 }
