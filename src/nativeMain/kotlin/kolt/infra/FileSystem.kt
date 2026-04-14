@@ -124,6 +124,23 @@ fun isDirectory(path: String): Boolean {
     }
 }
 
+/**
+ * Returns `true` iff [path] resolves (via `stat(2)`, following
+ * symlinks) to a regular file. Distinct from a naive "not a
+ * directory" test because symlinks, FIFOs, sockets, and device
+ * nodes are also not directories but are not regular files either.
+ * Used by [listJarFiles] to filter out anything a caller cannot
+ * hand to a JVM URL classloader as a jar.
+ */
+@OptIn(ExperimentalForeignApi::class)
+fun isRegularFile(path: String): Boolean {
+    memScoped {
+        val statBuf = alloc<stat>()
+        if (stat(path, statBuf.ptr) != 0) return false
+        return (statBuf.st_mode.toInt() and S_IFMT) == S_IFREG
+    }
+}
+
 @OptIn(ExperimentalForeignApi::class)
 fun fileMtime(path: String): Long? {
     memScoped {
@@ -185,12 +202,15 @@ private fun collectAllFileMtimes(directory: String, onFile: (Long) -> Unit) {
 }
 
 /**
- * Non-recursively lists regular files in [path] whose name ends with
- * `.jar`, returned as absolute paths (`$path/$name`) in lexicographic
- * order. Returns [ListFilesFailed] if the directory cannot be opened.
- * An empty successful result is distinct from the error case, so a
- * caller can treat "directory missing" (Err) and "directory exists but
- * has no jars" (empty Ok) differently.
+ * Non-recursively lists entries in [path] whose name ends with `.jar`
+ * **and** which resolve (via `stat(2)`) to regular files, returned
+ * as absolute paths (`$path/$name`) in lexicographic order. Symlinks
+ * are followed, so a symlink pointing at a real jar is admitted and
+ * a symlink pointing at a directory named `foo.jar` is filtered out.
+ * Returns [ListFilesFailed] if the directory cannot be opened. An
+ * empty successful result is distinct from the error case, so a
+ * caller can treat "directory missing" (Err) and "directory exists
+ * but has no jars" (empty Ok) differently.
  */
 @OptIn(ExperimentalForeignApi::class)
 fun listJarFiles(path: String): Result<List<String>, ListFilesFailed> {
@@ -203,7 +223,7 @@ fun listJarFiles(path: String): Result<List<String>, ListFilesFailed> {
             if (name == "." || name == "..") continue
             if (!name.endsWith(".jar")) continue
             val childPath = "$path/$name"
-            if (isDirectory(childPath)) continue
+            if (!isRegularFile(childPath)) continue
             entries.add(childPath)
         }
     } finally {
@@ -341,6 +361,23 @@ fun homeDirectory(): Result<String, HomeNotFound> {
 fun currentWorkingDirectory(): String? = memScoped {
     val buf = allocArray<ByteVar>(PATH_MAX)
     getcwd(buf, PATH_MAX.toULong())?.toKString()
+}
+
+/**
+ * If [path] starts with `/`, returns it unchanged. Otherwise returns
+ * `"$cwd/$path"` (with any trailing slash on [cwd] collapsed so the
+ * result never contains `//`). This is deliberately not a
+ * path-canonicalising helper — it does **not** resolve `..`, `.`,
+ * or symlinks. It exists so [doBuild] can hand absolute source /
+ * output paths to any backend without relying on the backend
+ * inheriting the kolt process's cwd, which is a load-bearing
+ * assumption today for the daemon path (see ADR 0016 §3 and the
+ * note on `CompileRequest.workingDir`).
+ */
+fun absolutise(path: String, cwd: String): String {
+    if (path.startsWith('/')) return path
+    val base = if (cwd.endsWith('/')) cwd.dropLast(1) else cwd
+    return "$base/$path"
 }
 
 @OptIn(ExperimentalForeignApi::class)

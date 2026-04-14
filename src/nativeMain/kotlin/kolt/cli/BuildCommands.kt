@@ -1,10 +1,12 @@
 package kolt.cli
 
+import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.*
 import kolt.build.daemon.DaemonCompilerBackend
+import kolt.build.daemon.DaemonPreconditionError
 import kolt.build.daemon.DaemonSetup
 import kolt.build.daemon.formatDaemonPreconditionWarning
 import kolt.build.daemon.resolveDaemonPreconditions
@@ -120,16 +122,32 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         subprocessBackend = subprocessBackend,
         useDaemon = useDaemon,
     )
+    // Sources and outputPath are relative to the project root in
+    // kolt.toml. The subprocess backend inherits cwd via fork+exec,
+    // but the daemon JVM persists across builds and ignores
+    // `CompileRequest.workingDir` (SharedCompilerHost.buildArgs does
+    // not consult it — ADR 0016 §3 leaves the daemon's cwd
+    // unspecified on purpose). Absolutise every path the backend
+    // receives so the result is identical regardless of whether the
+    // daemon or the subprocess backend serves the compile, and so a
+    // future daemon-side change (e.g. chdir or relative resolution)
+    // cannot silently desynchronise the two paths. `workingDir` is
+    // still populated with the project root as a forward-compatible
+    // anchor, but no backend reads it today.
+    val cwd = currentWorkingDirectory() ?: run {
+        eprintln("error: could not determine current working directory")
+        exitProcess(EXIT_BUILD_ERROR)
+    }
     val request = CompileRequest(
-        workingDir = "",
+        workingDir = cwd,
         // TODO(#14 S5+): resolveDependencies currently returns a ':'-joined
         // String for legacy reasons, so we split it here to hand the backend a
         // List<String>. When the daemon path lands and the legacy string form
         // is no longer needed, teach resolveDependencies to return List<String>
         // directly and delete this split.
         classpath = if (classpath.isNullOrEmpty()) emptyList() else classpath.split(":").filter { it.isNotEmpty() },
-        sources = config.sources,
-        outputPath = CLASSES_DIR,
+        sources = config.sources.map { absolutise(it, cwd) },
+        outputPath = absolutise(CLASSES_DIR, cwd),
         moduleName = config.name,
         extraArgs = buildList {
             add("-jvm-target")
@@ -457,72 +475,84 @@ internal fun ensureJdkBinsFromConfig(config: KoltConfig, paths: KoltPaths): JdkB
     return ensureJdkBins(version, paths, EXIT_BUILD_ERROR)
 }
 
+// Warning wording pinned as constants so unit tests can assert on
+// the exact string without hard-coding it a second time in each
+// branch's test. Kept internal so the tests in the same module can
+// reference them without exposing them on the public API.
+internal const val WARNING_CWD_UNKNOWN =
+    "warning: could not determine project directory — falling back to subprocess compile"
+internal const val WARNING_DAEMON_DIR_UNWRITABLE =
+    "warning: could not create daemon state directory — falling back to subprocess compile"
+
 /**
- * Picks the backend doBuild() will hand the compile request to. If
+ * Picks the backend [doBuild] will hand the compile request to. If
  * [useDaemon] is false (user passed `--no-daemon`), the subprocess
  * backend is returned directly — no fallback wrapper, no precondition
  * probing, so the code path is exactly the pre-daemon one. Otherwise
  * the daemon preconditions are checked; on success we return a
- * [FallbackCompilerBackend] wrapping [DaemonCompilerBackend] with
- * [subprocessBackend] as the fallback and [reportFallback] as the
- * observer. On a precondition failure we print a one-line warning and
- * degrade to the subprocess backend — daemon is never load-bearing
- * for correctness (ADR 0016 §5).
+ * [FallbackCompilerBackend] wrapping a freshly-constructed
+ * [DaemonCompilerBackend] with [subprocessBackend] as the fallback and
+ * [reportFallback] as the observer. On any precondition or wiring
+ * failure we print a one-line warning via [warningSink] and degrade
+ * to the subprocess backend — daemon is never load-bearing for
+ * correctness (ADR 0016 §5).
+ *
+ * Seams ([cwdResolver], [preconditionResolver], [daemonDirCreator],
+ * [daemonBackendFactory], [warningSink]) are defaulted to production
+ * helpers so callers pass only the first four arguments. Unit tests
+ * substitute fakes to drive each degradation branch without touching
+ * the filesystem or bringing up a real daemon.
  */
-private fun resolveCompilerBackend(
+internal fun resolveCompilerBackend(
     config: KoltConfig,
     paths: KoltPaths,
     subprocessBackend: CompilerBackend,
     useDaemon: Boolean,
+    cwdResolver: () -> String? = ::currentWorkingDirectory,
+    preconditionResolver: (KoltPaths, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
+        { p, kotlincVersion, cwd -> resolveDaemonPreconditions(p, kotlincVersion, cwd) },
+    daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
+    daemonBackendFactory: (DaemonSetup) -> CompilerBackend = ::createDaemonBackend,
+    warningSink: (String) -> Unit = ::eprintln,
 ): CompilerBackend {
     if (!useDaemon) return subprocessBackend
 
-    val absProjectPath = currentWorkingDirectory() ?: run {
-        eprintln("warning: could not determine project directory — falling back to subprocess compile")
+    val absProjectPath = cwdResolver() ?: run {
+        warningSink(WARNING_CWD_UNKNOWN)
         return subprocessBackend
     }
 
-    val setup = resolveDaemonPreconditions(
-        paths = paths,
-        kotlincVersion = config.kotlin,
-        absProjectPath = absProjectPath,
-    ).getOrElse { err ->
-        eprintln(formatDaemonPreconditionWarning(err))
+    val setup = preconditionResolver(paths, config.kotlin, absProjectPath).getOrElse { err ->
+        warningSink(formatDaemonPreconditionWarning(err))
         return subprocessBackend
     }
-    return buildFallbackBackend(setup, subprocessBackend)
-}
 
-private fun buildFallbackBackend(
-    setup: DaemonSetup,
-    subprocessBackend: CompilerBackend,
-): CompilerBackend {
     // spawnDetached opens the log path with O_CREAT but not the
     // intermediate directory — if ~/.kolt/daemon/<projectHash>/ is
-    // missing the log file is silently dropped and the daemon's stderr
-    // lands in /dev/null. The JVM side already creates the directory
-    // for the socket bind (ADR 0016 §Socket path lifecycle), but that
-    // happens after the client has already tried to open the log. We
-    // create it eagerly here so the first spawn's log is captured.
-    val dirResult = ensureDirectoryRecursive(setup.socketPath.substringBeforeLast('/'))
-    if (dirResult.getError() != null) {
-        eprintln("warning: could not create daemon state directory — falling back to subprocess compile")
+    // missing the log file is silently dropped and the daemon's
+    // stderr lands in /dev/null. The JVM side already creates the
+    // directory for the socket bind (ADR 0016 §Socket path
+    // lifecycle), but that happens after the client has already
+    // tried to open the log, so we create it eagerly here.
+    if (daemonDirCreator(setup.daemonDir).getError() != null) {
+        warningSink(WARNING_DAEMON_DIR_UNWRITABLE)
         return subprocessBackend
     }
 
-    val daemonBackend = DaemonCompilerBackend(
-        javaBin = setup.javaBin,
-        daemonJarPath = setup.daemonJarPath,
-        compilerJars = setup.compilerJars,
-        socketPath = setup.socketPath,
-        logPath = setup.logPath,
-    )
     return FallbackCompilerBackend(
-        primary = daemonBackend,
+        primary = daemonBackendFactory(setup),
         fallback = subprocessBackend,
         onFallback = ::reportFallback,
     )
 }
+
+internal fun createDaemonBackend(setup: DaemonSetup): CompilerBackend = DaemonCompilerBackend(
+    javaBin = setup.javaBin,
+    daemonJarPath = setup.daemonJarPath,
+    compilerJars = setup.compilerJars,
+    socketPath = setup.socketPath,
+    logPath = setup.logPath,
+)
 
 internal fun createResolverDeps() = object : ResolverDeps {
     override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)

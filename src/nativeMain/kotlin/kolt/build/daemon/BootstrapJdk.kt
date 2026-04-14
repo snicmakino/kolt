@@ -27,15 +27,18 @@ const val BOOTSTRAP_JDK_VERSION: String = "21"
  * daemon is never load-bearing for correctness (ADR 0016 §5); an
  * unavailable bootstrap JDK must degrade to the subprocess compile
  * path, never to a kolt process exit. Auto-install of the bootstrap
- * JDK is future work (tracked in ADR 0017 follow-ups) that requires
- * refactoring the existing `ensureJdkBins` path to return a
+ * JDK is future work (tracked in ADR 0017 Alternatives §5) that
+ * requires refactoring the existing `ensureJdkBins` path to return a
  * `Result<_, _>` instead of calling `exitProcess` on failure.
  *
- * Today the install happens via the user-invoked command
- * `kolt install jdk 21` — the daemon then activates automatically
- * on the next build. A caller that receives `null` should fall back
- * to [kolt.build.SubprocessCompilerBackend] and optionally print a
- * one-line hint pointing at `kolt install jdk $BOOTSTRAP_JDK_VERSION`.
+ * Until that lands, there is no dedicated one-line install command:
+ * a user who wants to activate the daemon must populate
+ * `~/.kolt/toolchains/jdk/$BOOTSTRAP_JDK_VERSION/` by other means
+ * (e.g. configuring the project's `kolt.toml` to the same JDK
+ * version, so the existing `ensureJdkBins` path installs it
+ * incidentally). A caller that receives `null` should fall back to
+ * [kolt.build.SubprocessCompilerBackend] and surface the probed
+ * directory in its warning so the user knows what kolt looked for.
  */
 internal fun resolveBootstrapJavaBin(paths: KoltPaths): String? {
     val javaBin = paths.javaBin(BOOTSTRAP_JDK_VERSION)

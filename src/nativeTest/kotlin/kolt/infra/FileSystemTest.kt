@@ -533,6 +533,50 @@ class FileSystemTest {
         assertIs<ListFilesFailed>(result.getError())
     }
 
+    // --- absolutise ---
+
+    @Test
+    fun absolutisePreservesAbsolutePath() {
+        assertEquals("/a/b/c", absolutise("/a/b/c", "/ignored"))
+    }
+
+    @Test
+    fun absolutisePrependsCwdToRelativePath() {
+        assertEquals("/proj/src/Main.kt", absolutise("src/Main.kt", "/proj"))
+    }
+
+    @Test
+    fun absolutiseCollapsesTrailingSlashOnCwd() {
+        assertEquals("/proj/build/classes", absolutise("build/classes", "/proj/"))
+    }
+
+    @Test
+    fun absolutiseDoesNotResolveDotSegments() {
+        // Intentional: absolutise is a simple join, not a canonicaliser.
+        assertEquals("/proj/./a", absolutise("./a", "/proj"))
+    }
+
+    @Test
+    fun listJarFilesFollowsSymlinkToRegularFileAndRejectsSymlinkToDirectory() {
+        val base = "/tmp/kolt_list_jars_symlinks"
+        val realDir = "/tmp/kolt_list_jars_symlinks_target"
+        platform.posix.mkdir(base, 0b111111101u)
+        platform.posix.mkdir(realDir, 0b111111101u)
+        writeTestFile("$realDir/real.jar", "r")
+        platform.posix.symlink("$realDir/real.jar", "$base/linked.jar")
+        platform.posix.symlink(realDir, "$base/dirlink.jar")
+        try {
+            val result = listJarFiles(base)
+            assertEquals(listOf("$base/linked.jar"), result.get())
+        } finally {
+            remove("$base/linked.jar")
+            remove("$base/dirlink.jar")
+            remove("$realDir/real.jar")
+            platform.posix.rmdir(realDir)
+            platform.posix.rmdir(base)
+        }
+    }
+
     private fun writeTestFile(path: String, content: String) {
         val fp = platform.posix.fopen(path, "w") ?: error("could not create test file: $path")
         if (content.isNotEmpty()) {

@@ -5,7 +5,6 @@ import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.CompileRequest
 import kolt.infra.ensureDirectoryRecursive
-import kolt.infra.eprintln
 import kolt.infra.fileExists
 import kolt.infra.listJarFiles
 import kolt.infra.removeDirectoryRecursive
@@ -30,6 +29,13 @@ import kotlin.test.assertNotNull
  * Without `KOLT_DAEMON_IT=1` the test returns immediately and is
  * reported as passing, which keeps `./gradlew linuxX64Test` green on
  * any developer machine without ceremony.
+ *
+ * When `KOLT_DAEMON_IT=1` **is** set, any missing dependency (env
+ * var unset, daemon jar not built, kotlinc lib empty) is a hard test
+ * failure rather than another silent skip — the opt-in is an
+ * explicit "I have the deps, run the test for real" signal, and
+ * quietly passing on a broken setup would paper over the mistake
+ * without surfacing it in the gradle test report.
  *
  * ## Environment variables
  *
@@ -58,9 +64,13 @@ import kotlin.test.assertNotNull
  *    connector's optimistic fast-path connects the already-running
  *    server instead of re-spawning.
  *
- * Cleanup leaves the daemon process running; it exits on its own idle
- * timeout. The `/tmp/kolt_daemon_it_<pid>/` state directory is torn
- * down in `finally` so a fresh run produces a fresh socket path.
+ * Cleanup leaves the daemon process running; it exits on its own
+ * idle timeout (30 minutes by default). The `/tmp/kolt_daemon_it_<pid>/`
+ * state directory is torn down in `finally` so a fresh run produces a
+ * fresh socket path. Do **not** enable this test in a CI job that
+ * runs many times per hour — each run leaks one daemon process for
+ * up to 30 minutes. The test is designed for a developer workstation
+ * where the opt-in is deliberate.
  *
  * ## Observed host-level failure modes
  *
@@ -81,7 +91,7 @@ class DaemonIntegrationTest {
     @Test
     fun realDaemonCompilesTrivialSourceTwice() {
         if (!integrationTestsEnabled()) return
-        val env = requireEnv() ?: return
+        val env = requireEnv()
 
         val projectDir = "/tmp/kolt_daemon_it_${getpid()}"
         val stateDir = "$projectDir/state"
@@ -130,35 +140,37 @@ class DaemonIntegrationTest {
         val compilerJars: List<String>,
     )
 
-    private fun requireEnv(): ItEnv? {
+    // Once the caller has opted in via `KOLT_DAEMON_IT=1`, every
+    // missing piece is a hard failure. Using `error()` makes the
+    // gradle test report surface the exact dependency the user needs
+    // to supply, instead of the earlier pattern of eprintln +
+    // silent-pass which left a green test that never touched the
+    // daemon path.
+    private fun requireEnv(): ItEnv {
         val javaHome = getenv("JAVA_HOME")?.toKString()
         if (javaHome.isNullOrEmpty()) {
-            eprintln("DaemonIntegrationTest: JAVA_HOME not set, skipping")
-            return null
+            error("KOLT_DAEMON_IT=1 but JAVA_HOME is not set")
         }
         val javaBin = "$javaHome/bin/java"
         if (!fileExists(javaBin)) {
-            eprintln("DaemonIntegrationTest: $javaBin missing, skipping")
-            return null
+            error("KOLT_DAEMON_IT=1 but $javaBin does not exist")
         }
 
         val daemonJar = when (val r = resolveDaemonJar()) {
             is DaemonJarResolution.Resolved -> r.path
-            DaemonJarResolution.NotFound -> {
-                eprintln("DaemonIntegrationTest: daemon jar not found (build it with './gradlew :kolt-compiler-daemon:shadowJar'), skipping")
-                return null
-            }
+            DaemonJarResolution.NotFound ->
+                error("KOLT_DAEMON_IT=1 but kolt-compiler-daemon jar not found — run './gradlew :kolt-compiler-daemon:shadowJar' first")
         }
 
         val libDir = getenv("KOLT_IT_COMPILER_JARS_DIR")?.toKString()
         if (libDir.isNullOrEmpty()) {
-            eprintln("DaemonIntegrationTest: KOLT_IT_COMPILER_JARS_DIR env var required, skipping")
-            return null
+            error("KOLT_DAEMON_IT=1 but KOLT_IT_COMPILER_JARS_DIR is not set")
         }
-        val jars = listJarFiles(libDir).getOrElse { null }
-        if (jars.isNullOrEmpty()) {
-            eprintln("DaemonIntegrationTest: no jars in $libDir, skipping")
-            return null
+        val jars = listJarFiles(libDir).getOrElse { fsErr ->
+            error("KOLT_DAEMON_IT=1 but $libDir cannot be opened: $fsErr")
+        }
+        if (jars.isEmpty()) {
+            error("KOLT_DAEMON_IT=1 but $libDir contains no .jar files")
         }
 
         return ItEnv(javaBin, daemonJar, jars)

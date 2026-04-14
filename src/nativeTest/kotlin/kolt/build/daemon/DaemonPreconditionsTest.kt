@@ -33,6 +33,7 @@ class DaemonPreconditionsTest {
         assertEquals("/fake/libexec/daemon.jar", setup.daemonJarPath)
         assertEquals(fakeJars, setup.compilerJars)
         val expectedHash = projectHashOf(absProject)
+        assertEquals("/fake/home/.kolt/daemon/$expectedHash", setup.daemonDir)
         assertEquals("/fake/home/.kolt/daemon/$expectedHash/daemon.sock", setup.socketPath)
         assertEquals("/fake/home/.kolt/daemon/$expectedHash/daemon.log", setup.logPath)
     }
@@ -49,7 +50,8 @@ class DaemonPreconditionsTest {
         )
 
         assertNull(result.get())
-        assertEquals(DaemonPreconditionError.BootstrapJdkMissing, result.getError())
+        val err = assertIs<DaemonPreconditionError.BootstrapJdkMissing>(result.getError())
+        assertEquals("/fake/home/.kolt/toolchains/jdk/$BOOTSTRAP_JDK_VERSION", err.jdkInstallDir)
     }
 
     @Test
@@ -98,8 +100,8 @@ class DaemonPreconditionsTest {
     @Test
     fun warningWordingCoversAllVariants() {
         assertEquals(
-            "warning: bootstrap JDK not installed — run 'kolt install jdk $BOOTSTRAP_JDK_VERSION' to enable the warm compiler daemon",
-            formatDaemonPreconditionWarning(DaemonPreconditionError.BootstrapJdkMissing),
+            "warning: bootstrap JDK not installed at /opt/jdks/21 — falling back to subprocess compile",
+            formatDaemonPreconditionWarning(DaemonPreconditionError.BootstrapJdkMissing("/opt/jdks/21")),
         )
         assertEquals(
             "warning: kolt-compiler-daemon jar not found — falling back to subprocess compile",

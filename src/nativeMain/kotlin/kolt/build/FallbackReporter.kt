@@ -26,6 +26,16 @@ import kolt.infra.eprintln
  *    not force a hasty wording decision here.
  */
 fun reportFallback(err: CompileError, sink: (String) -> Unit = ::eprintln) {
+    // Note on variant reachability: in the current production wiring
+    // (daemon primary + subprocess fallback) only
+    // `BackendUnavailable.Other` and `InternalMisuse` can arrive here
+    // — `DaemonCompilerBackend` wraps every spawn/connect/frame
+    // failure into one of those two. The four named `BackendUnavailable`
+    // variants below are emitted only by `SubprocessCompilerBackend`
+    // and are therefore dead in the current composition; they are
+    // kept (and tested) so a future composition that puts the
+    // subprocess backend as the primary — with a different secondary
+    // — does not silently lose severity wording.
     when (err) {
         is CompileError.BackendUnavailable.ForkFailed,
         is CompileError.BackendUnavailable.WaitFailed,
