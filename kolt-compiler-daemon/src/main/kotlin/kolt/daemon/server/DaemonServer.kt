@@ -8,6 +8,7 @@ import com.github.michaelbull.result.mapBoth
 import kolt.daemon.ic.IcError
 import kolt.daemon.ic.IcRequest
 import kolt.daemon.ic.IcResponse
+import kolt.daemon.ic.IcStateLayout
 import kolt.daemon.ic.IncrementalCompiler
 import kolt.daemon.ic.Status
 import kolt.daemon.protocol.Diagnostic
@@ -25,7 +26,6 @@ import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -51,6 +51,14 @@ class DaemonServer(
     // contract we are permitted to see. If a future change adds a BTA-typed
     // method here, that is the signal that the adapter has leaked.
     private val compiler: IncrementalCompiler,
+    // Root of daemon-owned IC state, per ADR 0019 §5. Typically
+    // `~/.kolt/daemon/ic/`. Wired in by Main.kt so tests can redirect it
+    // to a temp dir. The daemon is the sole writer under this root.
+    private val icRoot: Path,
+    // Kotlin compiler version segment under `icRoot`. Must move in
+    // lockstep with the BTA artifact pin (ADR 0019 §1); Main.kt holds
+    // the single source of truth.
+    private val kotlinVersion: String,
     private val config: DaemonConfig = DaemonConfig(),
 ) {
     private val stopRequested = AtomicBoolean(false)
@@ -202,13 +210,14 @@ class DaemonServer(
 
     private fun toIcRequest(request: Message.Compile): IcRequest {
         val projectRoot = Path.of(request.workingDir)
+        // ADR 0019 §5 / §6: projectId and workingDir are both derived from
+        // projectRoot through `IcStateLayout`, so they stay consistent
+        // regardless of how the wire `Message.Compile` is shaped. B-2a
+        // held a `workingDir = projectRoot` placeholder here; B-2b retires
+        // that by pointing workingDir at daemon-owned state under
+        // `icRoot / kotlinVersion / sha256(projectRoot)`.
         return IcRequest(
-            // ADR 0019 §5/§6: projectId is a stable sha256-of-projectRoot hash.
-            // Deriving it here keeps the wire protocol unchanged (Message.Compile
-            // stays the Phase A shape) while still letting the adapter key IC
-            // state by project. B-2a does not use IC state yet, but the id flows
-            // through into BTA's module name, so B-2b does not need to retrofit.
-            projectId = projectIdFor(request.workingDir),
+            projectId = IcStateLayout.projectIdFor(projectRoot),
             projectRoot = projectRoot,
             sources = request.sources.map { Path.of(it) },
             classpath = request.classpath.map { Path.of(it) },
@@ -218,14 +227,7 @@ class DaemonServer(
             // DaemonLifecycleTest was just a shape-only label and never reached
             // a real compile.
             outputDir = Path.of(request.outputPath),
-            // B-2a does not materialise IC state under workingDir — see ADR 0019 §5.
-            // A per-project directory under `~/.kolt/daemon/ic/<kotlin>/<hash>/`
-            // arrives in B-2b; until then, pass a placeholder that BTA would
-            // never touch because IC configuration is not attached (see
-            // BtaIncrementalCompiler.executeCompile). The placeholder must
-            // still be a valid Path to satisfy IcRequest's type, so we reuse
-            // projectRoot as a harmless non-null value.
-            workingDir = projectRoot,
+            workingDir = IcStateLayout.workingDirFor(icRoot, kotlinVersion, projectRoot),
         )
     }
 
@@ -256,15 +258,6 @@ class DaemonServer(
             stdout = "",
             stderr = "compile adapter error: ${error.cause.message ?: error.cause.javaClass.name}",
         )
-    }
-
-    private fun projectIdFor(workingDir: String): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(workingDir.toByteArray(Charsets.UTF_8))
-        // Short hex prefix is enough: Gradle's Kotlin plugin also uses a short
-        // project id and the stability is what matters (same workingDir →
-        // same IC state under `~/.kolt/daemon/ic/...` once B-2b wires it).
-        return digest.take(16).joinToString("") { "%02x".format(it) }
     }
 
     private fun heapUsedBytes(): Long =

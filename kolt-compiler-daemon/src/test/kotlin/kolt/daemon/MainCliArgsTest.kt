@@ -2,6 +2,7 @@ package kolt.daemon
 
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -84,6 +85,36 @@ class MainCliArgsTest {
             ),
         )
         assertEquals(CliError.EmptyBtaImplJars, result.getError())
+    }
+
+    @Test
+    fun icRootDefaultsToUserHomeKoltDaemonIc() {
+        // ADR 0019 §5: when `--ic-root` is omitted the daemon defaults to
+        // `$HOME/.kolt/daemon/ic`. Tests and integration harnesses override
+        // via `--ic-root <path>`.
+        val result = parseArgs(
+            arrayOf(
+                "--socket", "/tmp/s",
+                "--compiler-jars", "/a.jar",
+                "--bta-impl-jars", "/b.jar",
+            ),
+        )
+        val cli = assertNotNull(result.get())
+        assertEquals(Path.of(System.getProperty("user.home"), ".kolt", "daemon", "ic"), cli.icRoot)
+    }
+
+    @Test
+    fun icRootFlagOverridesDefault() {
+        val result = parseArgs(
+            arrayOf(
+                "--socket", "/tmp/s",
+                "--compiler-jars", "/a.jar",
+                "--bta-impl-jars", "/b.jar",
+                "--ic-root", "/tmp/custom-ic",
+            ),
+        )
+        val cli = assertNotNull(result.get())
+        assertEquals(Path.of("/tmp/custom-ic"), cli.icRoot)
     }
 
     @Test
