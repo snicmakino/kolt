@@ -80,6 +80,11 @@ class DaemonCompilerBackend internal constructor(
     private val javaBin: String,
     private val daemonJarPath: String,
     private val compilerJars: List<String>,
+    // kotlin-build-tools-impl classpath shipped separately from the fat jar
+    // per ADR 0019 §3. Passed verbatim on `--bta-impl-jars` when spawning
+    // the daemon; the daemon loads these through a URLClassLoader parented
+    // by `SharedApiClassesClassLoader`.
+    private val btaImplJars: List<String>,
     private val socketPath: String,
     private val logPath: String? = null,
     private val connector: DaemonConnector = defaultDaemonConnector,
@@ -92,12 +97,14 @@ class DaemonCompilerBackend internal constructor(
         javaBin: String,
         daemonJarPath: String,
         compilerJars: List<String>,
+        btaImplJars: List<String>,
         socketPath: String,
         logPath: String? = null,
     ) : this(
         javaBin = javaBin,
         daemonJarPath = daemonJarPath,
         compilerJars = compilerJars,
+        btaImplJars = btaImplJars,
         socketPath = socketPath,
         logPath = logPath,
         connector = defaultDaemonConnector,
@@ -182,6 +189,8 @@ class DaemonCompilerBackend internal constructor(
         // which on Linux is ':'. Hard-code rather than pull in a platform
         // detect: kolt is linuxX64-only today (see CLAUDE.md non-goals).
         add(compilerJars.joinToString(":"))
+        add("--bta-impl-jars")
+        add(btaImplJars.joinToString(":"))
     }
 
     companion object {

@@ -21,6 +21,16 @@ internal data class DaemonSetup(
     val javaBin: String,
     val daemonJarPath: String,
     val compilerJars: List<String>,
+    // kotlin-build-tools-impl jars shipped alongside the daemon. Required by the
+    // Phase B incremental compile path (ADR 0019 §3): the daemon spawns with
+    // these on the `--bta-impl-jars` CLI flag and loads them reflectively
+    // through a child URLClassLoader parented by `SharedApiClassesClassLoader`,
+    // keeping daemon-core classes free of @ExperimentalBuildToolsApi types.
+    // Existence is checked at precondition time, but jar *content* is not —
+    // a corrupted or version-mismatched -impl jar is a daemon-side failure
+    // surfaced through `IcError.InternalError` and retried via
+    // `FallbackCompilerBackend` per ADR 0016 §5.
+    val btaImplJars: List<String>,
     val daemonDir: String,
     val socketPath: String,
     val logPath: String,
@@ -55,6 +65,16 @@ internal sealed interface DaemonPreconditionError {
     // compiler classloader. Includes the directory so the warning can
     // point at the exact path the user needs to repair.
     data class CompilerJarsMissing(val kotlincLibDir: String) : DaemonPreconditionError
+
+    // kotlin-build-tools-impl jars could not be located. The Phase B
+    // incremental compile path needs them on disk so the daemon can
+    // load them through a URLClassLoader (ADR 0019 §3). Ships via
+    // `libexec/kolt-bta-impl/` at install time, or the dev-fallback
+    // directory `<repo>/kolt-compiler-daemon/build/bta-impl-jars/`
+    // populated by the `stageBtaImplJars` Gradle task. Includes the
+    // probed directory so the warning points at the exact path to
+    // repair — identical shape to CompilerJarsMissing.
+    data class BtaImplJarsMissing(val probedDir: String) : DaemonPreconditionError
 }
 
 /**
@@ -82,6 +102,7 @@ internal fun resolveDaemonPreconditions(
     ensureJavaBin: (KoltPaths) -> Result<String, BootstrapJdkError> = ::ensureBootstrapJavaBin,
     resolveDaemonJar: () -> DaemonJarResolution = ::resolveDaemonJar,
     listCompilerJars: (String) -> List<String>? = { dir -> listJarFiles(dir).getOrElse { null } },
+    resolveBtaImplJars: () -> BtaImplJarsResolution = ::resolveBtaImplJars,
 ): Result<DaemonSetup, DaemonPreconditionError> {
     val javaBin = ensureJavaBin(paths).getOrElse { err ->
         return Err(
@@ -103,12 +124,19 @@ internal fun resolveDaemonPreconditions(
         return Err(DaemonPreconditionError.CompilerJarsMissing(kotlincLibDir))
     }
 
+    val btaImplJars = when (val res = resolveBtaImplJars()) {
+        is BtaImplJarsResolution.Resolved -> res.jars
+        is BtaImplJarsResolution.NotFound ->
+            return Err(DaemonPreconditionError.BtaImplJarsMissing(res.probedDir))
+    }
+
     val projectHash = projectHashOf(absProjectPath)
     return Ok(
         DaemonSetup(
             javaBin = javaBin,
             daemonJarPath = daemonJar,
             compilerJars = compilerJars,
+            btaImplJars = btaImplJars,
             daemonDir = paths.daemonDir(projectHash),
             socketPath = paths.daemonSocketPath(projectHash),
             logPath = paths.daemonLogPath(projectHash),
@@ -132,4 +160,6 @@ internal fun formatDaemonPreconditionWarning(err: DaemonPreconditionError): Stri
         "warning: kolt-compiler-daemon jar not found — falling back to subprocess compile"
     is DaemonPreconditionError.CompilerJarsMissing ->
         "warning: no compiler jars found in ${err.kotlincLibDir} — falling back to subprocess compile"
+    is DaemonPreconditionError.BtaImplJarsMissing ->
+        "warning: kotlin-build-tools-impl jars not found in ${err.probedDir} — falling back to subprocess compile"
 }

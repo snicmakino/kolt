@@ -106,6 +106,7 @@ class DaemonIntegrationTest {
                 javaBin = env.javaBin,
                 daemonJarPath = env.daemonJarPath,
                 compilerJars = env.compilerJars,
+                btaImplJars = env.btaImplJars,
                 socketPath = "$stateDir/daemon.sock",
                 logPath = "$stateDir/daemon.log",
             )
@@ -138,6 +139,7 @@ class DaemonIntegrationTest {
         val javaBin: String,
         val daemonJarPath: String,
         val compilerJars: List<String>,
+        val btaImplJars: List<String>,
     )
 
     // Once the caller has opted in via `KOLT_DAEMON_IT=1`, every
@@ -173,7 +175,21 @@ class DaemonIntegrationTest {
             error("KOLT_DAEMON_IT=1 but $libDir contains no .jar files")
         }
 
-        return ItEnv(javaBin, daemonJar, jars)
+        // BTA impl jars: prefer the production resolver so a locally-built
+        // kolt-compiler-daemon stage (from `./gradlew :kolt-compiler-daemon:build`)
+        // is picked up via the dev-fallback branch. Falls through to the env
+        // override if the caller supplies one.
+        val btaJars = when (val res = resolveBtaImplJars()) {
+            is BtaImplJarsResolution.Resolved -> res.jars
+            is BtaImplJarsResolution.NotFound ->
+                error(
+                    "KOLT_DAEMON_IT=1 but kotlin-build-tools-impl jars not found at ${res.probedDir} — " +
+                        "run './gradlew :kolt-compiler-daemon:stageBtaImplJars' first, " +
+                        "or set $KOLT_BTA_IMPL_JARS_DIR_ENV",
+                )
+        }
+
+        return ItEnv(javaBin, daemonJar, jars, btaJars)
     }
 
     private fun integrationTestsEnabled(): Boolean =

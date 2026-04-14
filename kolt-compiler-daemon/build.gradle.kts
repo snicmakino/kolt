@@ -47,6 +47,25 @@ application {
     mainClass.set("kolt.daemon.MainKt")
 }
 
+// Stage the resolved kotlin-build-tools-impl classpath into
+// `build/bta-impl-jars/` so the native client's dev-fallback resolver
+// (see `BtaImplJarResolver.kt` in the root project) can find the jars
+// without any environment variable. Installed distributions should
+// mirror this layout under `<prefix>/libexec/kolt-bta-impl/`.
+val stageBtaImplJars = tasks.register<Sync>("stageBtaImplJars") {
+    group = "build"
+    description = "Copies kotlin-build-tools-impl jars into build/bta-impl-jars/ for the native client."
+    from(btaImplClasspath)
+    into(layout.buildDirectory.dir("bta-impl-jars"))
+}
+
+// Build-everything target wires stageBtaImplJars in so `./gradlew build`
+// populates the dev-fallback directory as a side effect, matching the
+// way shadowJar already gets picked up by `DaemonJarResolver.DevFallback`.
+tasks.named("build") {
+    dependsOn(stageBtaImplJars)
+}
+
 tasks.shadowJar {
     // Pin Main-Class explicitly rather than relying on Shadow's auto-detection
     // from the application plugin — if someone removes `application` later, a

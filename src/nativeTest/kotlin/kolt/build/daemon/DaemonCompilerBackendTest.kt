@@ -71,6 +71,7 @@ private fun newBackend(
     javaBin = "/opt/jdk/bin/java",
     daemonJarPath = "/opt/kolt/libexec/kolt-compiler-daemon-all.jar",
     compilerJars = listOf("/kt/lib/a.jar", "/kt/lib/b.jar"),
+    btaImplJars = listOf("/opt/kolt/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
     socketPath = "/tmp/kolt-daemon-test.sock",
     logPath = "/tmp/kolt-daemon-test.log",
     connector = connector,
