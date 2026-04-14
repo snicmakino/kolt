@@ -44,3 +44,28 @@ tasks.withType<Wrapper> {
     gradleVersion = "8.12"
     distributionType = Wrapper.DistributionType.BIN
 }
+
+// Keep the existing "./gradlew build rebuilds the daemon fat jar too" DX after
+// the kolt-compiler-daemon split into an independent Gradle build. Without this
+// wiring, the dev-fallback path in DaemonJarResolver.kt could pick up a stale
+// jar produced before a local protocol change.
+tasks.named("build") {
+    dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":build"))
+}
+
+// Propagate `check` to the included build as well, so that ADR 0016's
+// `verifyShadowJar` regression guard (which rejects kotlin-compiler-embeddable
+// being baked into the fat jar) stays on the root `./gradlew check` path.
+// Without this, the silent-fallback footgun that ADR 0018 flags loses its
+// first line of defense.
+tasks.named("check") {
+    dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":check"))
+}
+
+// Same rationale for `clean`: without this wiring, `./gradlew clean` at the
+// root leaves the daemon fat jar behind, and the dev-fallback path in
+// DaemonJarResolver.kt can keep resolving it across local protocol changes
+// until someone manually wipes kolt-compiler-daemon/build/.
+tasks.named("clean") {
+    dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":clean"))
+}

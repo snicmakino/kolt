@@ -9,7 +9,16 @@ rewritten to reflect the revised Phase A rollout — the daemon is the
 only as a fallback. The JVM-side daemon subproject (`kolt-compiler-daemon/`)
 and wire protocol landed in PR2 (#86, merged); the native client,
 `FallbackCompilerBackend`, and `--no-daemon` escape hatch land in PR3
-(#14).
+(#14). Also updated 2026-04-14: `kolt-compiler-daemon/` is now an
+**independent Gradle build** included from the root via `includeBuild`
+rather than a subproject via `include`. The wire-protocol and runtime
+decisions below are unchanged; the split is a build-system boundary
+that sets up the distribution plan in ADR 0018 and keeps a future
+self-host path (native built by kolt, daemon jar built by Gradle →
+eventually by `kolt build --fat-jar`) open. `./gradlew build` still
+rebuilds both sides via an explicit `dependsOn` from the root build
+to the included build's `:build` task, so the dev-fallback path in
+`DaemonJarResolver.kt` never sees a stale jar.
 
 ## Context
 

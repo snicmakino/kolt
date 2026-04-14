@@ -1,8 +1,8 @@
 import java.util.zip.ZipFile
 
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.serialization")
+    kotlin("jvm") version "2.3.20"
+    kotlin("plugin.serialization") version "2.3.20"
     application
     id("com.gradleup.shadow") version "8.3.5"
 }
