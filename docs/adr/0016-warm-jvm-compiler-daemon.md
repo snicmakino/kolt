@@ -356,13 +356,19 @@ Read as:
   (#3 incremental) will cut the slope; Phase A is not expected to.
 - **Gradle does not cross daemon-warm in this fixture range.**
   Gradle-warm stays 1.28–1.67× slower than kolt daemon-warm across
-  all four sizes, with no convergent trend. Gradle-warm's per-file
-  slope on these fixtures ((1.82 − 1.17) / 49 ≈ 13 ms/file) is
-  within rounding of kolt daemon-warm's ~12 ms/file, so the
-  persistent gap lives in the fixed-cost floor (~1.17 s gradle vs
-  ~0.70 s kolt), not per-file compile work. This is the Gradle
-  anchor that spike #86/#87 lacked; it shows kolt wins on clean
-  builds by amortising fixed cost faster, not by compiling faster.
+  all four sizes, flat within noise at N=10 (the jvm-25 ratio of
+  1.28× is the lowest of the four, so "no trend detectable" is the
+  honest framing rather than "convergent" or "divergent"). Gradle-
+  warm's per-file slope on these fixtures ((1.82 − 1.17) / 49 ≈
+  13 ms/file) is within rounding of kolt daemon-warm's ~12 ms/file,
+  so the persistent gap lives entirely in the fixed-cost floor
+  (~1.17 s gradle vs ~0.70 s kolt), not per-file compile work.
+  Because the two slopes converge by construction on this fixture
+  family, a "kolt scales better than Gradle on clean builds" claim
+  cannot be supported by extrapolating these numbers; what they
+  *do* support is "kolt amortises fixed cost faster on small
+  projects", which is a narrower claim. This is the Gradle anchor
+  that spike #86/#87 lacked.
 - **Resolve-phase tail latency reproduces as a ~3.3 s size-independent
   outlier.** Nodaemon and daemon-cold cells show 2–3 of 10 samples
   clustered ~3.3 s above the median, identical delta signature
@@ -371,13 +377,22 @@ Read as:
   into daemon-warm too (`jvm-25` run 6, `jvm-50` run 7), matching
   the same ~3.3 s delta; singletons out of N=10 do not move the
   median. A maven-metadata refresh hypothesis was considered and
-  is weak — the fixture has no SNAPSHOT deps and kolt's resolver
-  has no TTL machinery that would fire on ~30 % of invocations.
-  More plausible candidates, none verified: the harness's
-  `kill_daemon` poll-loop occasionally hitting its 2 s ceiling,
-  Kotlin/Native runtime teardown stalls in `kolt.kexe` shutdown,
-  or WSL2 9p filesystem stat storms. Disambiguating requires
-  phase-level self-timing from kolt itself; flagged for #88 / #90.
+  is weak (no SNAPSHOT deps, no TTL machinery). The leading
+  unverified hypothesis is a **WSL2 9p filesystem stat-storm on
+  kotlinc startup**: (a) the delta is almost exactly constant
+  across fixture sizes (+3.40 / +3.38 / +3.26 / +3.41 — fixed-cost
+  signature, not scaling work); (b) it hits `nodaemon` as often as
+  `daemon-cold`, so it cannot live inside the kolt daemon itself —
+  it is in the subprocess kotlinc startup path that both modes
+  share; (c) WSL2 9p is known to produce multi-second directory-
+  walk stalls, and kotlinc startup (classpath scan, JMOD indexing)
+  does a lot of directory walking. A Kotlin/Native runtime
+  teardown stall in `kolt.kexe` shutdown is a weaker but possible
+  alternative. The run-2 `kill_daemon` poll-loop hypothesis is
+  retracted — the poll ceiling is ~2.3 s, not 3.3 s, and warm-cell
+  outlier hits occur in iterations where `kill_daemon` was never
+  called. Disambiguating requires phase-level self-timing from
+  kolt itself plus `strace -c`; flagged for #88 / #90.
 - **8 s clean-build baseline in §Context does not reproduce.** On
   these fixtures the subprocess baseline is 4.77 s at `jvm-1`,
   rising to 10.37 s at `jvm-50`. The 8 s figure likely captured
