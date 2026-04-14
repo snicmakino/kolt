@@ -52,3 +52,12 @@ tasks.withType<Wrapper> {
 tasks.named("build") {
     dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":build"))
 }
+
+// Propagate `check` to the included build as well, so that ADR 0016's
+// `verifyShadowJar` regression guard (which rejects kotlin-compiler-embeddable
+// being baked into the fat jar) stays on the root `./gradlew check` path.
+// Without this, the silent-fallback footgun that ADR 0018 flags loses its
+// first line of defense.
+tasks.named("check") {
+    dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":check"))
+}
