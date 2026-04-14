@@ -1,10 +1,13 @@
 package kolt.daemon.server
 
 import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
-import kolt.daemon.host.CompileOutcome
-import kolt.daemon.host.CompileRequest
-import kolt.daemon.host.CompilerHost
+import kolt.daemon.ic.IcError
+import kolt.daemon.ic.IcRequest
+import kolt.daemon.ic.IcResponse
+import kolt.daemon.ic.IncrementalCompiler
+import kolt.daemon.ic.Status
 import kolt.daemon.protocol.FrameCodec
 import kolt.daemon.protocol.Message
 import java.net.StandardProtocolFamily
@@ -44,13 +47,10 @@ class DaemonLifecycleTest {
 
     @Test
     fun `server exits after serving maxCompiles compiles`() {
-        val host = object : CompilerHost {
-            override fun compile(request: CompileRequest) =
-                Ok(CompileOutcome(0, "", ""))
-        }
+        val compiler = alwaysSuccess()
         server = DaemonServer(
             socketPath = socketPath,
-            host = host,
+            compiler = compiler,
             config = DaemonConfig(
                 idleTimeoutMillis = 60_000,
                 maxCompiles = 2,
@@ -74,7 +74,7 @@ class DaemonLifecycleTest {
                         workingDir = "/w",
                         classpath = emptyList(),
                         sources = listOf("A.kt"),
-                        outputPath = "out.jar",
+                        outputPath = "build/classes",
                         moduleName = "m",
                     ),
                 )
@@ -88,13 +88,9 @@ class DaemonLifecycleTest {
 
     @Test
     fun `idle timeout stops server when no connection arrives`() {
-        val host = object : CompilerHost {
-            override fun compile(request: CompileRequest) =
-                Ok(CompileOutcome(0, "", ""))
-        }
         server = DaemonServer(
             socketPath = socketPath,
-            host = host,
+            compiler = alwaysSuccess(),
             config = DaemonConfig(
                 idleTimeoutMillis = 1_000,
                 maxCompiles = Int.MAX_VALUE,
@@ -114,17 +110,18 @@ class DaemonLifecycleTest {
     @Test
     fun `serve returns BindFailed when the parent directory cannot be created`() {
         val impossible = Path.of("/dev/null/kolt-daemon-impossible/daemon.sock")
-        val host = object : CompilerHost {
-            override fun compile(request: CompileRequest) =
-                Ok(CompileOutcome(0, "", ""))
-        }
-        server = DaemonServer(impossible, host, DaemonConfig())
+        server = DaemonServer(impossible, alwaysSuccess(), DaemonConfig())
         serverThread = Thread({}, "noop").apply { start(); join() }
 
         val result = server.serve()
         val err = result.getError()
         assertNotNull(err)
         assertIs<DaemonError.BindFailed>(err)
+    }
+
+    private fun alwaysSuccess(): IncrementalCompiler = object : IncrementalCompiler {
+        override fun compile(request: IcRequest): Result<IcResponse, IcError> =
+            Ok(IcResponse(wallMillis = 0, compiledFileCount = 0, status = Status.SUCCESS))
     }
 
     private fun waitForSocket() {

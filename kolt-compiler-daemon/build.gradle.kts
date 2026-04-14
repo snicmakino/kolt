@@ -25,10 +25,6 @@ val btaImplClasspath: Configuration by configurations.creating {
     isCanBeResolved = true
     isCanBeConsumed = false
 }
-val fixtureStdlib: Configuration by configurations.creating {
-    isCanBeResolved = true
-    isCanBeConsumed = false
-}
 
 dependencies {
     implementation(project(":ic"))
@@ -37,7 +33,6 @@ dependencies {
 
     compilerHostClasspath("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.20")
     btaImplClasspath("org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.20")
-    fixtureStdlib("org.jetbrains.kotlin:kotlin-stdlib:2.3.20")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
@@ -129,6 +124,4 @@ tasks.named("check") {
 
 tasks.test {
     useJUnitPlatform()
-    systemProperty("kolt.daemon.compilerJars", compilerHostClasspath.asPath)
-    systemProperty("kolt.daemon.stdlibJars", fixtureStdlib.asPath)
 }
