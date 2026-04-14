@@ -47,32 +47,6 @@ fun checkCommand(
     addAll(pluginArgs)
 }
 
-// TODO(#14 S5): remove after DaemonCompilerBackend proves the daemon path end
-// to end. Kept here only as the S1 cross-check oracle for subprocessArgv —
-// see SubprocessCompilerBackendLegacyCrossCheckTest. doBuild() no longer calls
-// this function; its only live callers are tests.
-fun buildCommand(
-    config: KoltConfig,
-    classpath: String? = null,
-    pluginArgs: List<String> = emptyList(),
-    kotlincPath: String? = null
-): BuildCommand {
-    val args = buildList {
-        add(kotlincPath ?: "kotlinc")
-        if (!classpath.isNullOrEmpty()) {
-            add("-cp")
-            add(classpath)
-        }
-        addAll(config.sources)
-        add("-jvm-target")
-        add(config.jvmTarget)
-        addAll(pluginArgs)
-        add("-d")
-        add(CLASSES_DIR)
-    }
-    return BuildCommand(args = args, outputPath = CLASSES_DIR)
-}
-
 // Native builds run in two stages because konanc silently no-ops compiler
 // plugins (e.g. kotlinx.serialization) on a single-step `-p program` invocation.
 // Stage 1 compiles sources into an unpacked klib with the plugin applied; Stage
