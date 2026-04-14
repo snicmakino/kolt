@@ -17,10 +17,24 @@ FIX_DIR="$HERE/fixtures"
 KOLT_BIN="$REPO_ROOT/build/bin/linuxX64/releaseExecutable/kolt.kexe"
 
 SIZES=(1 10 25 50)
-N_RUNS=7
-WARM_DISCARD=2
+N_RUNS=10
+WARM_DISCARD=5
 
-OUT="$HERE/results-$(date +%Y-%m-%d).md"
+# Pick an output path that does not clobber a previous run on the same day.
+# Previous runs survive as results-YYYY-MM-DD.md, results-YYYY-MM-DD-2.md, ...
+base="$HERE/results-$(date +%Y-%m-%d).md"
+if [[ ! -e "$base" ]]; then
+  OUT="$base"
+else
+  for i in 2 3 4 5 6 7 8 9; do
+    candidate="${base%.md}-${i}.md"
+    if [[ ! -e "$candidate" ]]; then
+      OUT="$candidate"
+      break
+    fi
+  done
+  : "${OUT:?too many same-day runs, clean up manually}"
+fi
 
 if [[ ! -x "$KOLT_BIN" ]]; then
   echo "release kolt binary not found: $KOLT_BIN" >&2
@@ -103,9 +117,14 @@ run_cell() {
       done
       ;;
     gradle)
+      # Fair comparison with kolt: `rm -rf build` happens OUTSIDE the
+      # timed region (kolt's `rm -rf build` does too), and `-x test`
+      # skips the test task family so we are comparing compileKotlin
+      # + jar assembly only.
       prime="$WARM_DISCARD"
       for i in $(seq 1 "$((total_runs + prime))"); do
-        local t; t=$(cd "$fixture_dir" && measure ./gradlew clean build -q)
+        rm -rf "$fixture_dir/build"
+        local t; t=$(cd "$fixture_dir" && measure ./gradlew build -x test -q)
         if (( i > prime )); then
           samples+=("$t")
         fi
