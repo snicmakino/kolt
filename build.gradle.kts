@@ -69,3 +69,14 @@ tasks.named("check") {
 tasks.named("clean") {
     dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":clean"))
 }
+
+// Force `stageBtaImplJars` before any `linuxX64Test` run. Without this
+// wiring, `./gradlew linuxX64Test` in isolation leaves
+// `kolt-compiler-daemon/build/bta-impl-jars/` un-populated, which means
+// `BtaImplJarResolver`'s dev-fallback path silently warns `BtaImplJarsMissing`
+// on the first dogfood `kolt build --daemon`. `./gradlew build` covers it
+// via the daemon `:build` dependency above, but test-only runs do not. This
+// closes B-2a review carryover #7.
+tasks.named("linuxX64Test") {
+    dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":stageBtaImplJars"))
+}
