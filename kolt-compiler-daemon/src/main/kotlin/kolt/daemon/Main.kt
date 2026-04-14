@@ -6,6 +6,7 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.mapBoth
 import kolt.daemon.ic.BtaIncrementalCompiler
 import kolt.daemon.ic.SelfHealingIncrementalCompiler
+import kolt.daemon.ic.StderrIcMetricsSink
 import kolt.daemon.server.DaemonConfig
 import kolt.daemon.server.DaemonServer
 import java.io.File
@@ -68,8 +69,18 @@ fun main(args: Array<String>) {
         },
     )
 
+    // ADR 0019 §7 observability: a stderr-backed sink so every
+    // `ic.success` / `ic.fallback_to_full` / `ic.self_heal` / `ic.bta.*`
+    // counter lands on the daemon's stderr stream in a single-line JSON
+    // shape (`IcMetricsSink.kt`). `kolt doctor` and Phase B smoke tests
+    // parse these lines back out. Wiring one instance and handing it to
+    // both the adapter and the self-heal wrapper keeps the
+    // "observability via metrics" rule from forking into two sinks.
+    val metrics = StderrIcMetricsSink()
+
     val adapter = BtaIncrementalCompiler.create(
         btaImplJars = cli.btaImplJars.map { it.toPath() },
+        metrics = metrics,
     ).mapBoth(
         success = { it },
         failure = { err ->
@@ -85,7 +96,10 @@ fun main(args: Array<String>) {
     // `IcError.InternalError` (corrupt cache / BTA-internal failure) is
     // transparently recovered by wiping the per-project IC state and
     // retrying once. Daemon core sees only the post-retry result.
-    val compiler = SelfHealingIncrementalCompiler(delegate = adapter)
+    val compiler = SelfHealingIncrementalCompiler(
+        delegate = adapter,
+        metrics = metrics,
+    )
 
     val server = DaemonServer(
         socketPath = cli.socketPath,

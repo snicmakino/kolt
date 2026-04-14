@@ -12,6 +12,7 @@ import kotlin.io.path.extension
 import kotlin.io.path.walk
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -133,6 +134,91 @@ class BtaIncrementalCompilerWarmPathTest {
             warmStateFileCount > 0,
             "IC state must still be present after warm compile (found $warmStateFileCount files)",
         )
+    }
+
+    @Test
+    fun `cold run emits ic_success + ic_fallback_to_full and warm run emits only ic_success`() {
+        val workRoot = Files.createTempDirectory("bta-metrics-")
+        val sourceFile = workRoot.resolve("Main.kt").also {
+            it.writeText(
+                """
+                package fixture
+                object Main { fun greeting(): String = "hi" }
+                """.trimIndent(),
+            )
+        }
+        val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+        val workingDir = workRoot.resolve("ic-state")
+
+        val metrics = RecordingMetricsSink()
+        val compiler = BtaIncrementalCompiler.create(
+            btaImplJars = btaImplJars,
+            metrics = metrics,
+        ).getOrElse { fail("failed to load BTA toolchain: $it") }
+
+        val request = IcRequest(
+            projectId = "metrics-smoke",
+            projectRoot = workRoot,
+            sources = listOf(sourceFile),
+            classpath = fixtureClasspath,
+            outputDir = outputDir,
+            workingDir = workingDir,
+        )
+
+        // --- cold ---
+        compiler.compile(request).getOrElse { fail("cold compile failed: $it") }
+        val coldEvents = metrics.snapshotAndReset()
+        val coldCounterNames = coldEvents.map { it.first }.toSet()
+        assertTrue(
+            "ic.success" in coldCounterNames,
+            "cold run must emit ic.success, got: $coldCounterNames",
+        )
+        assertTrue(
+            "ic.fallback_to_full" in coldCounterNames,
+            "cold run (empty workingDir) must emit ic.fallback_to_full, got: $coldCounterNames",
+        )
+        assertTrue(
+            "ic.wall_ms" in coldCounterNames,
+            "cold run must emit ic.wall_ms, got: $coldCounterNames",
+        )
+        // BTA metrics are forwarded with `ic.bta.` prefix; at least one is
+        // expected from a real compile. This is the observability guard
+        // that the BuildMetricsCollector hook is wired up to sink.
+        assertTrue(
+            coldCounterNames.any { it.startsWith("ic.bta.") },
+            "cold run must forward at least one BTA metric with ic.bta. prefix, got: $coldCounterNames",
+        )
+
+        // --- warm ---
+        Files.writeString(
+            sourceFile,
+            "\nfun warmMetricsTouch${System.nanoTime()}(): Int = 0\n",
+            StandardOpenOption.APPEND,
+        )
+        compiler.compile(request).getOrElse { fail("warm compile failed: $it") }
+        val warmEvents = metrics.snapshotAndReset()
+        val warmCounterNames = warmEvents.map { it.first }.toSet()
+        assertTrue(
+            "ic.success" in warmCounterNames,
+            "warm run must emit ic.success, got: $warmCounterNames",
+        )
+        assertEquals(
+            false,
+            "ic.fallback_to_full" in warmCounterNames,
+            "warm run (non-empty workingDir) must NOT emit ic.fallback_to_full, got: $warmCounterNames",
+        )
+    }
+
+    private class RecordingMetricsSink : IcMetricsSink {
+        private val events: MutableList<Pair<String, Long>> = mutableListOf()
+        override fun record(name: String, value: Long) {
+            events += name to value
+        }
+        fun snapshotAndReset(): List<Pair<String, Long>> {
+            val snap = events.toList()
+            events.clear()
+            return snap
+        }
     }
 
     private fun systemClasspath(key: String): List<Path> {

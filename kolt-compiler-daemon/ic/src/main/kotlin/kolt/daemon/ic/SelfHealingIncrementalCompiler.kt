@@ -41,6 +41,15 @@ class SelfHealingIncrementalCompiler(
     // below is what the ADR specifies: a recursive delete of the
     // per-project IC state tree.
     private val wipe: (Path) -> Unit = ::defaultWipe,
+    // ADR 0019 §7 "observability via metrics, not log spam": self-heal
+    // events are recorded here so `kolt doctor` / smoke tests can see
+    // what fired. Defaults to no-op so unit tests that do not care
+    // about metrics stay terse.
+    private val metrics: IcMetricsSink = NoopIcMetricsSink,
+    // ADR 0019 §7 also requires a single stderr warning on self-heal
+    // so a dogfooding user notices the event without having to grep
+    // the structured metric stream. Injected so tests can observe.
+    private val stderrWarn: (String) -> Unit = ::defaultStderrWarn,
 ) : IncrementalCompiler {
 
     override fun compile(request: IcRequest): Result<IcResponse, IcError> {
@@ -49,6 +58,11 @@ class SelfHealingIncrementalCompiler(
             success = { first },
             failure = { error ->
                 if (error is IcError.InternalError) {
+                    metrics.record(METRIC_SELF_HEAL)
+                    stderrWarn(
+                        "kolt-compiler-daemon: self-heal fired for project working dir " +
+                            "${request.workingDir}: ${error.cause.message ?: error.cause.javaClass.name}",
+                    )
                     wipe(request.workingDir)
                     delegate.compile(request)
                 } else {
@@ -59,6 +73,8 @@ class SelfHealingIncrementalCompiler(
     }
 
     companion object {
+        internal const val METRIC_SELF_HEAL: String = "ic.self_heal"
+
         // Recursively delete the working-dir tree. `Files.walk` in post-order
         // lets us delete children before their parent, which is the only
         // order `Files.delete` accepts for a non-empty directory.
@@ -68,6 +84,10 @@ class SelfHealingIncrementalCompiler(
                 stream.sorted(Comparator.reverseOrder())
                     .forEach { path -> runCatching { Files.delete(path) } }
             }
+        }
+
+        private fun defaultStderrWarn(message: String) {
+            System.err.println(message)
         }
     }
 }

@@ -196,9 +196,78 @@ class SelfHealingIncrementalCompilerTest {
         assertTrue(!Files.exists(nested.resolve("file.txt")))
     }
 
+    @Test
+    fun `self-heal emits ic_self_heal metric and a single stderr warning`() {
+        val metrics = RecordingMetricsSink()
+        val warnings = mutableListOf<String>()
+        val calls = AtomicInteger(0)
+        val delegate = FakeCompiler { _ ->
+            when (calls.incrementAndGet()) {
+                1 -> com.github.michaelbull.result.Err(IcError.InternalError(RuntimeException("corrupt ic state")))
+                else -> Ok(IcResponse(wallMillis = 1, compiledFileCount = 1))
+            }
+        }
+        val wrapper = SelfHealingIncrementalCompiler(
+            delegate = delegate,
+            wipe = { /* no-op wipe for metric-only focus */ },
+            metrics = metrics,
+            stderrWarn = { warnings.add(it) },
+        )
+
+        wrapper.compile(request()).get() ?: error("expected success")
+
+        assertEquals(listOf("ic.self_heal" to 1L), metrics.events)
+        assertEquals(1, warnings.size, "self-heal must emit exactly one stderr warning")
+        assertTrue(warnings.single().contains("self-heal fired"))
+        assertTrue(
+            warnings.single().contains("corrupt ic state"),
+            "warning must surface the underlying cause so a dogfood user can correlate it",
+        )
+    }
+
+    @Test
+    fun `no self-heal events when the first attempt succeeds`() {
+        val metrics = RecordingMetricsSink()
+        val warnings = mutableListOf<String>()
+        val delegate = FakeCompiler { _ -> Ok(IcResponse(wallMillis = 1, compiledFileCount = 0)) }
+        val wrapper = SelfHealingIncrementalCompiler(
+            delegate = delegate,
+            metrics = metrics,
+            stderrWarn = { warnings.add(it) },
+        )
+
+        wrapper.compile(request()).get() ?: error("expected success")
+
+        assertTrue(metrics.events.isEmpty(), "no retry → no ic.self_heal metric")
+        assertTrue(warnings.isEmpty(), "no retry → no stderr warning")
+    }
+
+    @Test
+    fun `no self-heal events when the failure is a CompilationFailed`() {
+        val metrics = RecordingMetricsSink()
+        val delegate = FakeCompiler { _ ->
+            com.github.michaelbull.result.Err(IcError.CompilationFailed(listOf("Main.kt: error")))
+        }
+        val wrapper = SelfHealingIncrementalCompiler(
+            delegate = delegate,
+            metrics = metrics,
+        )
+
+        wrapper.compile(request())
+
+        assertTrue(metrics.events.isEmpty(), "CompilationFailed is a user error — no self-heal")
+    }
+
     private class FakeCompiler(
         private val onCompile: (IcRequest) -> Result<IcResponse, IcError>,
     ) : IncrementalCompiler {
         override fun compile(request: IcRequest): Result<IcResponse, IcError> = onCompile(request)
+    }
+
+    private class RecordingMetricsSink : IcMetricsSink {
+        val events: MutableList<Pair<String, Long>> = mutableListOf()
+        override fun record(name: String, value: Long) {
+            events += name to value
+        }
     }
 }
