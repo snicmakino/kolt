@@ -6,7 +6,12 @@ Accepted (2026-04-13). Updated 2026-04-14 for #14 PR3: the native-side
 client landed on branch `14/daemon-native-client`, and §5 has been
 rewritten to reflect the revised Phase A rollout — the daemon is the
 **default** compile backend, with the subprocess compile path retained
-only as a fallback. The JVM-side daemon subproject (`kolt-compiler-daemon/`)
+only as a fallback. Also updated 2026-04-14 for #96: §Benchmark results
+now carries a scaling subsection measuring `kolt build` wall time across
+jvm-{1,10,25,50} fixtures with a Gradle comparison. The headline Phase A
+target phrased in §Context (clean build ~8 s → ~3 s, warm < 1 s) is
+retained as the original motivation; see §Benchmark results — Scaling
+(#96) for where the 1 s warm target actually lives on a scaling curve. The JVM-side daemon subproject (`kolt-compiler-daemon/`)
 and wire protocol landed in PR2 (#86, merged); the native client,
 `FallbackCompilerBackend`, and `--no-daemon` escape hatch land in PR3
 (#14). Also updated 2026-04-14: `kolt-compiler-daemon/` is now an
@@ -295,6 +300,83 @@ times over the run; no upward drift). Scenario B fails the Phase A
 kill criterion by a factor of 2.6×. Scenario C passes cleanly and is
 the configuration adopted.
 
+### Scaling (#96, 2026-04-14)
+
+The spike numbers above measure `SharedCompilerHost` directly in-JVM
+on a one-file fixture. They cover the steady-state compile cost but
+not end-to-end `kolt build` wall time, and they say nothing about how
+the numbers change as source file count grows. #96 fills both gaps
+with a scaling benchmark measured against the release binary on
+`spike/bench-scaling/fixtures/jvm-{1,10,25,50}` (deterministic
+generator, `kotlin-stdlib`-only classpath, a handful of top-level
+functions and data classes per file with cross-file references). The
+harness (`spike/bench-scaling/run-bench.sh`) drives real `kolt build`
+for each fixture × mode, N=7 per cell, warm modes discarding the
+first 2 runs as JIT warmup. Wall time is `/usr/bin/time -f '%e'`.
+
+Medians, seconds (OpenJDK 21 Corretto, Kotlin 2.1.0 fixtures, Linux
+WSL2):
+
+| Fixture | nodaemon | daemon-cold | daemon-warm | gradle-warm | nodaemon / warm | gradle / warm |
+|---|---|---|---|---|---|---|
+| jvm-1  | 4.83 | 4.59 | 0.66 | 1.19 | 7.3× | 1.8× |
+| jvm-10 | 5.74 | 5.89 | 0.97 | 1.25 | 5.9× | 1.3× |
+| jvm-25 | 7.14 | 7.34 | 1.36 | 1.41 | 5.3× | 1.0× |
+| jvm-50 | 8.64 | 8.84 | 1.65 | 1.61 | 5.2× | 1.0× |
+
+Read as:
+
+- **Daemon warm vs subprocess is 5.2–7.3× stable across sizes.** The
+  single-file hello-world 8.5× figure recorded in earlier memory was
+  an overestimate — it captured a regime where compile work is a
+  small fraction of wall time, so constant-overhead reduction looked
+  bigger than it is. `jvm-50` (5.2×) is the most defensible number
+  to quote outside the hello-world regime.
+- **Daemon cold regression is zero.** Cold medians track nodaemon
+  within ±0.25 s on every fixture, confirming the
+  `FallbackCompilerBackend` wiring adds no measurable client-side
+  cost on the cold path.
+- **The `warm < 1 s` Phase A target holds only below ~10–15 files.**
+  `jvm-1` (0.66 s) and `jvm-10` (0.97 s) are inside the budget;
+  `jvm-25` (1.36 s) and `jvm-50` (1.65 s) are above it. The 1 s
+  number was written against a hello-world baseline and does not
+  survive a scaling curve. The target is **not** a point target; it
+  is a fixed-cost floor (~0.66 s) plus a per-file slope of ~20 ms.
+  Future Phase B work (#3 incremental) will cut the slope; Phase A
+  is not expected to.
+- **Gradle crossover lives around 25–50 files for these fixtures.**
+  Gradle-warm is strikingly flat (1.19–1.61 s) — its worker API plus
+  embedded kotlinc amortises per-file work extremely well — so the
+  daemon-warm advantage closes from 1.8× on `jvm-1` down to ~1.0× on
+  `jvm-25` and `jvm-50`. This is the Gradle anchor that spike
+  #86/#87 lacked. It is also the headline ROI argument for #3
+  incremental: without incremental, kolt's clean-build advantage
+  over Gradle evaporates past 25 files.
+- **Resolve-phase tail latency surfaced as a reproducible outlier.**
+  Nodaemon and daemon-cold rows show 1–2 samples per cell clustered
+  ~3.3 s above the median, regardless of fixture size. The delta is
+  size-independent, which means it is a fixed-overhead event, not
+  compile work. It does not appear in gradle-warm (which reuses the
+  Gradle daemon's resolved classpath) and appears only rarely in
+  daemon-warm. Best current guess is a maven-metadata refresh or
+  kotlinc toolchain re-probe in kolt's dependency resolver firing on
+  ~28% of invocations. The raw per-run numbers and full outlier
+  analysis live in `spike/bench-scaling/results-2026-04-14.md`.
+  Flagged for #88 / #90 follow-up as evidence the resolve phase has
+  measurable tail latency worth monitoring separately from compile.
+- **8 s clean-build baseline in §Context does not reproduce.** On
+  the scaling fixtures the subprocess baseline is 4.83 s (jvm-1)
+  rather than ~8 s. The 8 s figure likely included a cold toolchain
+  download or dependency-resolution phase on different hardware.
+  The scaling curve supersedes it as the reference baseline; the
+  §Context paragraph is retained as the original motivation.
+
+Scope and non-goals for #96: this is an end-to-end wall-time
+measurement on clean builds only. Incremental compile (#3),
+multi-module projects (#89), long-run leak behaviour (#90), and
+rotating-fixture regression monitoring (#88) are explicitly out of
+scope and have their own issues.
+
 ## Alternatives Considered
 
 1. **JNI in-process compiler.** Link `kotlin-compiler-embeddable` into
@@ -340,6 +422,8 @@ the configuration adopted.
 - #86 — Phase A scope and spike results
 - #87 (merged) — the compile-bench spike that produced the numbers
   above
+- #96 — Phase A daemon scaling benchmark (this document's §Benchmark
+  results — Scaling subsection)
 - #88–#91 — follow-up spikes (rotating fixtures, multi-module,
   long-run leak check, concurrent-compile thread safety). Originally
   gating the Phase B default flip; after #14 PR3 landed default-on,
