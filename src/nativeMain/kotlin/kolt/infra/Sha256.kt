@@ -9,6 +9,15 @@ import platform.posix.*
 
 data class Sha256Error(val path: String)
 
+// In-memory SHA-256 hex digest. Callers that need only a byte-array hash
+// (e.g. hashing a project path for the daemon socket directory name) use
+// this instead of dragging bytes through a temporary file.
+fun sha256Hex(bytes: ByteArray): String {
+    val digest = SHA256()
+    digest.update(bytes)
+    return digest.digest().joinToString("") { it.toUByte().toString(16).padStart(2, '0') }
+}
+
 @OptIn(ExperimentalForeignApi::class)
 fun computeSha256(filePath: String): Result<String, Sha256Error> {
     val fp = fopen(filePath, "rb") ?: return Err(Sha256Error(filePath))
