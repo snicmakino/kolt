@@ -2,10 +2,14 @@
 
 ## Status
 
-Accepted (2026-04-13). Phase A implementation in progress: the daemon
-subproject (`kolt-compiler-daemon/`) and its wire protocol are landed;
-native-side client and the `--daemon` opt-in flag are still to come
-(tracked under #14 / #86).
+Accepted (2026-04-13). Updated 2026-04-14 for #14 PR3: the native-side
+client landed on branch `14/daemon-native-client`, and §5 has been
+rewritten to reflect the revised Phase A rollout — the daemon is the
+**default** compile backend, with the subprocess compile path retained
+only as a fallback. The JVM-side daemon subproject (`kolt-compiler-daemon/`)
+and wire protocol landed in PR2 (#86, merged); the native client,
+`FallbackCompilerBackend`, and `--no-daemon` escape hatch land in PR3
+(#14).
 
 ## Context
 
@@ -152,15 +156,40 @@ native client is expected to notice the closed socket and spawn a fresh
 daemon on the next build. This bounds any leak without paying the
 per-compile cost of discarding the compiler instance.
 
-### 5. Opt-in only in Phase A
+### 5. Default on from day one, with subprocess as fallback only
 
-The daemon is enabled per invocation with `kolt build --daemon` and is
-not the default. Phase B will flip the default after the follow-up
-spikes on rotating fixtures, multi-module workloads, long-run leak
-behaviour, and concurrent-compile thread safety confirm the bounds
-measured in the PoC (tracked as #88–#91). Any daemon error at the
-native client returns the build to the existing subprocess compile
-path — the daemon is never load-bearing for correctness.
+The daemon is the **default** compile backend starting with #14 PR3.
+`kolt build` wires `FallbackCompilerBackend(DaemonCompilerBackend,
+SubprocessCompilerBackend)` so that every build first attempts the
+warm daemon and silently falls back to the existing subprocess compile
+path on any `CompileError.BackendUnavailable` or
+`CompileError.InternalMisuse`. A user who wants to bypass the daemon
+for a single invocation passes `kolt build --no-daemon`; there is no
+`kolt.toml` knob and no global opt-out. `CompileError.CompilationFailed`
+(real user code errors) does **not** trigger fallback — the daemon's
+verdict is the build's verdict in that case.
+
+This decision supersedes an earlier plan to ship Phase A as opt-in
+(`kolt build --daemon`) and flip the default only after the follow-up
+spikes #88–#91 landed. The opt-in plan was abandoned for #14 PR3
+because every transient artifact it would produce — an opt-in flag,
+"experimental" caveats in user-facing docs, an interim ADR status —
+would have to be reversed a release later once the default flipped.
+Going straight to default-on removes that churn at the cost of
+making the fallback contract (ADR 0016 §3 exit-code table,
+`FallbackCompilerBackend`'s eligibility classifier) load-bearing from
+day one instead of after the spikes. The daemon is still never
+load-bearing for **correctness**: any failure drops to the subprocess
+path, and the subprocess path is exactly the pre-daemon `kolt build`
+behaviour, so the worst case for a user on a broken daemon is the
+old ~8 s clean build.
+
+The `reportFallback` helper in `doBuild` emits one stderr line per
+fallback: a `warning` for `BackendUnavailable.*` (expected transient
+conditions — missing bootstrap JDK, unwritable daemon dir, stale
+socket, connect refused) and an `error` log for `InternalMisuse`
+(kolt bug, exit code 64). `InternalMisuse` is deliberately loud so
+dogfooding surfaces bugs rather than silently masking them.
 
 ## Consequences
 
@@ -303,8 +332,10 @@ the configuration adopted.
 - #87 (merged) — the compile-bench spike that produced the numbers
   above
 - #88–#91 — follow-up spikes (rotating fixtures, multi-module,
-  long-run leak check, concurrent-compile thread safety) that must
-  land before the daemon becomes the default in Phase B
+  long-run leak check, concurrent-compile thread safety). Originally
+  gating the Phase B default flip; after #14 PR3 landed default-on,
+  these remain valuable as regression-monitoring follow-ups but no
+  longer gate the rollout
 - #3 — incremental compilation (Phase B, depends on this)
 - #15 — `kolt watch` (Phase C, depends on this)
 - ADR 0001 — `Result<V, E>` error handling discipline (applies to the
