@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.mapBoth
 import kolt.daemon.ic.BtaIncrementalCompiler
+import kolt.daemon.ic.SelfHealingIncrementalCompiler
 import kolt.daemon.server.DaemonConfig
 import kolt.daemon.server.DaemonServer
 import java.io.File
@@ -47,7 +48,7 @@ fun main(args: Array<String>) {
         },
     )
 
-    val compiler = BtaIncrementalCompiler.create(
+    val adapter = BtaIncrementalCompiler.create(
         btaImplJars = cli.btaImplJars.map { it.toPath() },
     ).mapBoth(
         success = { it },
@@ -59,6 +60,12 @@ fun main(args: Array<String>) {
             exitProcess(70)
         },
     )
+
+    // ADR 0019 §7: wrap the raw BTA adapter in the self-heal path so
+    // `IcError.InternalError` (corrupt cache / BTA-internal failure) is
+    // transparently recovered by wiping the per-project IC state and
+    // retrying once. Daemon core sees only the post-retry result.
+    val compiler = SelfHealingIncrementalCompiler(delegate = adapter)
 
     val server = DaemonServer(cli.socketPath, compiler, DaemonConfig())
     val reason = server.serve().mapBoth(

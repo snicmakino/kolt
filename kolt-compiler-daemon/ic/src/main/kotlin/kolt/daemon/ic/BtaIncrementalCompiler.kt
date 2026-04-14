@@ -55,6 +55,15 @@ class BtaIncrementalCompiler private constructor(
     override fun compile(request: IcRequest): Result<IcResponse, IcError> =
         try {
             executeCompile(request)
+        } catch (vme: VirtualMachineError) {
+            // ADR 0019 §7: JVM-fatal errors are **not** absorbed. Routing an
+            // `OutOfMemoryError` through `IcError.InternalError` would fire
+            // `SelfHealingIncrementalCompiler`'s wipe+retry path, which
+            // allocates more objects and reproduces the OOM in a loop. Let
+            // the VME propagate past daemon core so `FallbackCompilerBackend`
+            // (ADR 0016 §5) can take over — that is the escape hatch for
+            // "the daemon JVM itself is broken".
+            throw vme
         } catch (t: Throwable) {
             Err(IcError.InternalError(t))
         }
@@ -152,6 +161,13 @@ class BtaIncrementalCompiler private constructor(
                         pluginJarResolver = pluginJarResolver,
                     ),
                 )
+            } catch (vme: VirtualMachineError) {
+                // Same rationale as `compile` above: a VME during classloader
+                // construction (e.g. OOM loading the impl jars) is a daemon-
+                // JVM-broken signal, not a recoverable `InternalError`. Let
+                // it propagate to the daemon `main` which exits to
+                // `FallbackCompilerBackend`.
+                throw vme
             } catch (t: Throwable) {
                 Err(IcError.InternalError(t))
             }
