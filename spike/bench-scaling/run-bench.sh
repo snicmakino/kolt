@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
-# Scaling benchmark harness for issue #96.
+# Scaling benchmark harness for issues #96 and #103.
 #
 # Measures `kolt build` wall-clock wall time across
-#   (fixture size × mode) ∈ ({1,10,25,50} × {nodaemon, daemon-cold, daemon-warm, gradle})
-# using the release kolt binary. N=7 per cell, median/min/max reported;
-# daemon-warm and gradle modes discard the first 2 runs as JIT warmup.
+#   (fixture size × mode) ∈ ({1,10,25,50} × {nodaemon, daemon-cold,
+#     daemon-warm, gradle, daemon-warm-noop, daemon-warm-touch})
+# using the release kolt binary. N=10 per cell, median/min/max reported;
+# warm-family modes discard the first 5 runs as JIT warmup.
+#
+# Issue #103's "Scenario F" is implemented as a pair of modes rather than a
+# single cell. Splitting it keeps the harness shape uniform (one mode per
+# run_cell call, one row per mode in the output table) and lets the noop
+# number be reused as a fixed-cost reference by other analyses later.
+# The two warm-* scenarios added for #103 frame the incremental-build ceiling:
+#   - daemon-warm-noop: warm daemon, build/ preserved, no source change.
+#     Measures the fixed-cost floor (binary startup + dep resolve + kolt's
+#     coarse BuildCache up-to-date check + exit). No correct incremental
+#     scheme can go below this.
+#   - daemon-warm-touch: warm daemon, build/ preserved, touch one designated
+#     mid-graph file before each measured build. Today kolt has no real IC,
+#     so this exercises the full-recompile path with a warm daemon. The gap
+#     (touch − noop) is the incremental ceiling: the maximum wall time a
+#     Phase B implementation could ever hope to recover.
 #
 # Output: raw per-run table appended into results-YYYY-MM-DD.md next to this
-# script.  Does not modify kolt source or ADRs.
+# script. Does not modify kolt source or ADRs.
 
 set -euo pipefail
 
@@ -46,6 +62,19 @@ fi
 # our own shell invocations that merely mention the daemon in their cmdline).
 DAEMON_PATTERN='java.*kolt-compiler-daemon-all\.jar'
 
+# Relative path (from the fixture root) of the source file to touch in the
+# daemon-warm-touch scenario. Picks a mid-graph file so the downstream chain
+# of `work${i+1}` references into `work${i}` is exercised — not a leaf.
+# See gen.sh: files form a linear chain Main → File2 → ... → FileN.
+designated_touch_file() {
+  local n="$1"
+  if (( n == 1 )); then
+    echo "src/Main.kt"
+  else
+    echo "src/File$((n / 2)).kt"
+  fi
+}
+
 kill_daemon() {
   pkill -f "$DAEMON_PATTERN" 2>/dev/null || true
   for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -83,6 +112,7 @@ median_minmax() {
 run_cell() {
   local fixture_dir="$1" mode="$2"
   local label="$3"
+  local fixture_size="$4"
   local samples=()
   local prime=0
   local total_runs="$N_RUNS"
@@ -114,6 +144,64 @@ run_cell() {
         if (( i > prime )); then
           samples+=("$t")
         fi
+      done
+      ;;
+    daemon-warm-noop)
+      # Fixed-cost floor (#103). Warm daemon, build/ populated once, then
+      # N measured builds with no source change. BuildCache sees the state
+      # file matches and takes the up-to-date fast path (BuildCommands.kt
+      # doBuild: up-to-date return happens before resolveDependencies).
+      # We are timing: binary startup + config parse + toolchain resolve +
+      # mtime scan + short-circuit exit. resolveDependencies and the daemon
+      # round-trip are NOT exercised on this path. This is the absolute
+      # lower bound any kolt build invocation can hit today.
+      prime="$WARM_DISCARD"
+      kill_daemon
+      rm -rf "$fixture_dir/build" "$HOME/.kolt/daemon"
+      for i in $(seq 1 "$prime"); do
+        (cd "$fixture_dir" && "$KOLT_BIN" build >/dev/null 2>&1)
+      done
+      for i in $(seq 1 "$total_runs"); do
+        local t; t=$(cd "$fixture_dir" && measure "$KOLT_BIN" build)
+        samples+=("$t")
+      done
+      ;;
+    daemon-warm-touch)
+      # Incremental ceiling baseline (#103). Warm daemon, build/ populated,
+      # but each iteration touches one designated mid-graph source file
+      # before building. Today's kolt has no file-level incremental, so
+      # this is a full recompile on the warm daemon path. Phase B's target
+      # is to push this number toward daemon-warm-noop.
+      prime="$WARM_DISCARD"
+      kill_daemon
+      rm -rf "$fixture_dir/build" "$HOME/.kolt/daemon"
+      local touch_rel
+      touch_rel=$(designated_touch_file "$fixture_size")
+      if [[ ! -f "$fixture_dir/$touch_rel" ]]; then
+        echo "designated touch file missing: $fixture_dir/$touch_rel" >&2
+        return 1
+      fi
+      # Force the touched file's mtime strictly forward each iteration.
+      # WSL2 9p (and several other filesystems) expose 1-second mtime
+      # granularity, so a plain `touch` run within the same wall-clock
+      # second as the previous build's cached sourcesNewestMtime leaves
+      # the mtime value unchanged, BuildCache short-circuits to the
+      # up-to-date fast path, and the "touch → full recompile" signal
+      # we are trying to measure is lost. A monotonically-increasing
+      # synthetic epoch sidesteps the clock entirely.
+      local bump_counter=0
+      local bump_base
+      bump_base=$(( $(date +%s) + 10 ))
+      for i in $(seq 1 "$prime"); do
+        bump_counter=$(( bump_counter + 1 ))
+        (cd "$fixture_dir" && touch -d "@$((bump_base + bump_counter))" "$touch_rel")
+        (cd "$fixture_dir" && "$KOLT_BIN" build >/dev/null 2>&1)
+      done
+      for i in $(seq 1 "$total_runs"); do
+        bump_counter=$(( bump_counter + 1 ))
+        (cd "$fixture_dir" && touch -d "@$((bump_base + bump_counter))" "$touch_rel")
+        local t; t=$(cd "$fixture_dir" && measure "$KOLT_BIN" build)
+        samples+=("$t")
       done
       ;;
     gradle)
@@ -163,10 +251,12 @@ for n in "${SIZES[@]}"; do
   fix="$FIX_DIR/jvm-${n}"
   [[ -d "$fix" ]] || { echo "missing fixture $fix — run gen.sh first" >&2; exit 1; }
   echo "==> jvm-${n}"
-  run_cell "$fix" nodaemon     "jvm-${n}"
-  run_cell "$fix" daemon-cold  "jvm-${n}"
-  run_cell "$fix" daemon-warm  "jvm-${n}"
-  run_cell "$fix" gradle       "jvm-${n}"
+  run_cell "$fix" nodaemon          "jvm-${n}" "$n"
+  run_cell "$fix" daemon-cold       "jvm-${n}" "$n"
+  run_cell "$fix" daemon-warm       "jvm-${n}" "$n"
+  run_cell "$fix" gradle            "jvm-${n}" "$n"
+  run_cell "$fix" daemon-warm-noop  "jvm-${n}" "$n"
+  run_cell "$fix" daemon-warm-touch "jvm-${n}" "$n"
 done
 
 echo
