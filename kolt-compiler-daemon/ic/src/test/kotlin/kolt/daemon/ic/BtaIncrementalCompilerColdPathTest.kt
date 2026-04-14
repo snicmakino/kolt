@@ -4,6 +4,7 @@ package kolt.daemon.ic
 
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
+import com.github.michaelbull.result.mapBoth
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,6 +55,7 @@ class BtaIncrementalCompilerColdPathTest {
         val response = compiler.compile(
             IcRequest(
                 projectId = "cold-path-smoke",
+                projectRoot = workRoot,
                 sources = listOf(sourceFile),
                 classpath = fixtureClasspath,
                 outputDir = outputDir,
@@ -94,6 +96,7 @@ class BtaIncrementalCompilerColdPathTest {
         val err = compiler.compile(
             IcRequest(
                 projectId = "cold-path-err",
+                projectRoot = workRoot,
                 sources = listOf(sourceFile),
                 classpath = fixtureClasspath,
                 outputDir = outputDir,
@@ -102,6 +105,99 @@ class BtaIncrementalCompilerColdPathTest {
         ).getError() ?: fail("expected Err for broken source")
 
         assertTrue(err is IcError.CompilationFailed, "expected CompilationFailed, got $err")
+    }
+
+    // Acceptance criterion 4 of issue #112: a kolt.toml with one enabled plugin
+    // entry must drive the translation path all the way through to the BTA layer,
+    // even if the actual plugin jars cannot be resolved or the compile fails at
+    // plugin load. This test proves that (a) the injected resolver is consulted,
+    // and (b) the adapter still reaches BtaIncrementalCompiler.executeCompile's
+    // session.executeOperation() call — i.e. the translation is wired through
+    // to the compile operation, not short-circuited before BTA sees it.
+    //
+    // A fake plugin alias is used so the test stays independent of whether a
+    // real kotlinx-serialization-compiler-plugin jar is resolvable in the Gradle
+    // test task's environment. Real plugin validation (actually compiling a
+    // @Serializable class) is B-2c's scope.
+    @Test
+    fun `plugins section in kolt_toml reaches the compile path via the resolver`() {
+        val workRoot = Files.createTempDirectory("bta-plugins-")
+        workRoot.resolve("kolt.toml").writeText(
+            """
+            name = "demo"
+            version = "0.1.0"
+            kotlin = "2.3.20"
+            target = "jvm"
+            main = "fixture.Main"
+            sources = ["."]
+
+            [plugins]
+            serialization = true
+            """.trimIndent(),
+        )
+        workRoot.resolve("Main.kt").writeText(
+            """
+            package fixture
+            object Main {
+                fun greeting(): String = "hi"
+            }
+            """.trimIndent(),
+        )
+        val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+        val workingDir = workRoot.resolve("ic").apply { createDirectories() }
+
+        val resolverCalls = mutableListOf<String>()
+        val compiler = BtaIncrementalCompiler.create(
+            btaImplJars = btaImplJars,
+            pluginJarResolver = { alias ->
+                resolverCalls += alias
+                // Return an empty classpath on purpose: the point of this test is
+                // to prove the translation path is reached, not to successfully
+                // load a real plugin. Empty classpath means BTA is asked to
+                // attach a plugin id without a jar, which may or may not produce
+                // a compile-time error depending on how eagerly BTA validates
+                // COMPILER_PLUGINS — either outcome is acceptable here.
+                emptyList()
+            },
+        ).getOrElse { fail("failed to load BTA toolchain: $it") }
+
+        val result = compiler.compile(
+            IcRequest(
+                projectId = "plugin-path-smoke",
+                projectRoot = workRoot,
+                sources = listOf(workRoot.resolve("Main.kt")),
+                classpath = fixtureClasspath,
+                outputDir = outputDir,
+                workingDir = workingDir,
+            ),
+        )
+
+        // Primary assertion: the injected resolver was consulted for the
+        // `serialization` alias. Without this, the translation path never
+        // reached BTA; the compile outcome is a secondary signal.
+        assertEquals(
+            listOf("serialization"),
+            resolverCalls,
+            "expected PluginTranslator to consult the resolver for the `serialization` alias",
+        )
+
+        // Secondary assertion: the compile reaches a well-formed Result<,>
+        // (Ok or Err) — i.e., the adapter did not crash on a thrown exception
+        // when handed an empty-classpath plugin. Either outcome is acceptable
+        // because B-2a only requires that the translation path is exercised.
+        val outcome = result.mapBoth(
+            success = { "SUCCESS" },
+            failure = { err -> "Err(${err::class.simpleName})" },
+        )
+        // This assert is documentation for a future reader: both outcomes are
+        // legal. A test failure would mean `compile` threw past the adapter,
+        // which IS an ADR 0019 §7 invariant violation.
+        assertTrue(
+            outcome == "SUCCESS" ||
+                outcome == "Err(CompilationFailed)" ||
+                outcome == "Err(InternalError)",
+            "unexpected compile outcome: $outcome",
+        )
     }
 
     private fun systemClasspath(key: String): List<Path> {

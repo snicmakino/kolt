@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.buildtools.api.CompilationResult
 import org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi
 import org.jetbrains.kotlin.buildtools.api.KotlinToolchains
 import org.jetbrains.kotlin.buildtools.api.SharedApiClassesClassLoader
+import org.jetbrains.kotlin.buildtools.api.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.buildtools.api.arguments.JvmCompilerArguments
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmPlatformToolchain.Companion.jvm
 import java.io.File
@@ -42,6 +43,13 @@ import kotlin.time.TimeSource
 // `CompilationFailed`.
 class BtaIncrementalCompiler private constructor(
     private val toolchain: KotlinToolchains,
+    // Maps a kolt.toml plugin alias (e.g. "serialization") to the plugin jar
+    // classpath on disk. Injected at construction time so daemon startup owns
+    // the policy (walk a plugin-jars directory, read from --plugin-jars CLI,
+    // etc.) and :ic stays a pure translator. B-2a defaults this to an empty-
+    // result resolver — the translation path is still exercised end to end,
+    // and real plugin jar delivery is wired in daemon core later (B-2b/B-2c).
+    private val pluginJarResolver: (alias: String) -> List<Path>,
 ) : IncrementalCompiler {
 
     override fun compile(request: IcRequest): Result<IcResponse, IcError> =
@@ -58,6 +66,14 @@ class BtaIncrementalCompiler private constructor(
                 request.classpath.joinToString(File.pathSeparator) { it.toString() }
         }
         builder.compilerArguments[JvmCompilerArguments.MODULE_NAME] = moduleNameFor(request)
+
+        // ADR 0019 §9: kolt.toml [plugins] → List<CompilerPlugin> translation
+        // happens inside the adapter, not in daemon core. An empty list here is
+        // a "no plugins requested" signal and is the common case; emitting it
+        // unconditionally keeps the wiring obvious to a reader.
+        val translatedPlugins = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
+        builder.compilerArguments[CommonCompilerArguments.COMPILER_PLUGINS] = translatedPlugins
+
         // B-2a does not attach snapshotBasedIcConfigurationBuilder — the operation
         // runs as a plain full recompile. IC state layout under `request.workingDir`
         // is deliberately not exercised until B-2b (per issue #112 "Out of scope").
@@ -113,14 +129,29 @@ class BtaIncrementalCompiler private constructor(
         // load-bearing: if -impl classes cannot be found, BTA cannot initialise, so
         // we surface the classloader failure as an IcError.InternalError in the
         // Result returned to daemon core rather than throwing.
-        fun create(btaImplJars: List<Path>): Result<BtaIncrementalCompiler, IcError.InternalError> =
+        fun create(
+            btaImplJars: List<Path>,
+            // Defaults to an empty-result resolver: every plugin alias maps to
+            // an empty classpath. Production daemon startup overrides this with
+            // a resolver that walks a known plugin-jars directory. B-2a's
+            // acceptance criterion 4 requires the translation path to be
+            // exercised, not for plugins to actually compile — so even this
+            // default still attaches `COMPILER_PLUGINS` when kolt.toml lists
+            // enabled entries.
+            pluginJarResolver: (alias: String) -> List<Path> = { _ -> emptyList() },
+        ): Result<BtaIncrementalCompiler, IcError.InternalError> =
             try {
                 require(btaImplJars.isNotEmpty()) {
                     "btaImplJars is empty — daemon must receive kotlin-build-tools-impl classpath via --bta-impl-jars"
                 }
                 val urls = btaImplJars.map { it.toUri().toURL() }.toTypedArray()
                 val implLoader = URLClassLoader(urls, SharedApiClassesClassLoader())
-                Ok(BtaIncrementalCompiler(KotlinToolchains.loadImplementation(implLoader)))
+                Ok(
+                    BtaIncrementalCompiler(
+                        toolchain = KotlinToolchains.loadImplementation(implLoader),
+                        pluginJarResolver = pluginJarResolver,
+                    ),
+                )
             } catch (t: Throwable) {
                 Err(IcError.InternalError(t))
             }

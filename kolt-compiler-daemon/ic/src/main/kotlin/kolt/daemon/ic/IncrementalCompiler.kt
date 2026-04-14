@@ -20,6 +20,13 @@ interface IncrementalCompiler {
 
 data class IcRequest(
     val projectId: String,
+    // The project root directory (containing `kolt.toml`). The adapter reads the
+    // TOML file directly to translate plugin settings per ADR 0019 §9; this is
+    // the only way the @ExperimentalBuildToolsApi shape of plugin arguments
+    // stays out of daemon core. ADR §3's original data class did not list
+    // projectRoot, but §9 implicitly requires it — this is a minor inter-
+    // section fix, not a scope widening.
+    val projectRoot: Path,
     val sources: List<Path>,
     val classpath: List<Path>,
     val outputDir: Path,

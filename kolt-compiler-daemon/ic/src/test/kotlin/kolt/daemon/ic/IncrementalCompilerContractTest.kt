@@ -21,6 +21,7 @@ class IncrementalCompilerContractTest {
 
     private fun sampleRequest(): IcRequest = IcRequest(
         projectId = "abc123",
+        projectRoot = Path.of("/tmp/fixture"),
         sources = listOf(Path.of("/tmp/fixture/Main.kt")),
         classpath = listOf(Path.of("/tmp/kotlin-stdlib.jar")),
         outputDir = Path.of("/tmp/fixture/out"),

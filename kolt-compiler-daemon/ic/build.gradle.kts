@@ -1,5 +1,8 @@
 plugins {
     kotlin("jvm") version "2.3.20"
+    // kotlinx.serialization is required by ktoml-core at runtime — ktoml's data
+    // classes are @Serializable, so consumers must apply the plugin to build.
+    kotlin("plugin.serialization") version "2.3.20"
     // `java-library` provides the `api` configuration, which is required because
     // :ic exposes kotlin-result types in the signature of IncrementalCompiler.compile.
     // The `kotlin("jvm")` plugin on its own applies only `java`, which lacks `api`.
@@ -42,6 +45,13 @@ dependencies {
     // `implementation` would happen to work — but it would silently break the
     // day a second consumer imports :ic without its own kotlin-result dep.
     api("com.michael-bull.kotlin-result:kotlin-result-jvm:2.3.1")
+
+    // ADR 0019 §9 mandates that plugin translation from kolt.toml lives inside
+    // the adapter. We re-parse kolt.toml on the JVM side rather than passing
+    // pre-parsed plugin settings through IcRequest, keeping daemon core free
+    // of BTA-shaped fields. The cost is one extra TOML parse per build; ADR
+    // §9 Negative explicitly accepts it.
+    implementation("com.akuleshov7:ktoml-core-jvm:0.7.1")
 
     buildToolsImpl("org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.20")
     fixtureClasspath("org.jetbrains.kotlin:kotlin-stdlib:2.3.20")
