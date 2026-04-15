@@ -162,7 +162,21 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         // is no longer needed, teach resolveDependencies to return List<String>
         // directly and delete this split.
         classpath = if (classpath.isNullOrEmpty()) emptyList() else classpath.split(":").filter { it.isNotEmpty() },
-        sources = config.sources.map { absolutise(it, cwd) },
+        // Expand directory entries in `config.sources` to their
+        // constituent .kt files before handing them to the backend.
+        // The Phase A kotlin-compiler-embeddable subprocess path
+        // tolerated directories via kotlinc's CLI, but Phase B's BTA
+        // requires individual files (`jvmCompilationOperationBuilder`
+        // reports `Is a directory` on the first directory entry). See
+        // issue #117 for the dogfood trace that surfaced this. The
+        // expansion runs on absolute paths so subsequent `absolutise`
+        // calls are a no-op; we do them inline with flatMap to keep
+        // the single-Result shape this block used before the fix.
+        sources = expandKotlinSources(config.sources.map { absolutise(it, cwd) })
+            .getOrElse { err ->
+                eprintln("error: could not list Kotlin sources under ${err.path}")
+                exitProcess(EXIT_BUILD_ERROR)
+            },
         outputPath = absolutise(CLASSES_DIR, cwd),
         moduleName = config.name,
         extraArgs = buildList {

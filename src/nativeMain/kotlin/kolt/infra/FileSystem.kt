@@ -265,6 +265,38 @@ fun listKotlinFiles(directory: String): Result<List<String>, ListFilesFailed> {
     return Ok(files)
 }
 
+// Expand a caller-supplied source path list to a flat list of .kt files.
+// Directory entries are walked recursively via `collectKotlinFiles`;
+// individual .kt files are kept verbatim; anything else (non-.kt file, or a
+// path that does not exist) is kept as-is so the caller can still surface
+// a useful backend error.
+//
+// Motivation: Phase A (kotlin-compiler-embeddable) accepted directories on
+// the kotlinc command line and walked them implicitly. Phase B's BTA
+// (`jvmCompilationOperationBuilder(sources: List<Path>, ...)`) requires
+// individual file paths and reports `Is a directory` on the first entry
+// that happens to be a directory — which turns a typical
+// `sources = ["src"]` into a hard failure. Expanding here keeps both
+// backends happy with one call site. See issue #117.
+//
+// Order is stable: entries within each directory are sorted by
+// `listKotlinFiles`, and the overall order preserves the caller's
+// `sources` list position so kotlinc / BTA see the same module-boundary
+// order a hand-written CLI would produce.
+fun expandKotlinSources(sources: List<String>): Result<List<String>, ListFilesFailed> {
+    val expanded = mutableListOf<String>()
+    for (entry in sources) {
+        when {
+            isDirectory(entry) -> {
+                val found = listKotlinFiles(entry).getOrElse { err -> return Err(err) }
+                expanded.addAll(found)
+            }
+            else -> expanded.add(entry)
+        }
+    }
+    return Ok(expanded)
+}
+
 @OptIn(ExperimentalForeignApi::class)
 private fun collectKotlinFiles(directory: String, result: MutableList<String>): ListFilesFailed? {
     val dir = opendir(directory) ?: return ListFilesFailed(directory)

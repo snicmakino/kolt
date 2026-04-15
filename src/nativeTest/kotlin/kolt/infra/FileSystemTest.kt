@@ -280,6 +280,85 @@ class FileSystemTest {
     }
 
     @Test
+    fun expandKotlinSourcesWalksDirectoriesIntoKtFiles() {
+        // Regression guard for issue #117: the daemon compile path
+        // must receive individual .kt files, not directories, because
+        // BTA's jvmCompilationOperationBuilder rejects directory
+        // entries with `Is a directory`. Before this fix, a typical
+        // `sources = ["src"]` in kolt.toml silently crashed the
+        // daemon-backed compile under default-on B-2b rollout.
+        val root = "/tmp/kolt_expand_sources_walk"
+        val sub = "$root/sub"
+        platform.posix.mkdir(root, 0b111111101u)
+        platform.posix.mkdir(sub, 0b111111101u)
+        writeTestFile("$root/A.kt", "package p; fun a() = 0")
+        writeTestFile("$sub/B.kt", "package p.q; fun b() = 0")
+        writeTestFile("$root/notes.md", "ignored")
+        try {
+            val files = assertNotNull(expandKotlinSources(listOf(root)).get())
+            // Only .kt files; sorted; nested dir walked.
+            assertEquals(listOf("$root/A.kt", "$sub/B.kt"), files)
+        } finally {
+            remove("$root/A.kt")
+            remove("$sub/B.kt")
+            remove("$root/notes.md")
+            platform.posix.rmdir(sub)
+            platform.posix.rmdir(root)
+        }
+    }
+
+    @Test
+    fun expandKotlinSourcesKeepsIndividualFilesAsIs() {
+        val root = "/tmp/kolt_expand_sources_individual"
+        platform.posix.mkdir(root, 0b111111101u)
+        writeTestFile("$root/Main.kt", "fun main() {}")
+        try {
+            // A caller-supplied individual file must pass through
+            // verbatim — no flattening, no walk.
+            val files = assertNotNull(expandKotlinSources(listOf("$root/Main.kt")).get())
+            assertEquals(listOf("$root/Main.kt"), files)
+        } finally {
+            remove("$root/Main.kt")
+            platform.posix.rmdir(root)
+        }
+    }
+
+    @Test
+    fun expandKotlinSourcesMergesDirsAndFilesPreservingCallerOrder() {
+        val dir = "/tmp/kolt_expand_sources_merge_dir"
+        val loose = "/tmp/kolt_expand_sources_merge_loose.kt"
+        platform.posix.mkdir(dir, 0b111111101u)
+        writeTestFile("$dir/Inside.kt", "fun inside() {}")
+        writeTestFile(loose, "fun loose() {}")
+        try {
+            // Mixing a dir and a standalone file: the caller's
+            // positional order must be preserved so kotlinc / BTA see
+            // the same module-boundary order a hand-written CLI would
+            // produce.
+            val files = assertNotNull(expandKotlinSources(listOf(dir, loose)).get())
+            assertEquals(listOf("$dir/Inside.kt", loose), files)
+        } finally {
+            remove("$dir/Inside.kt")
+            platform.posix.rmdir(dir)
+            remove(loose)
+        }
+    }
+
+    @Test
+    fun expandKotlinSourcesPassesThroughNonExistentEntriesUnchanged() {
+        // A path that is neither an existing directory nor an existing
+        // file is treated as "caller's intent" and passed through
+        // verbatim. The backend (kotlinc / BTA) then surfaces a real
+        // "no such file" error, which is strictly more informative
+        // than a wrapped `ListFilesFailed` would be. The test pins
+        // this policy so a future rewrite does not silently drop
+        // missing entries.
+        val missing = "/tmp/kolt_expand_sources_missing_${platform.posix.getpid()}.kt"
+        val files = assertNotNull(expandKotlinSources(listOf(missing)).get())
+        assertEquals(listOf(missing), files)
+    }
+
+    @Test
     fun copyDirectoryContentsCopiesFilesToDest() {
         // Given: source dir with one file
         val src = "/tmp/kolt_copy_src_basic"
