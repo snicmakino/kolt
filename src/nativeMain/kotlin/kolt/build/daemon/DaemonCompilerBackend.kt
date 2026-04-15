@@ -312,6 +312,7 @@ internal fun mapReplyToOutcome(reply: Message): Result<CompileOutcome, CompileEr
                         exitCode = reply.exitCode,
                         stdout = reply.stdout,
                         stderr = reply.stderr,
+                        diagnostics = reply.diagnostics,
                     ),
                 )
         }

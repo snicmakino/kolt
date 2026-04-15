@@ -7,8 +7,10 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.build.CompileError
 import kolt.build.CompileRequest
+import kolt.daemon.wire.Diagnostic
 import kolt.daemon.wire.FrameError
 import kolt.daemon.wire.Message
+import kolt.daemon.wire.Severity
 import kolt.infra.ProcessError
 import kolt.infra.net.UnixSocketError
 import kotlin.test.Test
@@ -144,6 +146,51 @@ class DaemonCompilerBackendHappyPathTest {
         val failed = assertIs<CompileError.CompilationFailed>(err)
         assertEquals(1, failed.exitCode)
         assertEquals("Main.kt:3:5 error: expected ';'", failed.stderr)
+    }
+
+    @Test
+    fun diagnosticsFieldIsThreadedThroughToCompilationFailed() {
+        // ADR 0019 §7 + B-2c: `DaemonServer.icErrorToReply` parses
+        // kotlinc's `path:L:C: severity: msg` lines into the
+        // `Message.CompileResult.diagnostics` field and routes
+        // unparsable remains to `stderr`. This test pins that the
+        // native-side mapping propagates the structured list into
+        // `CompileError.CompilationFailed.diagnostics` so the
+        // `BuildCommands` rendering path can actually reach the user.
+        // Before this change the diagnostics field was silently
+        // dropped and dogfood users saw only the one-line summary.
+        val fake = FakeConnection(
+            reply = Ok(
+                Message.CompileResult(
+                    exitCode = 1,
+                    diagnostics = listOf(
+                        Diagnostic(
+                            severity = Severity.Error,
+                            file = "/tmp/Main.kt",
+                            line = 3,
+                            column = 5,
+                            message = "expected ';'",
+                        ),
+                        Diagnostic(
+                            severity = Severity.Warning,
+                            file = "/tmp/Main.kt",
+                            line = 1,
+                            column = 1,
+                            message = "unused import",
+                        ),
+                    ),
+                    stdout = "",
+                    stderr = "",
+                ),
+            ),
+        )
+        val backend = newBackend(connector = { Ok(fake) })
+
+        val err = assertNotNull(backend.compile(sampleRequest()).getError())
+        val failed = assertIs<CompileError.CompilationFailed>(err)
+        assertEquals(2, failed.diagnostics.size)
+        assertEquals("expected ';'", failed.diagnostics[0].message)
+        assertEquals(Severity.Warning, failed.diagnostics[1].severity)
     }
 
     @Test

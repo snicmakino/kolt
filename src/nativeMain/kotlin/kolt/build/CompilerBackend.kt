@@ -1,6 +1,8 @@
 package kolt.build
 
 import com.github.michaelbull.result.Result
+import kolt.daemon.wire.Diagnostic
+import kolt.daemon.wire.Severity
 
 // A CompilerBackend turns a CompileRequest into a compiled output. Two
 // implementations are planned:
@@ -40,10 +42,23 @@ data class CompileOutcome(
 sealed interface CompileError {
     // Compiler ran but the user's Kotlin source did not compile. Not fallback
     // eligible — the subprocess path would fail identically.
+    //
+    // `diagnostics` is the structured form of the compile errors
+    // `BtaIncrementalCompiler` captures via its `KotlinLogger` hook and
+    // `DaemonServer.icErrorToReply` splits out of the flat stderr stream
+    // (see `DiagnosticParser` on the daemon side). Daemon path: populated
+    // from `Message.CompileResult.diagnostics`. Subprocess path: empty,
+    // because kotlinc's diagnostics go directly to the inherited stderr
+    // and the native client never parses them. Callers that want a
+    // complete, ordered user-visible error rendering should prefer
+    // `renderCompilationFailure` below over reading `stderr` / `diagnostics`
+    // independently — that helper reunites the two streams without risk
+    // of double-printing on the daemon path.
     data class CompilationFailed(
         val exitCode: Int,
         val stdout: String,
         val stderr: String,
+        val diagnostics: List<Diagnostic> = emptyList(),
     ) : CompileError
 
     // Backend itself could not run the compiler. Fallback eligible. Distinct
@@ -66,6 +81,49 @@ sealed interface CompileError {
     // Logged as an error rather than a warning so self-inflicted problems do
     // not disappear into the fallback path silently.
     data class InternalMisuse(val detail: String) : CompileError
+}
+
+// Renders every diagnostic the daemon captured, plus any leftover plain-
+// text stderr lines, in the order kotlinc would have produced them.
+// Used by `BuildCommands` to print the full compile error body before
+// the one-line summary `formatCompileError` produces. Pre-B-2c the
+// daemon reply had everything in `stderr`; B-2c split the structured
+// lines out into `diagnostics`. This helper handles both shapes so
+// nothing goes missing regardless of which field is populated.
+//
+// Subprocess path callers should skip this helper — kotlinc already
+// wrote its diagnostics to the inherited stderr stream before the
+// CompilerBackend turned the non-zero exit into a CompilationFailed.
+// Calling `renderCompilationFailure` on a subprocess-path error would
+// typically produce an empty string anyway (both fields are empty),
+// but the ordering invariant is that daemon-path callers print this
+// block and subprocess-path callers do not.
+fun renderCompilationFailure(error: CompileError.CompilationFailed): String {
+    val parts = mutableListOf<String>()
+    for (diagnostic in error.diagnostics) {
+        parts += formatDiagnostic(diagnostic)
+    }
+    if (error.stderr.isNotEmpty()) parts += error.stderr.trimEnd('\n')
+    return parts.joinToString("\n")
+}
+
+private fun formatDiagnostic(diagnostic: Diagnostic): String {
+    val location = buildString {
+        if (diagnostic.file != null) append(diagnostic.file)
+        if (diagnostic.line != null) append(':').append(diagnostic.line)
+        if (diagnostic.column != null) append(':').append(diagnostic.column)
+    }
+    val severity = when (diagnostic.severity) {
+        Severity.Error -> "error"
+        Severity.Warning -> "warning"
+        Severity.Info -> "info"
+        Severity.Logging -> "logging"
+    }
+    return if (location.isEmpty()) {
+        "$severity: ${diagnostic.message}"
+    } else {
+        "$location: $severity: ${diagnostic.message}"
+    }
 }
 
 fun formatCompileError(error: CompileError, context: String): String = when (error) {

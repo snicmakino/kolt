@@ -188,6 +188,16 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
 
     println("compiling ${config.name}...")
     backend.compile(request).getOrElse { error ->
+        // Daemon path captures kotlinc diagnostics into
+        // `CompilationFailed.diagnostics` + leftover `stderr`; the
+        // subprocess path inherits fds and leaves both fields empty
+        // because kotlinc already wrote to the terminal. Printing the
+        // rendered body before the one-line summary handles both
+        // shapes without double-printing.
+        if (error is CompileError.CompilationFailed) {
+            val body = renderCompilationFailure(error)
+            if (body.isNotEmpty()) eprintln(body)
+        }
         eprintln(formatCompileError(error, "compilation"))
         exitProcess(EXIT_BUILD_ERROR)
     }
