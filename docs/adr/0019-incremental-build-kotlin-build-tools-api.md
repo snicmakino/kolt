@@ -491,22 +491,39 @@ deliberately **not** decisions made here. Filing them as separate
 issues before B-2 starts would risk bit-rot; filing them inside B-2
 scope keeps them attached to the person doing the work.
 
-- **Prototype `kotlinx.serialization` through the adapter** before
-  declaring B-2 complete. Resolves spike residual risk O.Q. 6.
-- **Smoke test for IC cache corruption**: point BTA at a truncated
-  state file, confirm the `InternalError` → wipe → full-recompile
-  self-heal path in §7 works end-to-end.
-- **ABI-affecting cascade validation**: linear-10 fixture with a
-  signature change in `work5` + matching call-site edits in `F6.kt`,
-  to observe real cascade depth. Pairs with the #103 bench numbers as
-  a regression guard.
+**Status (B-2c, #114):** the three required-for-declared-done validations
+and the `CapturingKotlinLogger` / structured-diagnostic plumbing have
+landed in #114. The remaining bullets are deliberately post-B-2 — they
+are operational-hygiene or future-wire-client items with no blocking
+dependency on the current B-2 surface.
+
+- ~~**Prototype `kotlinx.serialization` through the adapter**~~ —
+  done in B-2c (`BtaSerializationPluginTest`). Spike residual risk
+  O.Q. 6 is resolved: real plugin jar delivery through `--plugin-jars`
+  + `PluginTranslator` produces the synthetic `$serializer` /
+  `$Companion` classes and a compiling `@Serializable data class`.
+- ~~**Smoke test for IC cache corruption**~~ — done in B-2c
+  (`BtaIncrementalCorruptionSmokeTest`). Drives the composed
+  `SelfHealingIncrementalCompiler(BtaIncrementalCompiler)` stack
+  against a workingDir whose state files have been truncated to
+  0 bytes; the `ic.self_heal` counter fires and the second compile
+  returns `Ok(IcResponse)`.
+- ~~**ABI-affecting cascade validation**~~ — done in B-2c
+  (`BtaIncrementalAbiCascadeTest`). Mid-chain signature change +
+  matching caller edit on a linear-5 fixture; recompile set is
+  `>= 2 && < totalCount`, pinning both "cascade happened" and
+  "cascade stopped short of full".
 - **Classpath snapshot caching**: cache `ClasspathEntrySnapshot`
   keyed by `(path, mtime, size)` so repeated builds on an unchanged
   classpath skip re-snapshotting. Measure before implementing.
+  Remains post-B-2 per §Consequences / Negative.
 - **Scaling run on jvm-100 / jvm-250**: point the
   `spike/bench-scaling/` harness at a B-2 daemon to confirm the
   per-file slope drops as predicted. #103's ceiling and #96's slope
-  are the two reference numbers to beat.
+  are the two reference numbers to beat. B-2c drops results under
+  `spike/bench-scaling/results-*` for the available fixture sizes;
+  extending the harness to jvm-100 / jvm-250 is a separate harness-
+  scaling concern and is filed as a dedicated follow-up.
 - **`~/.kolt/daemon/ic/` reaper**: periodically remove old Kotlin
   version segments and old project-hash subdirs. Shares design with
   the Phase A socket-dir reaper follow-up.
