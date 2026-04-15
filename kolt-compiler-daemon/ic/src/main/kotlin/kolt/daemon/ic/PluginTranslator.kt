@@ -29,15 +29,23 @@ object PluginTranslator {
 
     // Kotlin compiler plugin IDs are stable strings the compiler itself uses to
     // route -P options. `kotlinx-serialization` is the canonical ID for the
-    // serialization plugin across Kotlin 1.x/2.x; changing it would break every
-    // build that depends on it, so it is safe to hard-code.
+    // serialization plugin across Kotlin 1.x/2.x; the `allopen` / `noarg` IDs
+    // are read from `AllOpenPluginNames.PLUGIN_ID` / `NoArgPluginNames.PLUGIN_ID`
+    // in the Kotlin source tree (verified against v2.3.20). Changing any of
+    // these would break every build that depends on the plugin, so they are
+    // safe to hard-code.
     const val SERIALIZATION_PLUGIN_ID = "org.jetbrains.kotlinx.serialization"
+    const val ALLOPEN_PLUGIN_ID = "org.jetbrains.kotlin.allopen"
+    const val NOARG_PLUGIN_ID = "org.jetbrains.kotlin.noarg"
 
-    // Alias that kolt.toml users type. Multiple aliases can resolve to the same
-    // plugin id — for now only one is supported, and adding more is a pure
-    // lookup-table update.
+    // Alias that kolt.toml users type. Aliases mirror the native client's
+    // `PLUGIN_JAR_NAMES` map in `kolt.build.CompilerPlugin` so a project's
+    // `[plugins]` section means the same thing on both the daemon and the
+    // subprocess fallback path.
     private val aliasToPluginId: Map<String, String> = mapOf(
         "serialization" to SERIALIZATION_PLUGIN_ID,
+        "allopen" to ALLOPEN_PLUGIN_ID,
+        "noarg" to NOARG_PLUGIN_ID,
     )
 
     /**

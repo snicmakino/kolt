@@ -117,6 +117,49 @@ class CompilerPluginTest {
         )
     }
 
+    // --- pluginJarPaths ---
+
+    // #65 daemon path: produces an alias → list-of-jar-paths map for
+    // `--plugin-jars`. Mirrors the existing pluginArgs lookup but emits
+    // structured paths instead of `-Xplugin=...` strings so the daemon's
+    // PluginTranslator can drive BTA's CompilerPlugin model.
+    @Test
+    fun pluginJarPathsSingleEnabledPluginReturnsAliasToJarList() {
+        val result = pluginJarPaths(mapOf("serialization" to true), kotlinHome)
+
+        val map = assertNotNull(result.get())
+        assertEquals(
+            mapOf("serialization" to listOf("/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar")),
+            map,
+        )
+    }
+
+    @Test
+    fun pluginJarPathsDisabledPluginsAreExcluded() {
+        val result = pluginJarPaths(
+            mapOf("serialization" to true, "allopen" to false, "noarg" to true),
+            kotlinHome,
+        )
+
+        val map = assertNotNull(result.get())
+        assertEquals(setOf("serialization", "noarg"), map.keys)
+    }
+
+    @Test
+    fun pluginJarPathsEmptyMapReturnsEmptyMap() {
+        val result = pluginJarPaths(emptyMap(), kotlinHome)
+        assertEquals(emptyMap(), assertNotNull(result.get()))
+    }
+
+    @Test
+    fun pluginJarPathsUnknownEnabledPluginReturnsError() {
+        val result = pluginJarPaths(mapOf("unknown-plugin" to true), kotlinHome)
+
+        assertNull(result.get())
+        val error = assertNotNull(result.getError())
+        assertEquals("unknown-plugin", error.name)
+    }
+
     // --- parseKotlinHome ---
 
     @Test

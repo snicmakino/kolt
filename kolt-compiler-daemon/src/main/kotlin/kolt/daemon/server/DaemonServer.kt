@@ -216,6 +216,21 @@ class DaemonServer(
         // held a `workingDir = projectRoot` placeholder here; B-2b retires
         // that by pointing workingDir at daemon-owned state under
         // `icRoot / kotlinVersion / sha256(projectRoot)`.
+        //
+        // ADR 0019 §9 + #65: `request.extraArgs` is intentionally NOT
+        // forwarded. The native client packs `-jvm-target N` and the
+        // legacy `-Xplugin=...` plugin args into `extraArgs` for the
+        // subprocess fallback path, which execs raw kotlinc and needs
+        // them. The daemon path uses structured channels instead:
+        // - plugins flow through `--plugin-jars` → `pluginJarResolver` →
+        //   `PluginTranslator` → `COMPILER_PLUGINS` (BTA's structured
+        //   plugin list).
+        // - jvm target is hard-coded by the daemon's BTA setup.
+        // Honouring `extraArgs` here would re-attach `-Xplugin=` as a
+        // free-text compiler arg on top of the structured `CompilerPlugin`
+        // list, double-loading the plugin classpath. If a future change
+        // wants to forward subset args, it MUST filter `-Xplugin=` first
+        // (or the native client must stop emitting it on the daemon path).
         return IcRequest(
             projectId = IcStateLayout.projectIdFor(projectRoot),
             projectRoot = projectRoot,

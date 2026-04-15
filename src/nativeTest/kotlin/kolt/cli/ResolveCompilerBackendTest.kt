@@ -57,7 +57,7 @@ class ResolveCompilerBackendTest {
             absProjectPath = absProject,
             preconditionResolver = { _, _, _ -> error("must not resolve preconditions when useDaemon=false") },
             daemonDirCreator = { error("must not create daemon dir when useDaemon=false") },
-            daemonBackendFactory = { error("must not construct daemon backend when useDaemon=false") },
+            daemonBackendFactory = { _, _ -> error("must not construct daemon backend when useDaemon=false") },
             warningSink = { warnings.add(it) },
         )
 
@@ -78,7 +78,7 @@ class ResolveCompilerBackendTest {
                 Err(DaemonPreconditionError.DaemonJarMissing)
             },
             daemonDirCreator = { error("must not create daemon dir after precondition failure") },
-            daemonBackendFactory = { error("must not construct daemon backend after precondition failure") },
+            daemonBackendFactory = { _, _ -> error("must not construct daemon backend after precondition failure") },
             warningSink = { warnings.add(it) },
         )
 
@@ -113,7 +113,7 @@ class ResolveCompilerBackendTest {
                 )
             },
             daemonDirCreator = { error("must not create daemon dir after precondition failure") },
-            daemonBackendFactory = { error("must not construct daemon backend after precondition failure") },
+            daemonBackendFactory = { _, _ -> error("must not construct daemon backend after precondition failure") },
             warningSink = { warnings.add(it) },
         )
 
@@ -145,12 +145,46 @@ class ResolveCompilerBackendTest {
             absProjectPath = absProject,
             preconditionResolver = { _, _, _ -> Ok(okSetup) },
             daemonDirCreator = { Err(MkdirFailed(okSetup.daemonDir)) },
-            daemonBackendFactory = { error("must not construct daemon backend after mkdir failure") },
+            daemonBackendFactory = { _, _ -> error("must not construct daemon backend after mkdir failure") },
             warningSink = { warnings.add(it) },
         )
 
         assertSame(subprocess, backend)
         assertEquals(listOf(WARNING_DAEMON_DIR_UNWRITABLE), warnings)
+    }
+
+    // #65 native client wiring: the `pluginJars` map flows through
+    // `resolveCompilerBackend` into `daemonBackendFactory` verbatim, so the
+    // daemon backend can serialise it onto `--plugin-jars` when it spawns
+    // the JVM. Pinning the pass-through here means a future contributor
+    // cannot silently drop the wiring between `doBuild` and the daemon
+    // spawn — the JVM build path's plugin support depends on it.
+    @Test
+    fun pluginJarsArgumentIsForwardedToDaemonBackendFactory() {
+        val warnings = mutableListOf<String>()
+        var capturedPluginJars: Map<String, List<String>>? = null
+        val pluginJars = mapOf(
+            "serialization" to listOf("/fake/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar"),
+        )
+        val backend = resolveCompilerBackend(
+            config = config,
+            paths = paths,
+            subprocessBackend = subprocess,
+            useDaemon = true,
+            absProjectPath = absProject,
+            pluginJars = pluginJars,
+            preconditionResolver = { _, _, _ -> Ok(okSetup) },
+            daemonDirCreator = { Ok(Unit) },
+            daemonBackendFactory = { _, jars ->
+                capturedPluginJars = jars
+                daemonSentinel
+            },
+            warningSink = { warnings.add(it) },
+        )
+
+        assertEquals(emptyList(), warnings)
+        assertNotNull(backend as? FallbackCompilerBackend)
+        assertEquals(pluginJars, capturedPluginJars)
     }
 
     @Test
@@ -172,7 +206,7 @@ class ResolveCompilerBackendTest {
                 assertEquals(okSetup.daemonDir, dir)
                 Ok(Unit)
             },
-            daemonBackendFactory = { setup ->
+            daemonBackendFactory = { setup, _ ->
                 createdFrom = setup
                 daemonSentinel
             },
@@ -188,6 +222,54 @@ class ResolveCompilerBackendTest {
         assertSame(daemonSentinel, fallback.primary)
         assertSame(subprocess, fallback.fallback)
         assertEquals(okSetup, createdFrom)
+    }
+
+    // #65 native client wiring: editing kolt.toml [plugins] between builds
+    // must NOT reuse a warm daemon spawned with a stale plugin set. The
+    // socket and log paths get a plugin-set fingerprint suffix so a
+    // different plugin set probes a different (absent) socket and trips
+    // the ENOENT spawn path in DaemonCompilerBackend.connectOrSpawn.
+    @Test
+    fun pluginsFingerprintIsStableForSamePluginMap() {
+        val a = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")))
+        val b = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")))
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun pluginsFingerprintIsOrderInsensitiveOnAliases() {
+        // Iteration order of a caller's map must not affect the fingerprint —
+        // otherwise a future caller swapping a `linkedMapOf` for a `mapOf`
+        // would orphan all warm daemons for no semantic change.
+        val a = pluginsFingerprint(linkedMapOf("a" to listOf("/x"), "b" to listOf("/y")))
+        val b = pluginsFingerprint(linkedMapOf("b" to listOf("/y"), "a" to listOf("/x")))
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun pluginsFingerprintChangesWhenAClasspathChanges() {
+        val a = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.0.jar")))
+        val b = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.1.jar")))
+        assertTrue(a != b, "version bump should change fingerprint, both=$a")
+    }
+
+    @Test
+    fun pluginsFingerprintEmptyMapHasFixedMarker() {
+        // The no-plugin path must collapse to a single, stable bucket so the
+        // common case keeps a single warm daemon across repeated builds.
+        assertEquals("noplugins", pluginsFingerprint(emptyMap()))
+    }
+
+    @Test
+    fun applyPluginsFingerprintInsertsBeforeExtension() {
+        assertEquals(
+            "/fake/daemon/dir/daemon-abcd1234.sock",
+            applyPluginsFingerprintToFile("/fake/daemon/dir/daemon.sock", "abcd1234"),
+        )
+        assertEquals(
+            "/fake/daemon/dir/daemon-abcd1234.log",
+            applyPluginsFingerprintToFile("/fake/daemon/dir/daemon.log", "abcd1234"),
+        )
     }
 
     private class SentinelBackend(val tag: String) : CompilerBackend {

@@ -108,6 +108,64 @@ class PluginTranslatorTest {
         assertTrue(plugins.isEmpty())
     }
 
+    // #65 native client wiring: allopen / noarg join serialization in the
+    // alias map so the JVM build path can enable them via kolt.toml. The
+    // plugin IDs are the stock Kotlin compiler ones (`org.jetbrains.kotlin.
+    // allopen`, `org.jetbrains.kotlin.noarg`) — not vendor-renamed — so a
+    // future bump of the kolt-compiler-daemon kotlin version does not need
+    // to revisit this map.
+    @Test
+    fun `allopen plugin entry is translated to the stock allopen CompilerPlugin id`() {
+        val projectRoot = Files.createTempDirectory("plugin-translator-allopen-")
+        projectRoot.resolve("kolt.toml").writeText(
+            """
+            name = "demo"
+            version = "0.1.0"
+            kotlin = "2.3.20"
+            target = "jvm"
+            main = "demo.Main"
+            sources = ["src/main/kotlin"]
+
+            [plugins]
+            allopen = true
+            """.trimIndent(),
+        )
+        val fakeJar = Path.of("/fake/allopen-compiler-plugin.jar")
+        val plugins = PluginTranslator.translate(
+            projectRoot = projectRoot,
+            jarResolver = { name -> if (name == "allopen") listOf(fakeJar) else emptyList() },
+        )
+        assertEquals(1, plugins.size)
+        assertEquals(PluginTranslator.ALLOPEN_PLUGIN_ID, plugins.single().pluginId)
+        assertEquals(listOf(fakeJar), plugins.single().classpath)
+    }
+
+    @Test
+    fun `noarg plugin entry is translated to the stock noarg CompilerPlugin id`() {
+        val projectRoot = Files.createTempDirectory("plugin-translator-noarg-")
+        projectRoot.resolve("kolt.toml").writeText(
+            """
+            name = "demo"
+            version = "0.1.0"
+            kotlin = "2.3.20"
+            target = "jvm"
+            main = "demo.Main"
+            sources = ["src/main/kotlin"]
+
+            [plugins]
+            noarg = true
+            """.trimIndent(),
+        )
+        val fakeJar = Path.of("/fake/noarg-compiler-plugin.jar")
+        val plugins = PluginTranslator.translate(
+            projectRoot = projectRoot,
+            jarResolver = { name -> if (name == "noarg") listOf(fakeJar) else emptyList() },
+        )
+        assertEquals(1, plugins.size)
+        assertEquals(PluginTranslator.NOARG_PLUGIN_ID, plugins.single().pluginId)
+        assertEquals(listOf(fakeJar), plugins.single().classpath)
+    }
+
     @Test
     fun `unresolved plugin jar produces an empty classpath but still emits a CompilerPlugin`() {
         // An empty classpath from the resolver does not mean "skip this plugin":

@@ -87,6 +87,11 @@ class DaemonCompilerBackend internal constructor(
     private val btaImplJars: List<String>,
     private val socketPath: String,
     private val logPath: String? = null,
+    // ADR 0019 §9 + #65: enabled `kolt.toml [plugins]` alias → compiler
+    // plugin classpath. Serialised onto `--plugin-jars` when spawning the
+    // daemon (see Main.parsePluginJars). Empty map omits the flag entirely
+    // so the common no-plugin path stays trivial.
+    private val pluginJars: Map<String, List<String>> = emptyMap(),
     private val connector: DaemonConnector = defaultDaemonConnector,
     private val spawner: DaemonSpawner = defaultDaemonSpawner,
     private val clockMs: () -> Long = ::monotonicMs,
@@ -100,6 +105,7 @@ class DaemonCompilerBackend internal constructor(
         btaImplJars: List<String>,
         socketPath: String,
         logPath: String? = null,
+        pluginJars: Map<String, List<String>> = emptyMap(),
     ) : this(
         javaBin = javaBin,
         daemonJarPath = daemonJarPath,
@@ -107,6 +113,7 @@ class DaemonCompilerBackend internal constructor(
         btaImplJars = btaImplJars,
         socketPath = socketPath,
         logPath = logPath,
+        pluginJars = pluginJars,
         connector = defaultDaemonConnector,
         spawner = defaultDaemonSpawner,
     )
@@ -191,6 +198,14 @@ class DaemonCompilerBackend internal constructor(
         add(compilerJars.joinToString(":"))
         add("--bta-impl-jars")
         add(btaImplJars.joinToString(":"))
+        if (pluginJars.isNotEmpty()) {
+            add("--plugin-jars")
+            add(
+                pluginJars.entries.joinToString(";") { (alias, cp) ->
+                    "$alias=${cp.joinToString(":")}"
+                },
+            )
+        }
     }
 
     companion object {

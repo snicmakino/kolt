@@ -131,12 +131,20 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
     }
 
     val subprocessBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
+    // #65 native client wiring: alias → plugin jar classpath fed to the
+    // daemon via `--plugin-jars`. The subprocess fallback still picks up
+    // plugins through `-Xplugin=...` in extraArgs (`pArgs`); the daemon
+    // ignores extraArgs entirely (DaemonServer.toIcRequest drops the
+    // field) and reads the plugin classpath from this map instead, so
+    // the two channels coexist without double-loading.
+    val pluginJarsForDaemon = resolvePluginJarsMap(config, managedKotlincBin)
     val backend: CompilerBackend = resolveCompilerBackend(
         config = config,
         paths = paths,
         subprocessBackend = subprocessBackend,
         useDaemon = useDaemon,
         absProjectPath = cwd,
+        pluginJars = pluginJarsForDaemon,
     )
     // Sources and outputPath are relative to the project root in
     // kolt.toml. The subprocess backend inherits cwd via fork+exec,
@@ -566,10 +574,17 @@ internal fun resolveCompilerBackend(
     subprocessBackend: CompilerBackend,
     useDaemon: Boolean,
     absProjectPath: String,
+    // #65 native client wiring: enabled `kolt.toml [plugins]` alias →
+    // compiler plugin jar classpath. The map is built by the caller
+    // (doBuild) so resolveCompilerBackend stays decoupled from the
+    // concrete jar lookup mechanism (kotlinc sidecar today, Maven fetch
+    // once the rest of #65 lands). An empty map means "no plugins" and
+    // collapses to spawnArgv omitting `--plugin-jars` entirely.
+    pluginJars: Map<String, List<String>> = emptyMap(),
     preconditionResolver: (KoltPaths, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
         { p, kotlincVersion, cwd -> resolveDaemonPreconditions(p, kotlincVersion, cwd) },
     daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
-    daemonBackendFactory: (DaemonSetup) -> CompilerBackend = ::createDaemonBackend,
+    daemonBackendFactory: (DaemonSetup, Map<String, List<String>>) -> CompilerBackend = ::createDaemonBackend,
     warningSink: (String) -> Unit = ::eprintln,
 ): CompilerBackend {
     if (!useDaemon) return subprocessBackend
@@ -592,20 +607,74 @@ internal fun resolveCompilerBackend(
     }
 
     return FallbackCompilerBackend(
-        primary = daemonBackendFactory(setup),
+        primary = daemonBackendFactory(setup, pluginJars),
         fallback = subprocessBackend,
         onFallback = ::reportFallback,
     )
 }
 
-internal fun createDaemonBackend(setup: DaemonSetup): CompilerBackend = DaemonCompilerBackend(
-    javaBin = setup.javaBin,
-    daemonJarPath = setup.daemonJarPath,
-    compilerJars = setup.compilerJars,
-    btaImplJars = setup.btaImplJars,
-    socketPath = setup.socketPath,
-    logPath = setup.logPath,
-)
+internal fun createDaemonBackend(
+    setup: DaemonSetup,
+    pluginJars: Map<String, List<String>>,
+): CompilerBackend {
+    // #65 native client wiring: a daemon spawned with one plugin set keeps
+    // that set for its entire JVM lifetime (`--plugin-jars` is parsed once
+    // in `Main.parseArgs` and stored on `CliArgs.pluginJars`). If the user
+    // edits `kolt.toml [plugins]` between builds, naively reusing the same
+    // socket would attach the warm daemon's stale plugin classpath — for an
+    // alias that wasn't in the original spawn, `pluginJarResolver` returns
+    // `emptyList()` and `PluginTranslator` emits a `CompilerPlugin` with an
+    // empty classpath, which BTA either silently drops or fails on with a
+    // diagnostic unrelated to the user's source.
+    //
+    // Mixing a plugin-set fingerprint into the socket / log filename forces
+    // a different (and absent) socket on a plugin-set change, which in turn
+    // trips the ENOENT path in `connectOrSpawn` and spawns a fresh daemon
+    // with the new args. The old daemon stays running on its own socket
+    // until it idles out (or the next reaper sweep) — harmless: the
+    // ADR 0016 socket layout already isolates per-project state.
+    val fp = pluginsFingerprint(pluginJars)
+    val socketPath = applyPluginsFingerprintToFile(setup.socketPath, fp)
+    val logPath = applyPluginsFingerprintToFile(setup.logPath, fp)
+    return DaemonCompilerBackend(
+        javaBin = setup.javaBin,
+        daemonJarPath = setup.daemonJarPath,
+        compilerJars = setup.compilerJars,
+        btaImplJars = setup.btaImplJars,
+        socketPath = socketPath,
+        logPath = logPath,
+        pluginJars = pluginJars,
+    )
+}
+
+// Stable 8-hex SHA-256 prefix over the canonicalised plugin map. Sorting
+// the alias keys means iteration order does not affect the fingerprint;
+// the inner classpath order IS significant because BTA treats it as the
+// plugin's own classpath order. Empty input collapses to a fixed marker
+// so the no-plugin path keeps a single socket name.
+internal fun pluginsFingerprint(pluginJars: Map<String, List<String>>): String {
+    if (pluginJars.isEmpty()) return "noplugins"
+    val canonical = pluginJars.entries
+        .sortedBy { it.key }
+        .joinToString(";") { (alias, cp) -> "$alias=${cp.joinToString(":")}" }
+    return kolt.infra.sha256Hex(canonical.encodeToByteArray()).take(8)
+}
+
+// Inserts `-<fingerprint>` between the filename stem and its extension so
+// both `daemon.sock` and `daemon.log` become `daemon-<fp>.sock` /
+// `daemon-<fp>.log`. Confined to this helper so KoltPaths does not need
+// to learn about the plugin channel.
+internal fun applyPluginsFingerprintToFile(path: String, fingerprint: String): String {
+    val slash = path.lastIndexOf('/')
+    val dir = if (slash >= 0) path.substring(0, slash + 1) else ""
+    val name = if (slash >= 0) path.substring(slash + 1) else path
+    val dot = name.lastIndexOf('.')
+    return if (dot > 0) {
+        "$dir${name.substring(0, dot)}-$fingerprint${name.substring(dot)}"
+    } else {
+        "$dir$name-$fingerprint"
+    }
+}
 
 internal fun createResolverDeps() = object : ResolverDeps {
     override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)

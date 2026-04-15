@@ -69,6 +69,7 @@ private fun newBackend(
     connector: DaemonConnector,
     spawner: DaemonSpawner = { _, _ -> Ok(Unit) },
     clock: FakeClock = FakeClock(),
+    pluginJars: Map<String, List<String>> = emptyMap(),
 ): DaemonCompilerBackend = DaemonCompilerBackend(
     javaBin = "/opt/jdk/bin/java",
     daemonJarPath = "/opt/kolt/libexec/kolt-compiler-daemon-all.jar",
@@ -76,6 +77,7 @@ private fun newBackend(
     btaImplJars = listOf("/opt/kolt/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
     socketPath = "/tmp/kolt-daemon-test.sock",
     logPath = "/tmp/kolt-daemon-test.log",
+    pluginJars = pluginJars,
     connector = connector,
     spawner = spawner,
     clockMs = clock.clock,
@@ -293,6 +295,106 @@ class DaemonCompilerBackendConnectAndSpawnTest {
             argv[flagIdx + 1].contains("kotlin-build-tools-impl"),
             "--bta-impl-jars value must contain kotlin-build-tools-impl jar, got: ${argv[flagIdx + 1]}",
         )
+    }
+
+    // #65 native client wiring: when kolt.toml [plugins] is empty (or all
+    // disabled) the native client must NOT pass --plugin-jars to the daemon.
+    // The daemon parser collapses an absent flag to an empty map, so omitting
+    // the flag is the canonical "no plugins" wire shape and avoids any risk of
+    // a malformed entry in the common path.
+    @Test
+    fun spawnArgvOmitsPluginJarsFlagWhenEmpty() {
+        var captured: List<String>? = null
+        var attempt = 0
+        val connector: DaemonConnector = { path ->
+            attempt++
+            if (attempt == 1) {
+                Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+            } else {
+                Ok(FakeConnection())
+            }
+        }
+        val backend = newBackend(
+            connector = connector,
+            spawner = { argv, _ -> captured = argv; Ok(Unit) },
+            pluginJars = emptyMap(),
+        )
+
+        backend.compile(sampleRequest())
+
+        val argv = assertNotNull(captured)
+        assertFalse(
+            argv.contains("--plugin-jars"),
+            "spawnArgv must omit --plugin-jars when no plugins are enabled, got: $argv",
+        )
+    }
+
+    // #65 native client wiring: a single enabled plugin must be serialised as
+    // `alias=cp1:cp2` (':' on linuxX64 == File.pathSeparator on the daemon
+    // side, see Main.kt:160). Pinning the wire format in a unit test means
+    // a future contributor cannot silently desync the two sides without
+    // failing CI.
+    @Test
+    fun spawnArgvSerialisesSinglePluginWithColonSeparatedClasspath() {
+        var captured: List<String>? = null
+        var attempt = 0
+        val connector: DaemonConnector = { path ->
+            attempt++
+            if (attempt == 1) {
+                Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+            } else {
+                Ok(FakeConnection())
+            }
+        }
+        val backend = newBackend(
+            connector = connector,
+            spawner = { argv, _ -> captured = argv; Ok(Unit) },
+            pluginJars = mapOf("serialization" to listOf("/kt/lib/ser1.jar", "/kt/lib/ser2.jar")),
+        )
+
+        backend.compile(sampleRequest())
+
+        val argv = assertNotNull(captured)
+        val flagIdx = argv.indexOf("--plugin-jars")
+        assertTrue(flagIdx >= 0, "spawnArgv must include --plugin-jars, got: $argv")
+        assertEquals("serialization=/kt/lib/ser1.jar:/kt/lib/ser2.jar", argv[flagIdx + 1])
+    }
+
+    // #65 native client wiring: multiple aliases are joined with ';' so that
+    // the daemon's parsePluginJars can re-split them. The serialised order
+    // mirrors the input map's iteration order — `linkedMapOf` is used here
+    // and `resolvePluginJarsMap` returns a `LinkedHashMap` in production, so
+    // the assertion below pins the exact wire string. A future caller that
+    // hands `DaemonCompilerBackend` a non-LinkedHashMap would break this
+    // test, which is the point: that change would also break the
+    // pluginsFingerprint stability and the warm-daemon reuse story.
+    @Test
+    fun spawnArgvSerialisesMultiplePluginsSemicolonSeparated() {
+        var captured: List<String>? = null
+        var attempt = 0
+        val connector: DaemonConnector = { path ->
+            attempt++
+            if (attempt == 1) {
+                Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+            } else {
+                Ok(FakeConnection())
+            }
+        }
+        val backend = newBackend(
+            connector = connector,
+            spawner = { argv, _ -> captured = argv; Ok(Unit) },
+            pluginJars = linkedMapOf(
+                "serialization" to listOf("/p/ser.jar"),
+                "allopen" to listOf("/p/open.jar"),
+            ),
+        )
+
+        backend.compile(sampleRequest())
+
+        val argv = assertNotNull(captured)
+        val flagIdx = argv.indexOf("--plugin-jars")
+        assertTrue(flagIdx >= 0, "spawnArgv must include --plugin-jars, got: $argv")
+        assertEquals("serialization=/p/ser.jar;allopen=/p/open.jar", argv[flagIdx + 1])
     }
 
     @Test

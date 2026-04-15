@@ -3,6 +3,7 @@ package kolt.cli
 import com.github.michaelbull.result.getOrElse
 import kolt.build.parseKotlinHome
 import kolt.build.pluginArgs
+import kolt.build.pluginJarPaths
 import kolt.config.KoltConfig
 import kolt.infra.eprintln
 import kolt.infra.executeAndCapture
@@ -35,6 +36,27 @@ internal fun resolvePluginArgs(config: KoltConfig, managedKotlincBin: String? = 
         resolveKotlinHome()
     }
     return pluginArgs(config.plugins, kotlinHome).getOrElse { error ->
+        eprintln("error: unknown plugin '${error.name}'")
+        exitProcess(EXIT_CONFIG_ERROR)
+    }
+}
+
+// #65 daemon path: alias → resolved plugin jar classpath, ready to be
+// handed to `resolveCompilerBackend(pluginJars=...)` and serialised on
+// `--plugin-jars` by `DaemonCompilerBackend`. Returns an empty map when
+// no plugins are enabled so the no-plugin path is free for both the
+// daemon and the subprocess fallback. The kotlinc lookup is the same
+// sidecar path `resolvePluginArgs` uses today; future Maven fetcher
+// work (rest of #65) is a single-callsite swap.
+internal fun resolvePluginJarsMap(
+    config: KoltConfig,
+    managedKotlincBin: String,
+): Map<String, List<String>> {
+    // No early return on `config.plugins.isEmpty()`: `pluginJarPaths`
+    // already filters disabled entries and returns an empty map for an
+    // empty input, which is the same shape this helper would emit.
+    val kotlinHome = parseKotlinHome(managedKotlincBin)
+    return pluginJarPaths(config.plugins, kotlinHome).getOrElse { error ->
         eprintln("error: unknown plugin '${error.name}'")
         exitProcess(EXIT_CONFIG_ERROR)
     }
