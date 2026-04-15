@@ -108,11 +108,21 @@ class BtaIncrementalCompiler private constructor(
         // — the wire protocol does not carry a dirty-file delta (§4), and
         // `kolt watch` (#15) is the future place where `SourcesChanges.Known`
         // would show up. `dependenciesSnapshotFiles` is empty for now: per-
-        // entry `ClasspathEntrySnapshot` computation is filed as a B-2b
-        // follow-up commit in the same PR, because the shipping first-cut
-        // handles the source-only iterative-edit case (the bimodal IC win
-        // the spike measured), and classpath changes go through kolt's
-        // existing BuildCache gate before they ever reach the daemon.
+        // entry `ClasspathEntrySnapshot` computation is filed as a post-B-2
+        // follow-up, because the shipping first-cut handles the source-only
+        // iterative-edit case (the bimodal IC win the spike measured), and
+        // classpath changes go through kolt's existing BuildCache gate
+        // before they ever reach the daemon.
+        //
+        // `shrunkClasspathSnapshot` is still a required argument to
+        // `snapshotBasedIcConfigurationBuilder`, so we pass a daemon-owned
+        // path under `workingDir`. With empty `dependenciesSnapshotFiles`
+        // there is nothing for BTA to shrink, and the impl in 2.3.20 may
+        // never create the file — the spike observed a 4-byte empty
+        // snapshot when deps were empty. The file name is promoted to the
+        // `SHRUNK_CLASSPATH_SNAPSHOT` constant so the post-B-2 reaper (and
+        // any future debugging session that wonders why this file
+        // occasionally does not exist) can recognise it.
         val shrunkClasspathSnapshot = request.workingDir.resolve(SHRUNK_CLASSPATH_SNAPSHOT)
         val icConfig = builder.snapshotBasedIcConfigurationBuilder(
             workingDirectory = request.workingDir,

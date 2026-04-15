@@ -38,7 +38,8 @@ internal data class CliArgs(
     // by the daemon rather than failing startup. `MainCliArgsTest` pins the
     // flag as required so a future contributor cannot silently remove it
     // from the parser without updating the native-client spawn argv in lock-
-    // step.
+    // step. TODO(B-2c): either consume this list (plugin plumbing) or
+    // retire the flag with a coordinated native-client argv change.
     val compilerJars: List<File>,
     val btaImplJars: List<File>,
     // Override for the daemon-owned IC state root (ADR 0019 §5). Defaults
