@@ -7,6 +7,7 @@ import com.github.michaelbull.result.mapBoth
 import kolt.daemon.ic.BtaIncrementalCompiler
 import kolt.daemon.ic.SelfHealingIncrementalCompiler
 import kolt.daemon.ic.StderrIcMetricsSink
+import kolt.daemon.reaper.IcReaper
 import kolt.daemon.server.DaemonConfig
 import kolt.daemon.server.DaemonServer
 import java.io.File
@@ -119,12 +120,20 @@ fun main(args: Array<String>) {
         metrics = metrics,
     )
 
+    // ADR 0019 §Negative follow-up (#125): fire the IC reaper on a
+    // detached thread right after the daemon has bound its socket but
+    // before it starts serving compiles. Cleanup never blocks the
+    // first compile; a reaper failure is logged via `metrics` and
+    // swallowed by DaemonServer's `runCatching` around `preServeHook`.
     val server = DaemonServer(
         socketPath = cli.socketPath,
         compiler = compiler,
         icRoot = cli.icRoot,
         kotlinVersion = KOLT_DAEMON_KOTLIN_VERSION,
         config = DaemonConfig(),
+        preServeHook = {
+            IcReaper.runDetached(cli.icRoot, KOLT_DAEMON_KOTLIN_VERSION, metrics)
+        },
     )
     val reason = server.serve().mapBoth(
         success = { it },

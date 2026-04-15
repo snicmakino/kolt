@@ -60,6 +60,14 @@ class DaemonServer(
     // the single source of truth.
     private val kotlinVersion: String,
     private val config: DaemonConfig = DaemonConfig(),
+    // Fires once in `serve()` after the socket is bound and before the
+    // accept loop starts, on the server thread. Main.kt uses this to
+    // kick the IC reaper (ADR 0019 §Negative follow-up) on a detached
+    // background thread so the initial compile is never blocked on
+    // cleanup. Defaults to a no-op so tests that do not care can stay
+    // terse. Any throwable out of the hook is swallowed so a reaper
+    // failure cannot abort daemon startup.
+    private val preServeHook: () -> Unit = {},
 ) {
     private val stopRequested = AtomicBoolean(false)
     private val compilesServed = AtomicInteger(0)
@@ -91,6 +99,7 @@ class DaemonServer(
         }
 
         serverChannel = server
+        runCatching { preServeHook() }
         val watchdog = startWatchdog()
         try {
             server.use {

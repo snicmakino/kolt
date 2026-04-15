@@ -15,6 +15,7 @@ import java.nio.channels.Channels
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -22,6 +23,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class DaemonLifecycleTest {
 
@@ -111,6 +113,82 @@ class DaemonLifecycleTest {
 
         serverThread.join(5_000)
         assertEquals(false, serverThread.isAlive, "server should have exited after idle timeout")
+    }
+
+    @Test
+    fun `preServeHook fires exactly once after bind and before accept loop`() {
+        val hookCalls = AtomicInteger(0)
+        server = DaemonServer(
+            socketPath = socketPath,
+            compiler = alwaysSuccess(),
+            icRoot = icRoot,
+            kotlinVersion = "2.3.20",
+            config = DaemonConfig(
+                idleTimeoutMillis = 500,
+                maxCompiles = Int.MAX_VALUE,
+                heapWatermarkBytes = Long.MAX_VALUE,
+            ),
+            preServeHook = {
+                // Socket must already exist when the hook fires — this
+                // is the ordering ADR 0019 §Negative relies on so that
+                // the IC reaper never races with a client connection
+                // attempt.
+                assertTrue(Files.exists(socketPath), "socket must be bound before hook fires")
+                hookCalls.incrementAndGet()
+            },
+        )
+        serverThread = Thread({ server.serve() }, "daemon-pre-serve-hook").apply {
+            isDaemon = true
+            start()
+        }
+        waitForSocket()
+        // Hook must fire synchronously between bind and accept loop, so
+        // the socket existing already proves the hook ran exactly once.
+        // Asserting here (before idle-driven shutdown) keeps the test
+        // independent of watchdog timing.
+        assertEquals(1, hookCalls.get(), "preServeHook must fire exactly once per serve()")
+    }
+
+    @Test
+    fun `serve swallows preServeHook failures and keeps serving`() {
+        val compiler = alwaysSuccess()
+        server = DaemonServer(
+            socketPath = socketPath,
+            compiler = compiler,
+            icRoot = icRoot,
+            kotlinVersion = "2.3.20",
+            config = DaemonConfig(
+                idleTimeoutMillis = 60_000,
+                maxCompiles = 1,
+                heapWatermarkBytes = Long.MAX_VALUE,
+            ),
+            preServeHook = { throw RuntimeException("reaper blew up") },
+        )
+        serverThread = Thread({ server.serve() }, "daemon-hook-failure").apply {
+            isDaemon = true
+            start()
+        }
+        waitForSocket()
+
+        SocketChannel.open(StandardProtocolFamily.UNIX).use { ch ->
+            ch.connect(UnixDomainSocketAddress.of(socketPath))
+            val input = Channels.newInputStream(ch)
+            val output = Channels.newOutputStream(ch)
+            FrameCodec.writeFrame(
+                output,
+                Message.Compile(
+                    workingDir = "/w",
+                    classpath = emptyList(),
+                    sources = listOf("A.kt"),
+                    outputPath = "build/classes",
+                    moduleName = "m",
+                ),
+            )
+            FrameCodec.readFrame(input)
+        }
+
+        serverThread.join(2_000)
+        assertFalse(serverThread.isAlive, "server should have served the compile despite hook failure")
     }
 
     @Test

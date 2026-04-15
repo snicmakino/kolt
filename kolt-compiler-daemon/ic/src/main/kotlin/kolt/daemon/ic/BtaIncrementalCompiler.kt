@@ -18,8 +18,13 @@ import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperatio
 import org.jetbrains.kotlin.buildtools.api.trackers.BuildMetricsCollector
 import java.io.File
 import java.net.URLClassLoader
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.DurationUnit
 import kotlin.time.TimeSource
 
@@ -62,6 +67,22 @@ class BtaIncrementalCompiler private constructor(
     private val metrics: IcMetricsSink,
 ) : IncrementalCompiler {
 
+    // Advisory `flock` held on `<workingDir>/LOCK` for the daemon
+    // process lifetime, keyed by `workingDir`. The IC reaper probes
+    // `tryLock` on the same file; a held entry here means "this dir is
+    // in use" and the reaper will skip it.
+    //
+    // Each entry caches both the `FileLock` and the backing
+    // `FileChannel`. When `SelfHealingIncrementalCompiler` wipes
+    // `workingDir` after a corruption, the LOCK file on disk is also
+    // deleted — the cached entry then points at a dead inode and the
+    // next compile must close the stale channel and re-acquire the
+    // lock against the freshly-created file. A naive "cache by
+    // containsKey" short-circuit would leave the daemon holding a dead
+    // lock for the rest of its lifetime.
+    private class HeldLock(val channel: FileChannel, val lock: FileLock)
+    private val heldLocks: MutableMap<Path, HeldLock> = ConcurrentHashMap()
+
     override fun compile(request: IcRequest): Result<IcResponse, IcError> =
         try {
             executeCompile(request)
@@ -84,8 +105,35 @@ class BtaIncrementalCompiler private constructor(
         // not learn which project is compiling until the first request
         // arrives. `createDirectories` is a no-op if the tree already
         // exists, which is the common case for every non-initial request.
-        val wasEmptyBeforeCompile = isEmptyDir(request.workingDir)
         Files.createDirectories(request.workingDir)
+        val btaWorkingDir = request.workingDir.resolve(BTA_SUBDIR)
+        val wasEmptyBeforeCompile = isEmptyDir(btaWorkingDir)
+        Files.createDirectories(btaWorkingDir)
+
+        // ADR 0019 §Negative follow-up (IC reaper): drop a `project.path`
+        // breadcrumb next to BTA state so the reaper can decide whether
+        // this projectId's source tree still exists. Idempotent on every
+        // compile — overwrite is cheap and resilient to a truncation by
+        // the self-heal path. Failure to write is logged as a reaper
+        // concern and does not fail the compile.
+        // ADR 0019 §Negative follow-up (IC reaper): drop a `project.path`
+        // breadcrumb next to the BTA subdir so the reaper can decide
+        // whether this projectId's source tree still exists. Kept
+        // above `btaWorkingDir` because BTA clears its workingDirectory
+        // on cold-path startup; a breadcrumb sitting inside BTA state
+        // would be swept away on every first compile.
+        runCatching {
+            Files.writeString(
+                request.workingDir.resolve(PROJECT_PATH_BREADCRUMB),
+                request.projectRoot.toString(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+            )
+        }.onFailure { metrics.record(METRIC_REAPER_BREADCRUMB_FAILED) }
+
+        runCatching { ensureLock(request.workingDir) }
+            .onFailure { metrics.record(METRIC_REAPER_LOCK_FAILED) }
 
         val builder = toolchain.jvm.jvmCompilationOperationBuilder(request.sources, request.outputDir)
         if (request.classpath.isNotEmpty()) {
@@ -122,9 +170,9 @@ class BtaIncrementalCompiler private constructor(
         // `SHRUNK_CLASSPATH_SNAPSHOT` constant so the post-B-2 reaper (and
         // any future debugging session that wonders why this file
         // occasionally does not exist) can recognise it.
-        val shrunkClasspathSnapshot = request.workingDir.resolve(SHRUNK_CLASSPATH_SNAPSHOT)
+        val shrunkClasspathSnapshot = btaWorkingDir.resolve(SHRUNK_CLASSPATH_SNAPSHOT)
         val icConfig = builder.snapshotBasedIcConfigurationBuilder(
-            workingDirectory = request.workingDir,
+            workingDirectory = btaWorkingDir,
             sourcesChanges = SourcesChanges.ToBeCalculated,
             dependenciesSnapshotFiles = emptyList(),
             shrunkClasspathSnapshot = shrunkClasspathSnapshot,
@@ -242,6 +290,39 @@ class BtaIncrementalCompiler private constructor(
         // already URL/FS-safe enough to serve as a kotlinc module name.
         "kolt-${request.projectId}"
 
+    private fun ensureLock(workingDir: Path) {
+        val lockPath = workingDir.resolve(LOCK_FILE)
+        val cached = heldLocks[workingDir]
+        if (cached != null && cached.lock.isValid && Files.isRegularFile(lockPath)) {
+            return
+        }
+        if (cached != null) {
+            // Stale cache entry: either the lock was released or
+            // `SelfHealingIncrementalCompiler` wiped the LOCK file when
+            // it cleaned `workingDir`. Close the dead channel and drop
+            // the entry so the next block re-acquires cleanly.
+            runCatching { cached.channel.close() }
+            heldLocks.remove(workingDir)
+        }
+        val channel = FileChannel.open(
+            lockPath,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.READ,
+            StandardOpenOption.WRITE,
+        )
+        val lock: FileLock? = try {
+            channel.tryLock()
+        } catch (_: OverlappingFileLockException) {
+            null
+        }
+        if (lock == null) {
+            channel.close()
+            metrics.record(METRIC_REAPER_LOCK_CONFLICT)
+            return
+        }
+        heldLocks[workingDir] = HeldLock(channel, lock)
+    }
+
     private fun isEmptyDir(workingDir: Path): Boolean {
         if (!Files.exists(workingDir)) return true
         if (!Files.isDirectory(workingDir)) return false
@@ -277,6 +358,16 @@ class BtaIncrementalCompiler private constructor(
         internal const val METRIC_LOG_WARN: String = "ic.log.warn"
         internal const val METRIC_LOG_INFO: String = "ic.log.info"
         internal const val METRIC_LOG_LIFECYCLE: String = "ic.log.lifecycle"
+
+        internal const val METRIC_REAPER_BREADCRUMB_FAILED: String = "reaper.breadcrumb_failed"
+        internal const val METRIC_REAPER_LOCK_FAILED: String = "reaper.lock_failed"
+        internal const val METRIC_REAPER_LOCK_CONFLICT: String = "reaper.lock_conflict"
+
+        // Layout constants are mirrored from `IcStateLayout` for call-
+        // site terseness. The authoritative definition is there.
+        private const val PROJECT_PATH_BREADCRUMB: String = IcStateLayout.BREADCRUMB_FILE
+        private const val LOCK_FILE: String = IcStateLayout.LOCK_FILE
+        private const val BTA_SUBDIR: String = IcStateLayout.BTA_SUBDIR
 
 
         // Loads kotlin-build-tools-impl from [btaImplJars] through a URLClassLoader

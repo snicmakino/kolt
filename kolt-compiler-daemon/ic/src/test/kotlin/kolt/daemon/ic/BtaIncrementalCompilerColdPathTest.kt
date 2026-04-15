@@ -9,7 +9,9 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
 import kotlin.io.path.extension
+import kotlin.io.path.readText
 import kotlin.io.path.walk
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -68,6 +70,15 @@ class BtaIncrementalCompilerColdPathTest {
         val classFiles = outputDir.walk().filter { it.extension == "class" }.toList()
         assertTrue(classFiles.isNotEmpty(), "expected at least one .class under $outputDir")
         assertTrue(classFiles.any { it.fileName.toString() == "Main.class" }, "expected fixture.Main.class in output: $classFiles")
+
+        // ADR 0019 §Negative follow-up — IC reaper coordination: the
+        // cold path must drop a `project.path` breadcrumb inside
+        // workingDir pointing at the request's projectRoot, so the
+        // reaper can distinguish live projectId dirs from stale ones
+        // after a project is moved or deleted.
+        val breadcrumb = workingDir.resolve("project.path")
+        assertTrue(breadcrumb.exists(), "expected project.path breadcrumb at $breadcrumb")
+        assertEquals(workRoot.toString(), breadcrumb.readText().trim())
     }
 
     // A user type error is the only BTA outcome that maps to CompilationFailed.
