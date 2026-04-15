@@ -103,6 +103,52 @@ executeAndCapture() -> Result<String, ProcessError>
 - Annotate POSIX API usage with `@OptIn(ExperimentalForeignApi::class)` at function level
 - Keep build/resolve functions pure where possible — push I/O to the edges (infra package)
 
+## Comment Discipline
+
+Default to no comments. If a comment doesn't fit one of the three categories below, delete it.
+
+### 1. Design invariants
+
+Constraints the code upholds; breaking them breaks the program.
+
+```kotlin
+// Invariant: up-to-date path must not hit the network.
+// Invariant: BFS prefers the newest version within the same artifact.
+// sha256 mismatch never triggers auto-redownload (supply-chain).
+```
+
+ADR pointers are the degenerate form. One-line pointer is correct; paraphrasing ADR prose is not.
+
+```kotlin
+// Invariant: daemon never loads plugin jars — see ADR 0021 §2.
+```
+
+### 2. Non-obvious "why not"
+
+Why a plausible approach was rejected. Not reconstructable from the code.
+
+```kotlin
+// Not traversing POM parent chain: unnecessary for Maven Central
+// and would blow up request count.
+```
+
+### 3. External-tool gotchas (with anchors)
+
+Undocumented behaviour of kotlinc / Maven Central / JUnit Platform / POSIX that the code depends on. **Must carry an anchor** (issue number, verified version, or bug URL). No anchor → delete.
+
+```kotlin
+// kotlinc -Xplugin breaks on paths with spaces (verified 2.1.0, KT-XXXXX).
+```
+
+### Always delete
+
+- Code narration ("call foo, then bar, then return")
+- Restating type / parameter / default from the signature
+- ADR paragraph summaries (collapse to a one-line pointer)
+- Repeated ADR citations on adjacent declarations (one at the top)
+- Section-heading KDoc (`### Seams`) over <10-line code blocks
+- Explanations of standard Kotlin / POSIX / JVM semantics
+
 ## Design References
 
 - [coursier](https://github.com/coursier/coursier) — Primary reference for transitive resolution: state-machine resolution (Done/Missing/Continue), exclusions (MinimizedExclusions), version intervals/constraints, immutable resolution state.

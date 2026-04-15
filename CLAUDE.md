@@ -15,6 +15,7 @@ Reads `kolt.toml`, compiles with `kotlinc`, and runs with `java -jar`.
 
 - **Exception throwing is prohibited** — use kotlin-result `Result<V, E>` for all error handling
 - **Follow TDD** (Red -> Green -> Refactor)
+- **Comments default to deletion** — keep only design invariants, "why-not" decisions, and anchored external-tool gotchas. See `/kolt-dev`.
 - **Write all code, comments, documentation, and commit messages in English**
 - Place test files in `src/nativeTest/kotlin/kolt/<package>/XxxTest.kt` mirroring main source structure
 - Annotate POSIX API usage with `@OptIn(ExperimentalForeignApi::class)` at function level
