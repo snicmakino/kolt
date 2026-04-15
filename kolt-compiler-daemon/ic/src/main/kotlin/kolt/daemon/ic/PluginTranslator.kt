@@ -38,10 +38,13 @@ object PluginTranslator {
     const val ALLOPEN_PLUGIN_ID = "org.jetbrains.kotlin.allopen"
     const val NOARG_PLUGIN_ID = "org.jetbrains.kotlin.noarg"
 
-    // Alias that kolt.toml users type. Aliases mirror the native client's
-    // `PLUGIN_JAR_NAMES` map in `kolt.build.CompilerPlugin` so a project's
-    // `[plugins]` section means the same thing on both the daemon and the
-    // subprocess fallback path.
+    // Alias that kolt.toml users type. The set of accepted aliases is
+    // kept in lock-step with the native client's plugin jar fetcher
+    // (`kolt.resolve.PluginJarFetcher`, the `serialization` / `allopen`
+    // / `noarg` alias map) so a project's `[plugins]` section means the
+    // same thing on the daemon, the subprocess fallback, and the native
+    // konanc path. There is no cross-module test pinning the two sides
+    // together today; adding one is filed as a #65 follow-up nit.
     private val aliasToPluginId: Map<String, String> = mapOf(
         "serialization" to SERIALIZATION_PLUGIN_ID,
         "allopen" to ALLOPEN_PLUGIN_ID,

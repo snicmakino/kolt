@@ -94,11 +94,19 @@ Two details follow from the split:
    the library path. Only the project klib goes through `-Xinclude`;
    everything else stays on `-l`.
 
-`resolveNativePluginArgs` (in `PluginSupport.kt`) short-circuits when
-no plugins are enabled, so plugin-less native projects do not pay the
-cost of provisioning the kotlinc sidecar. It is also invoked only after
-the `isBuildUpToDate` check in `doNativeBuild`, so cached builds skip
-plugin resolution entirely.
+`resolvePluginArgs` (in `PluginSupport.kt`) is invoked only after the
+`isBuildUpToDate` check in `doNativeBuild`, so cached builds skip plugin
+resolution entirely.
+
+**Superseded (2026-04-15, #65).** The original text of this paragraph
+named `resolveNativePluginArgs` and described a short-circuit that
+avoided provisioning the kotlinc sidecar when no plugins were enabled.
+Post-#65 the kotlinc sidecar is no longer consulted for plugin jars at
+all — `kolt.resolve.PluginJarFetcher` fetches them directly from Maven
+Central — so the short-circuit's cost-saving rationale no longer
+applies, `resolveNativePluginArgs` has been folded into
+`resolvePluginArgs`, and `doNativeBuild` / `doNativeTest` no longer
+call `ensureKotlincBin` at all.
 
 ## Consequences
 
@@ -136,14 +144,17 @@ plugin resolution entirely.
   projects. We did not measure the overhead explicitly; KGP takes the
   same shape and ships it to all users, so we are betting the overhead
   is dominated by the actual compilation cost.
-- **Kotlinc distribution is still provisioned as a sidecar for plugin
-  jar lookup.** `pluginArgs()` builds `-Xplugin=<kotlincHome>/lib/<plugin>.jar`,
-  so when a native project enables any plugin, `doNativeBuild` calls
-  `ensureKotlincBin` in addition to `ensureKonancBin`. Native-only
-  users who enable plugins therefore end up downloading a full kotlinc
-  distribution. A follow-up (#65) will resolve the plugin jars
-  directly from Maven Central by fixed coordinate to drop the kotlinc
-  sidecar.
+- ~~**Kotlinc distribution is still provisioned as a sidecar for plugin
+  jar lookup.**~~ **Resolved by #65 (2026-04-15).** The original text
+  noted that `pluginArgs()` built `-Xplugin=<kotlincHome>/lib/<plugin>.jar`
+  and that `doNativeBuild` therefore called `ensureKotlincBin` alongside
+  `ensureKonancBin`, forcing native-only users to download a full
+  kotlinc distribution just to enable any plugin. The #65 follow-up
+  introduced `kolt.resolve.PluginJarFetcher`, which pulls the shaded
+  compiler plugin jars directly from Maven Central by fixed coordinate
+  into `~/.kolt/cache` and serves them through the same seam to every
+  code path (JVM subprocess, JVM daemon, native konanc). Native builds
+  with plugins enabled now carry zero kotlinc dependency.
 - **`BuildState` still only tracks the final kexe mtime.** The
   intermediate klib at `build/<name>-klib/` is regenerated on every
   non-cached build; there is no caching between stages. This keeps
