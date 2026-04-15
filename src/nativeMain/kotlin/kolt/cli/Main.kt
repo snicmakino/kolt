@@ -35,7 +35,7 @@ fun main(args: Array<String>) {
                 val sep = all.indexOf("--")
                 if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
             }
-            val (config, classpath, _, javaPath) = doBuild(useDaemon = useDaemon)
+            val (config, classpath, javaPath) = doBuild(useDaemon = useDaemon)
             doRun(config, classpath, appArgs, javaPath)
         }
         "test" -> {

@@ -25,8 +25,7 @@ private const val KLS_CLASSPATH = "kls-classpath"
 internal data class BuildResult(
     val config: KoltConfig,
     val classpath: String?,
-    val pluginArgs: List<String> = emptyList(),
-    val javaPath: String? = null
+    val javaPath: String? = null,
 )
 
 internal fun loadProjectConfig(): KoltConfig {
@@ -56,7 +55,7 @@ internal fun doCheck(useDaemon: Boolean = true) {
     val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
 
     val classpath = resolveDependencies(config)
-    val pArgs = resolvePluginArgs(config, managedKotlincBin)
+    val pArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR)
     val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
     println("checking ${config.name}...")
@@ -100,16 +99,40 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         ?.let { parseBuildState(it) }
 
     val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
-    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
     val (managedJavaBin, managedJarBin) = ensureJdkBinsFromConfig(config, paths)
 
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, cachedState!!.classpath, resolvePluginArgs(config, managedKotlincBin), managedJavaBin)
+        // #65 review finding #2: the up-to-date path deliberately does
+        // NOT resolve plugin jars, and (as of the second review pass)
+        // does NOT provision the kotlinc toolchain either. Plugin jar
+        // resolution re-hashes every cached jar against its stamp (TOFU
+        // self-heal, see PluginJarFetcher) and falls through to re-
+        // download on corruption, which would hard-exit an offline
+        // build that otherwise would have succeeded. kotlinc is only
+        // needed for the subprocess-fallback compile path (below), so
+        // deferring both keeps this branch a pure mtime compare, which
+        // is the invariant dogfood offline builds depend on. `doTest`
+        // resolves plugin args on its own for test compilation, so
+        // nothing downstream of `BuildResult` needs them here.
+        return BuildResult(config, cachedState!!.classpath, managedJavaBin)
     }
+    // Only provisioned when we actually need to run a compile. Matches
+    // the `ensureKonancBin` ordering in `doNativeBuild`, which has had
+    // the same "provision after the cache check" shape since it
+    // landed.
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
     val classpath = resolveDependencies(config)
-    val pArgs = resolvePluginArgs(config, managedKotlincBin)
+    // #65 review finding #1: resolve enabled plugin jars once per
+    // rebuild and derive both the subprocess `-Xplugin=` form and the
+    // daemon `--plugin-jars` alias map from the same map. The previous
+    // version called `resolvePluginArgs` + `resolvePluginJarsMap` back
+    // to back and paid the file-exists + re-hash cost per enabled plugin
+    // twice on every warm-cache rebuild.
+    val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR)
+    val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
+    val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
     ensureDirectoryRecursive(CLASSES_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
         exitProcess(EXIT_BUILD_ERROR)
@@ -131,13 +154,13 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
     }
 
     val subprocessBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
-    // #65 native client wiring: alias → plugin jar classpath fed to the
-    // daemon via `--plugin-jars`. The subprocess fallback still picks up
-    // plugins through `-Xplugin=...` in extraArgs (`pArgs`); the daemon
-    // ignores extraArgs entirely (DaemonServer.toIcRequest drops the
-    // field) and reads the plugin classpath from this map instead, so
-    // the two channels coexist without double-loading.
-    val pluginJarsForDaemon = resolvePluginJarsMap(config, managedKotlincBin)
+    // #65 native client wiring: `pluginJarsForDaemon` (built just above
+    // from `resolveEnabledPluginJarPaths`) is fed to the daemon via
+    // `--plugin-jars`. The subprocess fallback still picks up plugins
+    // through `-Xplugin=...` in extraArgs (`pArgs`); the daemon ignores
+    // extraArgs entirely (DaemonServer.toIcRequest drops the field) and
+    // reads the plugin classpath from this map instead, so the two
+    // channels coexist without double-loading.
     val backend: CompilerBackend = resolveCompilerBackend(
         config = config,
         paths = paths,
@@ -235,7 +258,7 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built ${jarCmd.outputPath} in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath, pArgs, managedJavaBin)
+    return BuildResult(config, classpath, managedJavaBin)
 }
 
 private fun doNativeBuild(config: KoltConfig): BuildResult {
@@ -262,11 +285,16 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, classpath = null, pluginArgs = emptyList(), javaPath = null)
+        return BuildResult(config, classpath = null, javaPath = null)
     }
 
-    // Resolved only on a real rebuild so cached builds don't provision kotlinc.
-    val nativePluginArgs = resolveNativePluginArgs(config, paths, EXIT_BUILD_ERROR)
+    // Resolved only on a real rebuild so cached builds don't hit Maven
+    // Central for the plugin jar fetch. Per #65: native builds no longer
+    // provision the full kotlinc sidecar just to borrow plugin jars —
+    // `resolvePluginArgs` pulls the shaded compiler-plugin jars directly
+    // from Maven Central into `~/.kolt/cache` and feeds `-Xplugin=...`
+    // to konanc from there.
+    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR)
 
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
@@ -302,7 +330,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built $kexePath in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath = null, pluginArgs = nativePluginArgs, javaPath = null)
+    return BuildResult(config, classpath = null, javaPath = null)
 }
 
 /** Returns the newest mtime among all .def files declared in cinterop entries, or null if none. */
@@ -412,7 +440,7 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
         doNativeTest(config, testArgs)
         return
     }
-    val (_, classpath, pArgs, javaPath) = doBuild(useDaemon = useDaemon)
+    val (_, classpath, javaPath) = doBuild(useDaemon = useDaemon)
 
     val existingTestSources = config.testSources.filter { fileExists(it) }
     if (existingTestSources.isEmpty()) {
@@ -425,6 +453,14 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
     val paths = resolveKoltPaths(EXIT_TEST_ERROR)
     val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC, EXIT_TEST_ERROR)
     val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_TEST_ERROR) }
+
+    // #65 review finding #2: resolve plugin args at test time, not via
+    // `BuildResult.pluginArgs` threaded through `doBuild`. The up-to-
+    // date compile path deliberately skips plugin resolution so that an
+    // offline cached build stays offline; test compilation always runs
+    // a kotlinc subprocess, so the fetch is both unavoidable and
+    // bounded to test runs.
+    val pArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR)
 
     val testConfig = config.copy(testSources = existingTestSources)
     val testCmd = testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs, kotlincPath = managedKotlincBin)
@@ -470,7 +506,7 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
 
     val paths = resolveKoltPaths(EXIT_TEST_ERROR)
     val managedKonancBin = ensureKonancBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_TEST_ERROR) }
-    val nativePluginArgs = resolveNativePluginArgs(config, paths, EXIT_TEST_ERROR)
+    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR)
 
     val depKlibs = resolveNativeDependencies(config, paths)
 
