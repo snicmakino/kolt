@@ -20,6 +20,12 @@ Reads `kolt.toml`, compiles with `kotlinc`, and runs with `java -jar`.
 - Place test files in `src/nativeTest/kotlin/kolt/<package>/XxxTest.kt` mirroring main source structure
 - Annotate POSIX API usage with `@OptIn(ExperimentalForeignApi::class)` at function level
 
+## Issue & PR writing
+
+- Issues: problem, definition of done, scope. Skip project background and tech prerequisites — the reader already knows what kolt is.
+- PRs: what changed and where the reviewer should focus (judgment calls, places to double-check). Don't restate what the diff shows. Don't repeat the issue's background.
+- Write prose, not checklists. Don't mechanically fill a `## Summary` / `## Test plan` template — default `gh pr create` scaffolding is fine to discard.
+
 ## Skills
 
 - `/kolt-usage` — How to use kolt (commands, kolt.toml configuration, dependencies)
