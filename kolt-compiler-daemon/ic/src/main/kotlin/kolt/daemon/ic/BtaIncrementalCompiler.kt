@@ -8,7 +8,6 @@ import com.github.michaelbull.result.Result
 import org.jetbrains.kotlin.buildtools.api.BuildOperation
 import org.jetbrains.kotlin.buildtools.api.CompilationResult
 import org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi
-import org.jetbrains.kotlin.buildtools.api.KotlinLogger
 import org.jetbrains.kotlin.buildtools.api.KotlinToolchains
 import org.jetbrains.kotlin.buildtools.api.SharedApiClassesClassLoader
 import org.jetbrains.kotlin.buildtools.api.SourcesChanges
@@ -242,46 +241,6 @@ class BtaIncrementalCompiler private constructor(
         // projectId is a stable caller-derived hash per ADR 0019 §3; it is
         // already URL/FS-safe enough to serve as a kotlinc module name.
         "kolt-${request.projectId}"
-
-    // Captures BTA's compile-time log output. `error`-level lines are
-    // retained for folding into `IcError.CompilationFailed.messages`;
-    // `warn` / `info` / `debug` / `lifecycle` lines are forwarded to
-    // the metrics sink as coarse counters so log volume is observable
-    // without polluting the user's compile-error stream. Throwables
-    // attached to error/warn calls are unwrapped and appended to the
-    // captured line so a user chasing a BTA-internal stack trace still
-    // sees the message.
-    private class CapturingKotlinLogger(
-        private val metrics: IcMetricsSink,
-    ) : KotlinLogger {
-        private val errors: MutableList<String> = mutableListOf()
-
-        override val isDebugEnabled: Boolean get() = false
-
-        override fun error(msg: String, throwable: Throwable?) {
-            errors.add(if (throwable == null) msg else "$msg: ${throwable.message ?: throwable.javaClass.name}")
-            metrics.record(METRIC_LOG_ERROR)
-        }
-
-        override fun warn(msg: String, throwable: Throwable?) {
-            metrics.record(METRIC_LOG_WARN)
-        }
-
-        override fun info(msg: String) {
-            metrics.record(METRIC_LOG_INFO)
-        }
-
-        override fun debug(msg: String) {
-            // Not recorded: debug is too noisy to count per line and
-            // `isDebugEnabled = false` keeps BTA from even producing it.
-        }
-
-        override fun lifecycle(msg: String) {
-            metrics.record(METRIC_LOG_LIFECYCLE)
-        }
-
-        fun errorMessages(): List<String> = errors.toList()
-    }
 
     private fun isEmptyDir(workingDir: Path): Boolean {
         if (!Files.exists(workingDir)) return true
