@@ -1,7 +1,10 @@
 package kolt.cli
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
+import com.github.michaelbull.result.map
 import kolt.config.KoltConfig
 import kolt.config.KoltPaths
 import kolt.infra.DownloadError
@@ -13,7 +16,6 @@ import kolt.infra.eprintln
 import kolt.resolve.PluginFetchError
 import kolt.resolve.PluginFetcherDeps
 import kolt.resolve.fetchEnabledPluginJars
-import kotlin.system.exitProcess
 
 private fun defaultPluginFetcherDeps(): PluginFetcherDeps = object : PluginFetcherDeps {
     override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)
@@ -34,23 +36,22 @@ internal fun resolveEnabledPluginJarPaths(
     config: KoltConfig,
     paths: KoltPaths,
     operationalExitCode: Int,
-): Map<String, String> = resolveEnabledPluginJarsOrExit(config, paths, operationalExitCode)
+): Result<Map<String, String>, PluginFetchExit> =
+    resolveEnabledPluginJarsResult(config, paths, operationalExitCode)
 
-private fun resolveEnabledPluginJarsOrExit(
+private fun resolveEnabledPluginJarsResult(
     config: KoltConfig,
     paths: KoltPaths,
     operationalExitCode: Int,
-): Map<String, String> {
+): Result<Map<String, String>, PluginFetchExit> {
     return fetchEnabledPluginJars(
         plugins = config.plugins,
         kotlinVersion = config.kotlin,
         cacheBase = paths.cacheBase,
         deps = defaultPluginFetcherDeps(),
     ).getOrElse { err ->
-        val exit = mapPluginFetchErrorToExit(err, operationalExitCode)
-        eprintln("error: ${exit.message}")
-        exitProcess(exit.exitCode)
-    }
+        return Err(mapPluginFetchErrorToExit(err, operationalExitCode))
+    }.let { Ok(it) }
 }
 
 // 404 on a plugin jar → EXIT_CONFIG_ERROR (bad kotlin version in kolt.toml).
@@ -95,13 +96,15 @@ private fun formatDownloadError(err: DownloadError): String = when (err) {
 internal fun resolvePluginArgs(
     config: KoltConfig,
     paths: KoltPaths,
-    exitCode: Int,
-): List<String> =
-    resolveEnabledPluginJarsOrExit(config, paths, exitCode).values.map { "-Xplugin=$it" }
+    operationalExitCode: Int,
+): Result<List<String>, PluginFetchExit> =
+    resolveEnabledPluginJarsResult(config, paths, operationalExitCode)
+        .map { it.values.map { path -> "-Xplugin=$path" } }
 
 internal fun resolvePluginJarsMap(
     config: KoltConfig,
     paths: KoltPaths,
-    exitCode: Int,
-): Map<String, List<String>> =
-    resolveEnabledPluginJarsOrExit(config, paths, exitCode).mapValues { (_, path) -> listOf(path) }
+    operationalExitCode: Int,
+): Result<Map<String, List<String>>, PluginFetchExit> =
+    resolveEnabledPluginJarsResult(config, paths, operationalExitCode)
+        .map { it.mapValues { (_, path) -> listOf(path) } }

@@ -1,5 +1,7 @@
 package kolt.cli
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
@@ -14,7 +16,6 @@ import kolt.config.*
 import kolt.infra.*
 import kolt.resolve.*
 import kolt.tool.*
-import kotlin.system.exitProcess
 import kotlin.time.TimeSource
 
 internal const val KOLT_TOML = "kolt.toml"
@@ -28,58 +29,60 @@ internal data class BuildResult(
     val javaPath: String? = null,
 )
 
-internal fun loadProjectConfig(): KoltConfig {
+internal fun loadProjectConfig(): Result<KoltConfig, Int> {
     val tomlString = readFileAsString(KOLT_TOML).getOrElse { error ->
         eprintln("error: could not read ${error.path}")
-        exitProcess(EXIT_CONFIG_ERROR)
+        return Err(EXIT_CONFIG_ERROR)
     }
     return parseConfig(tomlString).getOrElse { error ->
         when (error) {
             is ConfigError.ParseFailed -> eprintln("error: ${error.message}")
         }
-        exitProcess(EXIT_CONFIG_ERROR)
-    }
+        return Err(EXIT_CONFIG_ERROR)
+    }.let { Ok(it) }
 }
 
-internal fun doCheck(useDaemon: Boolean = true) {
+internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
     val startMark = TimeSource.Monotonic.markNow()
-    val config = loadProjectConfig()
+    val config = loadProjectConfig().getOrElse { return Err(it) }
     // konanc has no syntax-only mode; a full build is the only option.
     if (config.target == "native") {
-        doBuild(useDaemon = useDaemon)
-        return
+        doBuild(useDaemon = useDaemon).getOrElse { return Err(it) }
+        return Ok(Unit)
     }
-    val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
-    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
-    val classpath = resolveDependencies(config)
-    val pArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR)
+    val classpath = resolveDependencies(config).getOrElse { return Err(it) }
+    val pArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
     println("checking ${config.name}...")
     executeCommand(cmd).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "check"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
     val elapsed = startMark.elapsedNow()
     println("check passed in ${formatDuration(elapsed)}")
+    return Ok(Unit)
 }
 
-internal fun doClean() {
+internal fun doClean(): Result<Unit, Int> {
     if (!fileExists(BUILD_DIR)) {
         println("nothing to clean")
-        return
+        return Ok(Unit)
     }
     removeDirectoryRecursive(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not remove ${error.path}")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
     println("removed $BUILD_DIR/")
+    return Ok(Unit)
 }
 
-internal fun doBuild(useDaemon: Boolean = true): BuildResult {
+internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     val startMark = TimeSource.Monotonic.markNow()
-    val config = loadProjectConfig()
+    val config = loadProjectConfig().getOrElse { return Err(it) }
 
     if (config.target == "native") {
         return doNativeBuild(config)
@@ -96,8 +99,8 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
     val cachedState = readFileAsString(BUILD_STATE_FILE).getOrElse { null }
         ?.let { parseBuildState(it) }
 
-    val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
-    val (managedJavaBin, managedJarBin) = ensureJdkBinsFromConfig(config, paths)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
+    val (managedJavaBin, managedJarBin) = ensureJdkBinsFromConfig(config, paths).getOrElse { return Err(it) }
 
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
@@ -105,21 +108,21 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         // Invariant: the up-to-date path must stay a pure mtime compare —
         // no plugin jar resolution or toolchain provisioning — so offline
         // cached builds don't hard-exit on a failed fetch.
-        return BuildResult(config, cachedState!!.classpath, managedJavaBin)
+        return Ok(BuildResult(config, cachedState!!.classpath, managedJavaBin))
     }
-    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
-    val classpath = resolveDependencies(config)
-    val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR)
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+    val classpath = resolveDependencies(config).getOrElse { return Err(it) }
+    val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
     val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
     ensureDirectoryRecursive(CLASSES_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val cwd = currentWorkingDirectory() ?: run {
         eprintln("error: could not determine current working directory")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val subprocessBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
@@ -142,7 +145,7 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         sources = expandKotlinSources(config.sources.map { absolutise(it, cwd) })
             .getOrElse { err ->
                 eprintln("error: could not list Kotlin sources under ${err.path}")
-                exitProcess(EXIT_BUILD_ERROR)
+                return Err(EXIT_BUILD_ERROR)
             },
         outputPath = absolutise(CLASSES_DIR, cwd),
         moduleName = config.name,
@@ -160,21 +163,21 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
             if (body.isNotEmpty()) eprintln(body)
         }
         eprintln(formatCompileError(error, "compilation"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     for (resourceDir in config.resources) {
         if (!fileExists(resourceDir)) continue
         copyDirectoryContents(resourceDir, CLASSES_DIR).getOrElse { error ->
             eprintln("error: could not copy resources from ${error.path}")
-            exitProcess(EXIT_BUILD_ERROR)
+            return Err(EXIT_BUILD_ERROR)
         }
     }
 
     val jarCmd = jarCommand(config, jarPath = managedJarBin)
     executeCommand(jarCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "jar packaging"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val newState = currentState.copy(
@@ -188,16 +191,16 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built ${jarCmd.outputPath} in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath, managedJavaBin)
+    return Ok(BuildResult(config, classpath, managedJavaBin))
 }
 
-private fun doNativeBuild(config: KoltConfig): BuildResult {
+private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
     val startMark = TimeSource.Monotonic.markNow()
 
-    val paths = resolveKoltPaths(EXIT_BUILD_ERROR)
-    val managedKonancBin = ensureKonancBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
+    val managedKonancBin = ensureKonancBin(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
-    val depKlibs = resolveNativeDependencies(config, paths)
+    val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
 
     val kexePath = outputKexePath(config)
     val defNewestMtime = newestDefMtime(config)
@@ -215,36 +218,36 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        return BuildResult(config, classpath = null, javaPath = null)
+        return Ok(BuildResult(config, classpath = null, javaPath = null))
     }
 
-    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR)
+    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
 
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
-    val cinteropKlibs = runCinterop(config, paths)
+    val cinteropKlibs = runCinterop(config, paths).getOrElse { return Err(it) }
     val klibs = depKlibs + cinteropKlibs
 
     val libraryCmd = nativeLibraryCommand(config, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling ${config.name} (native)...")
     executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "compilation"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
     println("linking ${config.name} (native)...")
     executeCommand(linkCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "linking"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     if (!fileExists(kexePath)) {
         eprintln("error: $kexePath not produced by konanc")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val newState = currentState.copy(classesDirMtime = fileMtime(kexePath))
@@ -254,7 +257,7 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
 
     val elapsed = startMark.elapsedNow()
     println("built $kexePath in ${formatDuration(elapsed)}")
-    return BuildResult(config, classpath = null, javaPath = null)
+    return Ok(BuildResult(config, classpath = null, javaPath = null))
 }
 
 private fun newestDefMtime(config: KoltConfig): Long? {
@@ -263,10 +266,11 @@ private fun newestDefMtime(config: KoltConfig): Long? {
     return if (mtimes.isEmpty()) null else mtimes.max()
 }
 
-private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
-    if (config.cinterop.isEmpty()) return emptyList()
+private fun runCinterop(config: KoltConfig, paths: KoltPaths): Result<List<String>, Int> {
+    if (config.cinterop.isEmpty()) return Ok(emptyList())
     val managedCinteropBin = paths.cinteropBin(config.kotlin)
-    return config.cinterop.map { entry ->
+    val klibs = mutableListOf<String>()
+    for (entry in config.cinterop) {
         val klibPath = cinteropOutputKlibPath(entry)
         val stampPath = cinteropStampPath(entry)
         val defMtime = fileMtime(entry.def)
@@ -275,7 +279,8 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
         if (currentStamp != null && fileExists(klibPath) && fileExists(stampPath)) {
             val previousStamp = readFileAsString(stampPath).get()
             if (previousStamp == currentStamp) {
-                return@map klibPath
+                klibs.add(klibPath)
+                continue
             }
         }
 
@@ -283,86 +288,87 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
         println("generating cinterop klib for ${entry.name}...")
         executeCommand(cmd.args).getOrElse { error ->
             eprintln("error: " + formatProcessError(error, "cinterop (${entry.name})"))
-            exitProcess(EXIT_BUILD_ERROR)
+            return Err(EXIT_BUILD_ERROR)
         }
         if (currentStamp != null) {
             writeFileAsString(stampPath, currentStamp).getOrElse { error ->
                 eprintln("warning: failed to write cinterop stamp ${error.path}")
             }
         }
-        klibPath
+        klibs.add(klibPath)
     }
+    return Ok(klibs)
 }
 
-internal fun resolveNativeDependencies(config: KoltConfig, paths: KoltPaths): List<String> {
-    if (config.dependencies.isEmpty()) return emptyList()
+private fun resolveNativeDependencies(config: KoltConfig, paths: KoltPaths): Result<List<String>, Int> {
+    if (config.dependencies.isEmpty()) return Ok(emptyList())
 
     println("resolving native dependencies...")
     val result = resolve(config, existingLock = null, paths.cacheBase, createResolverDeps()).getOrElse { error ->
         eprintln(formatResolveError(error))
-        exitProcess(EXIT_DEPENDENCY_ERROR)
+        return Err(EXIT_DEPENDENCY_ERROR)
     }
-    return result.deps.map { it.cachePath }
+    return Ok(result.deps.map { it.cachePath })
 }
 
-internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String> = emptyList(), javaPath: String? = null) {
+internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String> = emptyList(), javaPath: String? = null): Result<Unit, Int> {
     if (config.target == "native") {
         val kexePath = outputKexePath(config)
         if (!fileExists(kexePath)) {
             eprintln("error: $kexePath not found. Run 'kolt build' first.")
-            exitProcess(EXIT_BUILD_ERROR)
+            return Err(EXIT_BUILD_ERROR)
         }
         val cmd = nativeRunCommand(config, appArgs)
         executeCommand(cmd.args).getOrElse { error ->
-            when (error) {
-                is ProcessError.NonZeroExit -> exitProcess(error.exitCode)
-                else -> exitProcess(EXIT_BUILD_ERROR)
-            }
+            return Err(when (error) {
+                is ProcessError.NonZeroExit -> error.exitCode
+                else -> EXIT_BUILD_ERROR
+            })
         }
-        return
+        return Ok(Unit)
     }
     if (!fileExists(CLASSES_DIR)) {
         eprintln("error: $CLASSES_DIR not found. Run 'kolt build' first.")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val cmd = runCommand(config, classpath, appArgs, javaPath = javaPath)
     executeCommand(cmd.args).getOrElse { error ->
-        when (error) {
-            is ProcessError.NonZeroExit -> exitProcess(error.exitCode)
-            else -> exitProcess(EXIT_BUILD_ERROR)
-        }
+        return Err(when (error) {
+            is ProcessError.NonZeroExit -> error.exitCode
+            else -> EXIT_BUILD_ERROR
+        })
     }
+    return Ok(Unit)
 }
 
-internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = true) {
-    val config = loadProjectConfig()
+internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = true): Result<Unit, Int> {
+    val config = loadProjectConfig().getOrElse { return Err(it) }
     if (config.target == "native") {
-        doNativeTest(config, testArgs)
-        return
+        return doNativeTest(config, testArgs)
     }
-    val (_, classpath, javaPath) = doBuild(useDaemon = useDaemon)
+    val (_, classpath, javaPath) = doBuild(useDaemon = useDaemon).getOrElse { return Err(it) }
 
     val existingTestSources = config.testSources.filter { fileExists(it) }
     if (existingTestSources.isEmpty()) {
         eprintln("error: no test sources found in ${config.testSources}")
-        exitProcess(EXIT_TEST_ERROR)
+        return Err(EXIT_TEST_ERROR)
     }
 
     val testStartMark = TimeSource.Monotonic.markNow()
 
-    val paths = resolveKoltPaths(EXIT_TEST_ERROR)
-    val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC, EXIT_TEST_ERROR)
-    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_TEST_ERROR) }
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
+    val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC).getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
+    val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
 
-    val pArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR)
+    val pArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
 
     val testConfig = config.copy(testSources = existingTestSources)
     val testCmd = testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs, kotlincPath = managedKotlincBin)
     println("compiling tests...")
     executeCommand(testCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "test compilation"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val existingTestResourceDirs = config.testResources.filter { fileExists(it) }
@@ -384,33 +390,34 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
             }
             else -> eprintln("error: failed to run tests")
         }
-        exitProcess(EXIT_TEST_ERROR)
+        return Err(EXIT_TEST_ERROR)
     }
     val elapsed = testStartMark.elapsedNow()
     println("tests passed in ${formatDuration(elapsed)}")
+    return Ok(Unit)
 }
 
-private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
+private fun doNativeTest(config: KoltConfig, testArgs: List<String>): Result<Unit, Int> {
     val existingTestSources = config.testSources.filter { fileExists(it) }
     if (existingTestSources.isEmpty()) {
         eprintln("error: no test sources found in ${config.testSources}")
-        exitProcess(EXIT_TEST_ERROR)
+        return Err(EXIT_TEST_ERROR)
     }
 
     val testStartMark = TimeSource.Monotonic.markNow()
 
-    val paths = resolveKoltPaths(EXIT_TEST_ERROR)
-    val managedKonancBin = ensureKonancBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_TEST_ERROR) }
-    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
+    val managedKonancBin = ensureKonancBin(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
+    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
 
-    val depKlibs = resolveNativeDependencies(config, paths)
+    val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
 
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
         eprintln("error: could not create directory ${error.path}")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
-    val cinteropKlibs = runCinterop(config, paths)
+    val cinteropKlibs = runCinterop(config, paths).getOrElse { return Err(it) }
     val klibs = depKlibs + cinteropKlibs
 
     val testConfig = config.copy(testSources = existingTestSources)
@@ -418,19 +425,19 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
     println("compiling tests (native)...")
     executeCommand(libraryCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "test compilation"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val linkCmd = nativeTestLinkCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
     println("linking tests (native)...")
     executeCommand(linkCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "test linking"))
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     if (!fileExists(linkCmd.outputPath)) {
         eprintln("error: ${linkCmd.outputPath} not produced by konanc")
-        exitProcess(EXIT_BUILD_ERROR)
+        return Err(EXIT_BUILD_ERROR)
     }
 
     val runCmd = nativeTestRunCommand(testConfig, testArgs)
@@ -443,20 +450,19 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>) {
             }
             else -> eprintln("error: failed to run tests")
         }
-        exitProcess(EXIT_TEST_ERROR)
+        return Err(EXIT_TEST_ERROR)
     }
     val elapsed = testStartMark.elapsedNow()
     println("tests passed in ${formatDuration(elapsed)}")
+    return Ok(Unit)
 }
 
-internal fun ensureJdkBinsFromConfig(config: KoltConfig, paths: KoltPaths): JdkBins {
-    val version = config.jdk ?: return JdkBins(null, null)
-    return ensureJdkBins(version, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
-}
-
-internal fun exitWithToolchainError(err: ToolchainError, exitCode: Int): Nothing {
-    eprintln("error: ${err.message}")
-    exitProcess(exitCode)
+internal fun ensureJdkBinsFromConfig(config: KoltConfig, paths: KoltPaths): Result<JdkBins, Int> {
+    val version = config.jdk ?: return Ok(JdkBins(null, null))
+    return ensureJdkBins(version, paths).getOrElse { err ->
+        eprintln("error: ${err.message}")
+        return Err(EXIT_BUILD_ERROR)
+    }.let { Ok(it) }
 }
 
 internal const val WARNING_DAEMON_DIR_UNWRITABLE =
@@ -564,7 +570,7 @@ internal fun findOverlappingDependencies(
         .map { OverlappingDep(it, mainDeps[it], testDeps[it]) }
 }
 
-internal fun resolveDependencies(config: KoltConfig): String? {
+internal fun resolveDependencies(config: KoltConfig): Result<String?, Int> {
     for (dep in findOverlappingDependencies(config.dependencies, config.testDependencies)) {
         eprintln("warning: '${dep.groupArtifact}' is in both [dependencies] (${dep.mainVersion}) and [test-dependencies] (${dep.testVersion}); using ${dep.mainVersion}")
     }
@@ -574,12 +580,12 @@ internal fun resolveDependencies(config: KoltConfig): String? {
         if (fileExists(LOCK_FILE)) {
             deleteFile(LOCK_FILE)
         }
-        return null
+        return Ok(null)
     }
 
     val resolveConfig = config.copy(dependencies = allDeps)
 
-    val paths = resolveKoltPaths(EXIT_DEPENDENCY_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_DEPENDENCY_ERROR) }
 
     val existingLock = if (fileExists(LOCK_FILE)) {
         val lockJson = readFileAsString(LOCK_FILE).getOrElse { error ->
@@ -603,7 +609,7 @@ internal fun resolveDependencies(config: KoltConfig): String? {
         if (error is ResolveError.Sha256Mismatch) {
             eprintln("delete the cached jar and rebuild to re-download")
         }
-        exitProcess(EXIT_DEPENDENCY_ERROR)
+        return Err(EXIT_DEPENDENCY_ERROR)
     }
 
     if (resolveResult.lockChanged) {
@@ -611,7 +617,7 @@ internal fun resolveDependencies(config: KoltConfig): String? {
         val lockJson = serializeLockfile(lockfile)
         writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
             eprintln("error: could not write ${error.path}")
-            exitProcess(EXIT_DEPENDENCY_ERROR)
+            return Err(EXIT_DEPENDENCY_ERROR)
         }
     }
 
@@ -620,7 +626,7 @@ internal fun resolveDependencies(config: KoltConfig): String? {
     }
 
     val jarPaths = resolveResult.deps.map { it.cachePath }
-    return buildClasspath(jarPaths).ifEmpty { null }
+    return Ok(buildClasspath(jarPaths).ifEmpty { null })
 }
 
 private fun writeWorkspaceFiles(config: KoltConfig, deps: List<ResolvedDep>) {

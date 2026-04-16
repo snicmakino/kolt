@@ -134,7 +134,7 @@ internal fun doAdd(args: List<String>) {
 }
 
 private fun fetchLatestVersion(group: String, artifact: String, repos: List<String>): String {
-    val paths = resolveKoltPaths(EXIT_DEPENDENCY_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_DEPENDENCY_ERROR) }
     val groupPath = group.replace('.', '/')
     val metadataPath = "${paths.cacheBase}/$groupPath/$artifact/maven-metadata.xml"
 
@@ -170,20 +170,20 @@ private fun fetchLatestVersion(group: String, artifact: String, repos: List<Stri
 }
 
 internal fun doInstall() {
-    val config = loadProjectConfig()
-    resolveDependencies(config)
+    val config = loadProjectConfig().getOrElse { exitProcess(it) }
+    resolveDependencies(config).getOrElse { exitProcess(it) }
     println("install complete")
 }
 
 internal fun doUpdate() {
-    val config = loadProjectConfig()
+    val config = loadProjectConfig().getOrElse { exitProcess(it) }
     val allDeps = mergeAllDeps(config)
     if (allDeps.isEmpty()) {
         println("no dependencies to update")
         return
     }
 
-    val paths = resolveKoltPaths(EXIT_DEPENDENCY_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_DEPENDENCY_ERROR) }
 
     for ((groupArtifact, version) in allDeps) {
         val coord = parseCoordinate(groupArtifact, version).getOrElse { continue }
@@ -210,7 +210,7 @@ internal fun doUpdate() {
 }
 
 internal fun doTree() {
-    val config = loadProjectConfig()
+    val config = loadProjectConfig().getOrElse { exitProcess(it) }
 
     val hasAnyDeps = config.dependencies.isNotEmpty() ||
         config.testDependencies.isNotEmpty() ||
@@ -220,7 +220,7 @@ internal fun doTree() {
         return
     }
 
-    val paths = resolveKoltPaths(EXIT_DEPENDENCY_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_DEPENDENCY_ERROR) }
 
     if (config.target == "native") {
         val nativeLookup = createNativeLookup(

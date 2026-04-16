@@ -35,7 +35,7 @@ internal fun doDaemon(args: List<String>) {
 
 private fun doDaemonStop(args: List<String>) {
     val all = args.contains("--all")
-    val paths = resolveKoltPaths(EXIT_CONFIG_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_CONFIG_ERROR) }
 
     if (all) {
         stopAllDaemons(paths.daemonBaseDir)
@@ -83,7 +83,7 @@ private fun sendShutdown(socketPath: String): Boolean {
 }
 
 private fun doDaemonReap() {
-    val paths = resolveKoltPaths(EXIT_CONFIG_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_CONFIG_ERROR) }
     val result = reapStaleDaemons(paths.daemonBaseDir)
     if (result.reaped == 0) {
         println("no stale daemons found")

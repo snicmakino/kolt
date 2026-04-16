@@ -1,5 +1,6 @@
 package kolt.cli
 
+import com.github.michaelbull.result.getOrElse
 import kolt.config.versionString
 import kolt.infra.eprintln
 import kotlin.system.exitProcess
@@ -23,25 +24,25 @@ fun main(args: Array<String>) {
 
     when (filteredArgs[0]) {
         "init" -> doInit(filteredArgs.drop(1))
-        "build" -> doBuild(useDaemon = useDaemon)
-        "check" -> doCheck(useDaemon = useDaemon)
+        "build" -> doBuild(useDaemon = useDaemon).getOrElse { exitProcess(it) }
+        "check" -> doCheck(useDaemon = useDaemon).getOrElse { exitProcess(it) }
         "run" -> {
             val appArgs = filteredArgs.let { all ->
                 val sep = all.indexOf("--")
                 if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
             }
-            val (config, classpath, javaPath) = doBuild(useDaemon = useDaemon)
-            doRun(config, classpath, appArgs, javaPath)
+            val (config, classpath, javaPath) = doBuild(useDaemon = useDaemon).getOrElse { exitProcess(it) }
+            doRun(config, classpath, appArgs, javaPath).getOrElse { exitProcess(it) }
         }
         "test" -> {
             val testArgs = filteredArgs.let { all ->
                 val sep = all.indexOf("--")
                 if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
             }
-            doTest(testArgs, useDaemon = useDaemon)
+            doTest(testArgs, useDaemon = useDaemon).getOrElse { exitProcess(it) }
         }
         "fmt" -> doFmt(filteredArgs.drop(1))
-        "clean" -> doClean()
+        "clean" -> doClean().getOrElse { exitProcess(it) }
         "deps" -> doDeps(filteredArgs.drop(1))
         "add" -> doDeps(listOf("add") + filteredArgs.drop(1))
         "install" -> doDeps(listOf("install"))

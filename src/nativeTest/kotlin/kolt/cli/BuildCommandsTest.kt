@@ -1,5 +1,6 @@
 package kolt.cli
 
+import com.github.michaelbull.result.get
 import kolt.testConfig
 import kolt.build.cinteropCommand
 import kolt.build.cinteropOutputKlibPath
@@ -13,6 +14,7 @@ import kolt.infra.writeFileAsString
 import kolt.tool.JdkBins
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -23,7 +25,7 @@ class EnsureJdkBinsFromConfigTest {
         val config = testConfig(jdk = null)
         val paths = KoltPaths("/tmp/kolt_ensure_jdk_bins_null")
 
-        val result = ensureJdkBinsFromConfig(config, paths)
+        val result = assertNotNull(ensureJdkBinsFromConfig(config, paths).get())
 
         assertNull(result.java)
         assertNull(result.jar)
@@ -38,7 +40,7 @@ class EnsureJdkBinsFromConfigTest {
         writeFileAsString("$binDir/java", "#!/bin/sh")
         writeFileAsString("$binDir/jar", "#!/bin/sh")
         try {
-            val result = ensureJdkBinsFromConfig(config, paths)
+            val result = assertNotNull(ensureJdkBinsFromConfig(config, paths).get())
 
             assertEquals(paths.javaBin("21"), result.java)
             assertEquals(paths.jarBin("21"), result.jar)

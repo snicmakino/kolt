@@ -1,9 +1,9 @@
 package kolt.config
 
-import com.github.michaelbull.result.getOrElse
-import kolt.infra.eprintln
+import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.map
+import com.github.michaelbull.result.mapError
 import kolt.infra.homeDirectory
-import kotlin.system.exitProcess
 
 internal data class KoltPaths(val home: String) {
     val cacheBase: String = "$home/.kolt/cache"
@@ -27,10 +27,5 @@ internal data class KoltPaths(val home: String) {
     fun cinteropBin(version: String): String = "${konancPath(version)}/bin/cinterop"
 }
 
-internal fun resolveKoltPaths(exitCode: Int): KoltPaths {
-    val home = homeDirectory().getOrElse { error ->
-        eprintln("error: ${error.message}")
-        exitProcess(exitCode)
-    }
-    return KoltPaths(home)
-}
+internal fun resolveKoltPaths(): Result<KoltPaths, String> =
+    homeDirectory().map { KoltPaths(it) }.mapError { it.message }

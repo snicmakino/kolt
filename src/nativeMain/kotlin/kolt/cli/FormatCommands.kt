@@ -10,10 +10,10 @@ import kotlin.system.exitProcess
 internal fun doFmt(args: List<String>) {
     val checkOnly = "--check" in args
 
-    val config = loadProjectConfig()
+    val config = loadProjectConfig().getOrElse { exitProcess(it) }
 
-    val paths = resolveKoltPaths(EXIT_FORMAT_ERROR)
-    val ktfmtPath = ensureTool(paths, KTFMT_SPEC, EXIT_FORMAT_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_FORMAT_ERROR) }
+    val ktfmtPath = ensureTool(paths, KTFMT_SPEC).getOrElse { eprintln("error: $it"); exitProcess(EXIT_FORMAT_ERROR) }
 
     val files = buildList {
         for (dir in config.sources) {

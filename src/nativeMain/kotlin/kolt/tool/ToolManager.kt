@@ -1,10 +1,12 @@
 package kolt.tool
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltPaths
 import kolt.infra.*
 import kolt.config.MAVEN_CENTRAL_BASE
-import kotlin.system.exitProcess
 
 internal data class ToolSpec(
     val group: String,
@@ -34,24 +36,22 @@ internal val CONSOLE_LAUNCHER_SPEC = ToolSpec(
     fileName = "junit-platform-console-standalone-1.11.4.jar"
 )
 
-internal fun ensureTool(paths: KoltPaths, spec: ToolSpec, exitCode: Int): String {
+internal fun ensureTool(paths: KoltPaths, spec: ToolSpec): Result<String, String> {
     val path = spec.toolPath(paths.toolsDir)
-    if (fileExists(path)) return path
+    if (fileExists(path)) return Ok(path)
 
     ensureDirectoryRecursive(paths.toolsDir).getOrElse { error ->
-        eprintln("error: could not create directory ${error.path}")
-        exitProcess(exitCode)
+        return Err("could not create directory ${error.path}")
     }
 
     val url = spec.downloadUrl()
     println("downloading ${spec.artifact}...")
     downloadFile(url, path).getOrElse { error ->
-        when (error) {
-            is DownloadError.HttpFailed -> eprintln("error: failed to download ${spec.artifact} (HTTP ${error.statusCode})")
-            is DownloadError.WriteFailed -> eprintln("error: could not write $path")
-            is DownloadError.NetworkError -> eprintln("error: network error downloading ${spec.artifact}: ${error.message}")
-        }
-        exitProcess(exitCode)
+        return Err(when (error) {
+            is DownloadError.HttpFailed -> "failed to download ${spec.artifact} (HTTP ${error.statusCode})"
+            is DownloadError.WriteFailed -> "could not write $path"
+            is DownloadError.NetworkError -> "network error downloading ${spec.artifact}: ${error.message}"
+        })
     }
-    return path
+    return Ok(path)
 }

@@ -1,11 +1,13 @@
 package kolt.cli
 
+import com.github.michaelbull.result.get
 import kolt.config.KoltPaths
 import kolt.infra.DownloadError
 import kolt.resolve.PluginFetchError
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 // Bogus KoltPaths: if the zero-plugin short-circuit regresses, any I/O
@@ -18,7 +20,7 @@ class PluginSupportTest {
     fun resolvePluginArgsNoPluginsReturnsEmptyWithoutTouchingTheNetwork() {
         val config = testConfig(plugins = emptyMap())
 
-        val result = resolvePluginArgs(config, bogusPaths, exitCode = 999)
+        val result = assertNotNull(resolvePluginArgs(config, bogusPaths, operationalExitCode = 999).get())
 
         assertTrue(result.isEmpty())
     }
@@ -29,7 +31,7 @@ class PluginSupportTest {
             plugins = mapOf("serialization" to false, "allopen" to false),
         )
 
-        val result = resolvePluginArgs(config, bogusPaths, exitCode = 999)
+        val result = assertNotNull(resolvePluginArgs(config, bogusPaths, operationalExitCode = 999).get())
 
         assertTrue(result.isEmpty())
     }
@@ -38,7 +40,7 @@ class PluginSupportTest {
     fun resolvePluginJarsMapNoPluginsReturnsEmptyMap() {
         val config = testConfig(plugins = emptyMap())
 
-        val result = resolvePluginJarsMap(config, bogusPaths, exitCode = 999)
+        val result = assertNotNull(resolvePluginJarsMap(config, bogusPaths, operationalExitCode = 999).get())
 
         assertEquals(emptyMap(), result)
     }
@@ -49,7 +51,7 @@ class PluginSupportTest {
             plugins = mapOf("serialization" to false, "allopen" to false),
         )
 
-        val result = resolvePluginJarsMap(config, bogusPaths, exitCode = 999)
+        val result = assertNotNull(resolvePluginJarsMap(config, bogusPaths, operationalExitCode = 999).get())
 
         assertEquals(emptyMap(), result)
     }
@@ -58,7 +60,7 @@ class PluginSupportTest {
     fun resolvePluginArgsNativeTargetSharesTheSameShortCircuit() {
         val config = testConfig(plugins = emptyMap(), target = "native")
 
-        val result = resolvePluginArgs(config, bogusPaths, exitCode = 999)
+        val result = assertNotNull(resolvePluginArgs(config, bogusPaths, operationalExitCode = 999).get())
 
         assertTrue(result.isEmpty())
     }

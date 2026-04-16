@@ -4,8 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
-import kolt.config.KoltPaths
-import kolt.config.resolveKoltPaths
+import kolt.config.*
 import kolt.infra.*
 import kolt.tool.installJdkToolchain
 import kolt.tool.installKonancToolchain
@@ -40,19 +39,19 @@ private fun printToolchainUsage() {
 }
 
 private fun doToolchainInstall() {
-    val config = loadProjectConfig()
-    val paths = resolveKoltPaths(EXIT_CONFIG_ERROR)
-    installKotlincToolchain(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
+    val config = loadProjectConfig().getOrElse { exitProcess(it) }
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_CONFIG_ERROR) }
+    installKotlincToolchain(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); exitProcess(EXIT_BUILD_ERROR) }
     if (config.jdk != null) {
-        installJdkToolchain(config.jdk, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
+        installJdkToolchain(config.jdk, paths).getOrElse { eprintln("error: ${it.message}"); exitProcess(EXIT_BUILD_ERROR) }
     }
     if (config.target == "native") {
-        installKonancToolchain(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
+        installKonancToolchain(config.kotlin, paths).getOrElse { eprintln("error: ${it.message}"); exitProcess(EXIT_BUILD_ERROR) }
     }
 }
 
 private fun doToolchainList() {
-    val paths = resolveKoltPaths(EXIT_CONFIG_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_CONFIG_ERROR) }
     val kotlincVersions = listInstalledVersions("${paths.toolchainsDir}/kotlinc")
     val jdkVersions = listInstalledVersions("${paths.toolchainsDir}/jdk")
     val konancVersions = listInstalledVersions("${paths.toolchainsDir}/konanc")
@@ -114,7 +113,7 @@ private fun doToolchainRemove(args: List<String>) {
         exitProcess(EXIT_CONFIG_ERROR)
     }
 
-    val paths = resolveKoltPaths(EXIT_CONFIG_ERROR)
+    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); exitProcess(EXIT_CONFIG_ERROR) }
     val toolchainPath = resolveToolchainPathForRemove(parsed.name, parsed.version, paths)
     if (toolchainPath == null) {
         eprintln("error: ${parsed.name} ${parsed.version} is not installed")
