@@ -37,6 +37,7 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 | cli | ToolchainCommands.kt | Toolchain management commands (install) |
 | cli | FormatCommands.kt | Format command (kolt fmt) |
 | cli | PluginSupport.kt | Compiler plugin argument resolution |
+| cli | WatchLoop.kt | Watch mode: file change detection, settle-window debounce, command re-execution loop, process group management for `run --watch` |
 | cli | ExitCode.kt | Standardized exit code constants |
 | config | Config.kt | Parse kolt.toml, KoltConfig data class |
 | config | KoltPaths.kt | ~/.kolt/ path resolution (cache, tools, toolchains) |
@@ -68,6 +69,7 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 | infra | Process.kt | Command execution via fork/execvp, output capture via popen |
 | infra | Downloader.kt | HTTP file download via libcurl cinterop |
 | infra | Sha256.kt | SHA256 hash computation |
+| infra | Inotify.kt | Linux inotify wrapper: InotifyWatcher (recursive directory watching, event polling, EXCLUDED_DIRS filtering) |
 | infra | Format.kt | Duration formatting utility |
 | infra.net | UnixSocket.kt | AF_UNIX stream socket client (`connect` / `sendAll` / `recvExact` / `shutdownWrite` / `close`). Raw cinterop types stay confined to this file; all entry points return `Result<_, UnixSocketError>`. Used by the warm daemon native client (ADR 0016) |
 | tool | ToolManager.kt | External tool download and caching (ktfmt, JUnit Console Launcher) |

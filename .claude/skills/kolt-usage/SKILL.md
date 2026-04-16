@@ -48,6 +48,26 @@ kolt --version              Show version
 
 `install`, `update`, and `tree` are also available as top-level aliases.
 
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--watch` | Watch source files and re-run on change (build/check/test/run) |
+| `--no-daemon` | Skip the warm compiler daemon for this invocation |
+
+### Watch Mode
+
+`--watch` monitors source directories via inotify and re-executes the command when `.kt`/`.kts` files or `kolt.toml` change. Editor temp files (`.swp`, `~`, etc.) are filtered out. Multiple rapid saves are batched via a settle window.
+
+```sh
+kolt build --watch          # Rebuild on source change
+kolt test --watch           # Retest on source/test change
+kolt run --watch            # Rebuild and restart app on change
+kolt run --watch -- --port 8080  # App args passed through
+```
+
+For `run --watch`, the running application is killed and restarted on each source change. Ctrl+C stops watch mode.
+
 ## Configuration (kolt.toml)
 
 ```toml

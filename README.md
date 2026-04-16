@@ -59,6 +59,12 @@ kolt run               Build and run (kolt run -- args for app arguments)
 kolt test              Build and run tests (kolt test -- args for JUnit Platform arguments)
 kolt check             Type-check without producing artifacts
 kolt add <dep>         Add a dependency (alias for deps add)
+
+# --watch flag: monitor sources, rebuild on change
+kolt build --watch     Watch and rebuild
+kolt test --watch      Watch and retest
+kolt run --watch       Watch, rebuild, and restart app
+kolt check --watch     Watch and type-check
 kolt fmt               Format source files with ktfmt
 kolt fmt --check       Check formatting (CI mode)
 kolt clean             Remove build artifacts
@@ -78,6 +84,13 @@ kolt --version         Show version
 ```
 
 `install`, `update`, and `tree` are also available as top-level aliases (e.g. `kolt install`).
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--watch` | Watch source files and re-run the command on change (build/check/test/run) |
+| `--no-daemon` | Skip the warm compiler daemon for this invocation |
 
 ## Configuration
 
