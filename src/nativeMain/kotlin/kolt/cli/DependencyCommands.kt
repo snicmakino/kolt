@@ -212,10 +212,6 @@ internal fun doUpdate() {
 internal fun doTree() {
     val config = loadProjectConfig()
 
-    // For JVM, `autoInjectedTestDeps` unconditionally injects kotlin-test-junit5
-    // so `kolt tree` has something to show even when the user declared no test
-    // deps. For native, that function returns empty (konanc bundles kotlin.test),
-    // so we gate on user-declared deps only.
     val hasAnyDeps = config.dependencies.isNotEmpty() ||
         config.testDependencies.isNotEmpty() ||
         autoInjectedTestDeps(config).isNotEmpty()
@@ -227,9 +223,6 @@ internal fun doTree() {
     val paths = resolveKoltPaths(EXIT_DEPENDENCY_ERROR)
 
     if (config.target == "native") {
-        // Native target: walk Gradle Module Metadata, not POMs. The rendered
-        // graph mirrors what NativeResolver actually links (redirected
-        // -linuxx64 names, kotlin-stdlib skipped per ADR 0011).
         val nativeLookup = createNativeLookup(
             config.repositories.values.toList(),
             paths.cacheBase,

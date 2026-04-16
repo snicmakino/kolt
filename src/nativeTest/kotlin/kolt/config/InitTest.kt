@@ -24,8 +24,7 @@ class InitTest {
 
     @Test
     fun generateTomlUsesKotlinFunctionFqnForMain() {
-        // Init writes the bare function FQN "main" (root package) rather than
-        // a JVM facade class name. See ADR 0015.
+        // ADR 0015: bare function FQN, not JVM facade class name.
         val toml = generateKoltToml("my-app")
         assertTrue(toml.contains("main = \"main\""))
     }
@@ -63,7 +62,6 @@ class InitTest {
     @Test
     fun generateTomlDoesNotContainTestDependencies() {
         val toml = generateKoltToml("my-app")
-        // kotlin-test-junit5 is auto-injected by kolt, not declared in kolt.toml
         assertFalse(toml.contains("[test-dependencies]"))
         assertFalse(toml.contains("kotlin-test-junit5"))
     }

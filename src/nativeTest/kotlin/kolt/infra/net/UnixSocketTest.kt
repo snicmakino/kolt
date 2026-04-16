@@ -37,9 +37,6 @@ class UnixSocketTest {
 
     @Test
     fun recvExactReturnsInvalidArgumentForNegativeLength() {
-        // A stray invalid fd cannot reach the recv() call because the
-        // length check fires first, so this test is independent of
-        // any server.
         UnixSocket(fd = -1).use { socket ->
             val result = socket.recvExact(-1)
             val err = assertIs<UnixSocketError.InvalidArgument>(result.getError())
@@ -52,8 +49,6 @@ class UnixSocketTest {
 
     @Test
     fun recvExactReturnsUnexpectedEofWhenPeerProvidesFewerBytes() {
-        // The echo server hands back exactly three bytes; asking for
-        // four exercises the partial-read branch of recvExact.
         UnixEchoServer.start(handler = { byteArrayOf(1, 2, 3) })
             .getOrElse { fail("start failed: $it") }
             .use { server ->

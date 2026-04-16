@@ -48,7 +48,6 @@ fun addDependencyToToml(
 ): Result<String, AlreadyExists> {
     val sectionHeader = if (isTest) "[test-dependencies]" else "[dependencies]"
 
-    // Check if the dependency already exists in the target section
     if (containsDependency(toml, groupArtifact, sectionHeader)) {
         return Err(AlreadyExists(groupArtifact))
     }
@@ -58,12 +57,9 @@ fun addDependencyToToml(
     val sectionIndex = lines.indexOfFirst { it.trim() == sectionHeader }
 
     if (sectionIndex >= 0) {
-        // Insert before trailing blank lines of the section
         val insertIndex = findSectionContentEnd(lines, sectionIndex)
         lines.add(insertIndex, newEntry)
     } else {
-        // Section doesn't exist — append it
-        // Ensure a blank line separator before the new section
         if (lines.isNotEmpty() && lines.last().isNotEmpty()) {
             lines.add("")
         }
@@ -72,7 +68,6 @@ fun addDependencyToToml(
     }
 
     val result = lines.joinToString("\n")
-    // Preserve trailing newline if input had one, or ensure one for new sections
     return Ok(if (result.endsWith("\n")) result else "$result\n")
 }
 

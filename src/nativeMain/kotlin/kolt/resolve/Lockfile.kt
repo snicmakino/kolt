@@ -15,20 +15,7 @@ sealed class LockfileError {
 
 data class LockEntry(val version: String, val sha256: String, val transitive: Boolean = false)
 
-/**
- * Domain model for kolt.lock. Serialized as JSON (v2):
- * ```json
- * {
- *   "version": 2,
- *   "kotlin": "2.1.0",
- *   "jvm_target": "17",
- *   "dependencies": {
- *     "group:artifact": { "version": "1.0.0", "sha256": "...", "transitive": false }
- *   }
- * }
- * ```
- * V1 lockfiles (without `transitive` field) are accepted with `transitive` defaulting to `false`.
- */
+// V1 lockfiles (without `transitive` field) are accepted with transitive defaulting to false.
 data class Lockfile(
     val version: Int,
     val kotlin: String,

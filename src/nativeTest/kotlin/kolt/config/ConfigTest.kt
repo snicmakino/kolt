@@ -192,7 +192,6 @@ class ConfigTest {
 
         assertNull(result.get())
         val error = assertIs<ConfigError.ParseFailed>(result.getError())
-        // message should mention valid targets
         kotlin.test.assertTrue(error.message.contains("target"))
         kotlin.test.assertTrue(error.message.contains("jvm"))
         kotlin.test.assertTrue(error.message.contains("native"))
@@ -372,11 +371,8 @@ class ConfigTest {
 
     @Test
     fun parseMinimalConfigHasDefaultRepositories() {
-        // Given: no [repositories] section in TOML
-        // When: config is parsed
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        // Then: default is Maven Central
         assertEquals(1, config.repositories.size)
         assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
@@ -402,7 +398,6 @@ class ConfigTest {
 
     @Test
     fun parseConfigWithMultipleRepositoriesPreservesOrder() {
-        // Given: two repositories declared in a specific order
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -418,7 +413,6 @@ class ConfigTest {
 
         val config = assertNotNull(parseConfig(toml).get())
         assertEquals(2, config.repositories.size)
-        // Map preserves insertion order
         val entries = config.repositories.entries.toList()
         assertEquals("internal", entries[0].key)
         assertEquals("https://nexus.example.com/repository/internal", entries[0].value)
@@ -451,7 +445,6 @@ class ConfigTest {
 
     @Test
     fun repositoryTrailingSlashIsNormalized() {
-        // Given: a repository URL with a trailing slash
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -466,18 +459,14 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        // Trailing slashes must be stripped to prevent double-slash in constructed URLs
         assertEquals("https://jitpack.io", config.repositories["jitpack"])
         assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
 
     @Test
     fun parseMinimalConfigHasDefaultResources() {
-        // Given: no resources or test_resources fields in TOML
-        // When: config is parsed
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        // Then: both default to empty list
         assertEquals(emptyList(), config.resources)
         assertEquals(emptyList(), config.testResources)
     }
@@ -582,28 +571,20 @@ class ConfigTest {
 
     @Test
     fun mavenCentralBaseDefinedInConfigPackage() {
-        // Verifies MAVEN_CENTRAL_BASE is defined in kolt.config (not scattered to resolve/tool),
-        // and matches the canonical Maven Central URL used as the default repository.
         assertEquals("https://repo1.maven.org/maven2", MAVEN_CENTRAL_BASE)
         val config = assertNotNull(parseConfig(minimalToml).get())
         assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
 
-    // --- jdk field ---
-
     @Test
     fun parseMinimalConfigHasNullJdk() {
-        // Given: minimal config with no jdk field
-        // When: parsing
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        // Then: jdk defaults to null (use system java)
         assertNull(config.jdk)
     }
 
     @Test
     fun parseConfigWithJdkVersion() {
-        // Given: config with jdk = "21"
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -614,16 +595,12 @@ class ConfigTest {
             sources = ["src"]
         """.trimIndent()
 
-        // When: parsing
         val config = assertNotNull(parseConfig(toml).get())
-
-        // Then: jdk field contains the specified version
         assertEquals("21", config.jdk)
     }
 
     @Test
     fun parseConfigWithJdkAndJvmTargetAreIndependent() {
-        // Given: config with both jdk and jvm_target set to different values
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -635,29 +612,20 @@ class ConfigTest {
             sources = ["src"]
         """.trimIndent()
 
-        // When: parsing
         val config = assertNotNull(parseConfig(toml).get())
-
-        // Then: jdk and jvm_target are independent fields
         assertEquals("21", config.jdk)
         assertEquals("17", config.jvmTarget)
     }
 
-    // --- [[cinterop]] ---
-
     @Test
     fun parseMinimalConfigHasEmptyCinteropList() {
-        // Given: no [[cinterop]] section in TOML
-        // When: config is parsed
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        // Then: cinterop defaults to empty list
         assertEquals(emptyList(), config.cinterop)
     }
 
     @Test
     fun parseConfigWithSingleCinteropEntry() {
-        // Given: one [[cinterop]] entry with only required fields
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -671,10 +639,8 @@ class ConfigTest {
             def = "src/nativeInterop/cinterop/libcurl.def"
         """.trimIndent()
 
-        // When: config is parsed
         val config = assertNotNull(parseConfig(toml).get())
 
-        // Then: one entry is parsed with correct fields
         assertEquals(1, config.cinterop.size)
         val entry = config.cinterop[0]
         assertEquals("libcurl", entry.name)
@@ -684,7 +650,6 @@ class ConfigTest {
 
     @Test
     fun parseConfigWithCinteropEntryAllFields() {
-        // Given: one [[cinterop]] entry with all optional fields
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -699,10 +664,8 @@ class ConfigTest {
             package = "libcurl"
         """.trimIndent()
 
-        // When: config is parsed
         val config = assertNotNull(parseConfig(toml).get())
 
-        // Then: all fields are parsed correctly
         assertEquals(1, config.cinterop.size)
         val entry = config.cinterop[0]
         assertEquals("libcurl", entry.name)
@@ -712,7 +675,6 @@ class ConfigTest {
 
     @Test
     fun parseConfigWithMultipleCinteropEntries() {
-        // Given: two [[cinterop]] entries
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -731,10 +693,8 @@ class ConfigTest {
             package = "openssl"
         """.trimIndent()
 
-        // When: config is parsed
         val config = assertNotNull(parseConfig(toml).get())
 
-        // Then: both entries are parsed in order
         assertEquals(2, config.cinterop.size)
         assertEquals("libcurl", config.cinterop[0].name)
         assertEquals("openssl", config.cinterop[1].name)
@@ -744,7 +704,6 @@ class ConfigTest {
 
     @Test
     fun parseConfigCinteropWithDependencies() {
-        // Given: [[cinterop]] alongside [dependencies]
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -761,10 +720,8 @@ class ConfigTest {
             def = "libcurl.def"
         """.trimIndent()
 
-        // When: config is parsed
         val config = assertNotNull(parseConfig(toml).get())
 
-        // Then: both sections are parsed independently
         assertEquals(1, config.dependencies.size)
         assertEquals(1, config.cinterop.size)
     }

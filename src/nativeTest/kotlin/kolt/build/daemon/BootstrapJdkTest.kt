@@ -11,13 +11,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * Drives every branch of [ensureBootstrapJavaBin] with injected seams.
- * The fast path (JDK already present) must not touch the installer,
- * the slow path (JDK absent) must run the installer and re-probe,
- * and a failing installer must surface as [BootstrapJdkError] with
- * the probed install dir and the underlying ToolchainError.
- */
 class EnsureBootstrapJavaBinTest {
 
     private val paths = KoltPaths(home = "/fake/home")
@@ -75,9 +68,6 @@ class EnsureBootstrapJavaBinTest {
 
     @Test
     fun postInstallProbeFailureSurfacesAsBootstrapJdkError() {
-        // installJdkToolchain returned Ok but the post-install probe
-        // cannot find bin/java — a ToolchainManager bug we still
-        // translate into a graceful daemon fallback.
         val result = ensureBootstrapJavaBin(
             paths = paths,
             resolve = { null },

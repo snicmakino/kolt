@@ -26,12 +26,6 @@ class SpawnDetachedTest {
 
     @Test
     fun spawnRunsGrandchildAndReturnsOkImmediately() {
-        // /bin/sh -c "echo ok > $scratch.marker" writes a file and
-        // exits. The parent reaps only the intermediate child, so the
-        // call returns as soon as the double-fork finishes — the
-        // marker file is written by the detached grandchild at some
-        // point after that. A short polling loop waits for the
-        // grandchild to reach the write.
         val result = spawnDetached(
             listOf("/bin/sh", "-c", "echo ok > $scratch.marker"),
         )
@@ -50,9 +44,6 @@ class SpawnDetachedTest {
 
     @Test
     fun logPathCapturesStdoutAndStderrOfGrandchild() {
-        // sh echoes the same marker to stdout and stderr; both must
-        // land in the log file because dup2 redirects fd 1 and fd 2
-        // onto the log fd.
         val logPath = "$scratch.log"
         deleteFile(logPath)
         val result = spawnDetached(

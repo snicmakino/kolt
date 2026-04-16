@@ -124,14 +124,6 @@ fun isDirectory(path: String): Boolean {
     }
 }
 
-/**
- * Returns `true` iff [path] resolves (via `stat(2)`, following
- * symlinks) to a regular file. Distinct from a naive "not a
- * directory" test because symlinks, FIFOs, sockets, and device
- * nodes are also not directories but are not regular files either.
- * Used by [listJarFiles] to filter out anything a caller cannot
- * hand to a JVM URL classloader as a jar.
- */
 @OptIn(ExperimentalForeignApi::class)
 fun isRegularFile(path: String): Boolean {
     memScoped {
@@ -150,7 +142,6 @@ fun fileMtime(path: String): Long? {
     }
 }
 
-/** Return the newest mtime among all .kt files in the given directories. 0 if no files found. */
 fun newestMtime(directories: List<String>): Long {
     var newest = 0L
     for (dir in directories) {
@@ -201,17 +192,6 @@ private fun collectAllFileMtimes(directory: String, onFile: (Long) -> Unit) {
     }
 }
 
-/**
- * Non-recursively lists entries in [path] whose name ends with `.jar`
- * **and** which resolve (via `stat(2)`) to regular files, returned
- * as absolute paths (`$path/$name`) in lexicographic order. Symlinks
- * are followed, so a symlink pointing at a real jar is admitted and
- * a symlink pointing at a directory named `foo.jar` is filtered out.
- * Returns [ListFilesFailed] if the directory cannot be opened. An
- * empty successful result is distinct from the error case, so a
- * caller can treat "directory missing" (Err) and "directory exists
- * but has no jars" (empty Ok) differently.
- */
 @OptIn(ExperimentalForeignApi::class)
 fun listJarFiles(path: String): Result<List<String>, ListFilesFailed> {
     val dir = opendir(path) ?: return Err(ListFilesFailed(path))
@@ -265,24 +245,8 @@ fun listKotlinFiles(directory: String): Result<List<String>, ListFilesFailed> {
     return Ok(files)
 }
 
-// Expand a caller-supplied source path list to a flat list of .kt files.
-// Directory entries are walked recursively via `collectKotlinFiles`;
-// individual .kt files are kept verbatim; anything else (non-.kt file, or a
-// path that does not exist) is kept as-is so the caller can still surface
-// a useful backend error.
-//
-// Motivation: Phase A (kotlin-compiler-embeddable) accepted directories on
-// the kotlinc command line and walked them implicitly. Phase B's BTA
-// (`jvmCompilationOperationBuilder(sources: List<Path>, ...)`) requires
-// individual file paths and reports `Is a directory` on the first entry
-// that happens to be a directory — which turns a typical
-// `sources = ["src"]` into a hard failure. Expanding here keeps both
-// backends happy with one call site. See issue #117.
-//
-// Order is stable: entries within each directory are sorted by
-// `listKotlinFiles`, and the overall order preserves the caller's
-// `sources` list position so kotlinc / BTA see the same module-boundary
-// order a hand-written CLI would produce.
+// BTA requires individual file paths, not directories (issue #117).
+// Non-.kt / non-existent entries are kept as-is for backend error reporting.
 fun expandKotlinSources(sources: List<String>): Result<List<String>, ListFilesFailed> {
     val expanded = mutableListOf<String>()
     for (entry in sources) {
@@ -384,28 +348,13 @@ fun homeDirectory(): Result<String, HomeNotFound> {
     }
 }
 
-/**
- * Returns the absolute path of the current working directory, or
- * `null` if `getcwd(3)` fails. Distinct from [homeDirectory] so
- * callers can use a cwd they just entered without re-reading `$HOME`.
- */
 @OptIn(ExperimentalForeignApi::class)
 fun currentWorkingDirectory(): String? = memScoped {
     val buf = allocArray<ByteVar>(PATH_MAX)
     getcwd(buf, PATH_MAX.toULong())?.toKString()
 }
 
-/**
- * If [path] starts with `/`, returns it unchanged. Otherwise returns
- * `"$cwd/$path"` (with any trailing slash on [cwd] collapsed so the
- * result never contains `//`). This is deliberately not a
- * path-canonicalising helper — it does **not** resolve `..`, `.`,
- * or symlinks. It exists so [doBuild] can hand absolute source /
- * output paths to any backend without relying on the backend
- * inheriting the kolt process's cwd, which is a load-bearing
- * assumption today for the daemon path (see ADR 0016 §3 and the
- * note on `CompileRequest.workingDir`).
- */
+// Does not resolve `..`, `.`, or symlinks — purely prepends cwd.
 fun absolutise(path: String, cwd: String): String {
     if (path.startsWith('/')) return path
     val base = if (cwd.endsWith('/')) cwd.dropLast(1) else cwd

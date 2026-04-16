@@ -16,13 +16,6 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-// FakeDeps records every seam call so each test can assert exactly which
-// I/O the fetcher performed. Callers pre-populate `existingFiles` (cache
-// contents before the call), `sha256Results` (hash that `computeSha256`
-// will return for a given path), and `stampContents` (what
-// `readFileAsString` will return for a given stamp path). All writes —
-// downloads and stamp updates — are recorded on the same maps so a
-// second lookup of the same path sees the updated view.
 private class FakeFetcherDeps(
     val existingFiles: MutableSet<String> = mutableSetOf(),
     val sha256Results: MutableMap<String, String> = mutableMapOf(),
@@ -77,9 +70,6 @@ class PluginJarFetcherTest {
     private val cacheBase = "/home/u/.kolt/cache"
     private val kotlinVersion = "2.3.20"
 
-    // Cache layout mirrors the existing Maven-shaped dependency cache so
-    // a future `kolt clean --cache` sweep does not need to special-case
-    // plugin jars. See issue #65 + discussion on coordinate shape.
     private val serializationJar =
         "$cacheBase/org/jetbrains/kotlin/kotlin-serialization-compiler-plugin/2.3.20/" +
             "kotlin-serialization-compiler-plugin-2.3.20.jar"
@@ -168,19 +158,11 @@ class PluginJarFetcherTest {
 
     @Test
     fun cacheHitWithStampMismatchReDownloadsAndRewritesStampAndWarns() {
-        // TOFU self-heal: a corrupt stamp or corrupt jar means one of
-        // the two drifted. Re-download + re-stamp is the only safe move —
-        // silently trusting either side would let bit rot survive forever.
-        // #65 review finding #4: emit a single observable warning so a
-        // user staring at "why is every build slow" can grep stderr.
         val deps = FakeFetcherDeps(
             existingFiles = mutableSetOf(serializationJar, serializationStamp),
             sha256Results = mutableMapOf(serializationJar to "hash-actual"),
             stampContents = mutableMapOf(serializationStamp to "hash-stale"),
         )
-        // After the re-download the freshly-downloaded jar hashes to
-        // "hash-fresh". The fake keeps `sha256Results` and updates it
-        // alongside the "successful" download.
         deps.sha256Results[serializationJar] = "hash-fresh"
 
         val result = fetchPluginJar("serialization", kotlinVersion, cacheBase, deps)
@@ -197,15 +179,9 @@ class PluginJarFetcherTest {
 
     @Test
     fun cacheHitWithUnreadableStampWarnsAndReDownloads() {
-        // Stamp file exists but cannot be read (fs error, race, etc.).
-        // The self-heal path still falls through to re-download, but it
-        // must not do so silently — that would let a systematic fs
-        // failure (disk full, fs bug) drain the network on every build
-        // with no user-visible signal.
         val deps = FakeFetcherDeps(
             existingFiles = mutableSetOf(serializationJar, serializationStamp),
             sha256Results = mutableMapOf(serializationJar to "hash-fresh"),
-            // stampContents deliberately empty → readFileAsString returns OpenFailed
         )
 
         fetchPluginJar("serialization", kotlinVersion, cacheBase, deps)
@@ -216,18 +192,9 @@ class PluginJarFetcherTest {
 
     @Test
     fun cacheHitWithHashFailureWarnsBeforeReDownload() {
-        // computeSha256 fails on the existing jar (fs error, io race).
-        // The cache-hit branch logs a warning and falls through to the
-        // download path. `sha256Results` stays empty for this test so
-        // the re-download's own `computeSha256` call also fails — the
-        // whole fetch then returns `HashComputationFailed`. That is
-        // fine for this assertion: we only care that the *cache-hit*
-        // failure emitted a warning, because the silent-self-heal
-        // regression the warning defends against happens on that path.
         val deps = FakeFetcherDeps(
             existingFiles = mutableSetOf(serializationJar, serializationStamp),
             stampContents = mutableMapOf(serializationStamp to "hash-x"),
-            // sha256Results intentionally empty
         )
 
         val result = fetchPluginJar("serialization", kotlinVersion, cacheBase, deps)
@@ -242,10 +209,6 @@ class PluginJarFetcherTest {
 
     @Test
     fun cacheHitWithMissingStampReDownloads() {
-        // Legacy cache state: jar is present from before the fetcher
-        // switch (previously written by `ensureKotlincBin` in-place from
-        // the kotlinc sidecar). No stamp means no TOFU anchor, so we
-        // must not trust the cached jar — re-download to establish one.
         val deps = FakeFetcherDeps(
             existingFiles = mutableSetOf(serializationJar),
             sha256Results = mutableMapOf(serializationJar to "hash-fresh"),
@@ -273,11 +236,6 @@ class PluginJarFetcherTest {
 
     @Test
     fun hashComputationFailureAfterDownloadMapsToFetchError() {
-        // downloadFile succeeded, so the jar exists on disk, but
-        // computeSha256 is unable to open it (disk error, race with
-        // another kolt process, etc.). This is rare but must not
-        // corrupt the cache — returning HashComputationFailed leaves
-        // the stamp absent so the next build re-downloads.
         val deps = FakeFetcherDeps()
 
         val result = fetchPluginJar("serialization", kotlinVersion, cacheBase, deps)
@@ -310,11 +268,6 @@ class PluginJarFetcherTest {
 
     @Test
     fun fetchEnabledPluginJarsAbortsOnFirstError() {
-        // A missing jar must surface as a build-breaking error, not a
-        // silently half-plugged compile. We seed only allopen with a
-        // hash so serialization's computeSha256 call fails after the
-        // stubbed download, and the iterator stops before even
-        // attempting allopen.
         val deps = FakeFetcherDeps()
 
         val result = fetchEnabledPluginJars(
@@ -352,11 +305,6 @@ class PluginJarFetcherTest {
 
     @Test
     fun mkdirRunsOnColdCachePath() {
-        // Regression guard: the fetcher must create the cache directory
-        // tree before delegating to `downloadFile`. `downloadFile` itself
-        // opens the destination with O_CREAT but not the enclosing
-        // directory — same rationale as the daemon dir setup path in
-        // DaemonPreconditions.
         val deps = FakeFetcherDeps(
             sha256Results = mutableMapOf(serializationJar to "h"),
         )

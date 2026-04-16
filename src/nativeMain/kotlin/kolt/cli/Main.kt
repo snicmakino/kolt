@@ -10,11 +10,6 @@ fun main(args: Array<String>) {
         return
     }
 
-    // Kolt-level flags (consumed here, never forwarded to subcommands
-    // or to the user program via `--`). Only `--no-daemon` lives at
-    // this layer today. The flag is only recognised *before* the `--`
-    // passthrough sentinel so a user program that accepts `--no-daemon`
-    // itself (e.g. `kolt run -- --no-daemon`) still receives it intact.
     val argList = args.toList()
     val passthroughStart = argList.indexOf("--")
     val koltLevel = if (passthroughStart >= 0) argList.subList(0, passthroughStart) else argList

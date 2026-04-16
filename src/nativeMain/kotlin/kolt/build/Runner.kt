@@ -24,9 +24,6 @@ fun nativeRunCommand(
     appArgs: List<String> = emptyList()
 ): RunCommand = RunCommand(args = listOf(outputKexePath(config)) + appArgs)
 
-// Invokes the test kexe produced by nativeTestBuildCommand. testArgs are passed
-// through verbatim so users can supply kotlin.native test flags such as
-// --ktest_filter, --ktest_logger, --ktest_negative_filter.
 fun nativeTestRunCommand(
     config: KoltConfig,
     testArgs: List<String> = emptyList()

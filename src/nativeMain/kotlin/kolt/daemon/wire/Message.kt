@@ -3,18 +3,8 @@ package kolt.daemon.wire
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * Native mirror of `kolt.daemon.protocol.Message` from the JVM
- * `kolt-compiler-daemon` subproject. Field names and serial names are
- * load-bearing — the JSON wire format documented in ADR 0016 is the
- * contract shared between the two sides, and drift in either file
- * breaks the daemon.
- *
- * This file is deliberately duplicated rather than shared via a
- * commonMain source set: kolt today only speaks this protocol from one
- * native client and one JVM server, so a shared module would trade
- * straight-line readability for generic build plumbing we do not need.
- */
+// Mirror of JVM kolt.daemon.protocol.Message. Field/serial names are
+// load-bearing wire contract (ADR 0016) — drift breaks the daemon.
 @Serializable
 sealed interface Message {
 

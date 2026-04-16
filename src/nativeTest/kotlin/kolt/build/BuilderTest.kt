@@ -8,8 +8,6 @@ import kotlin.test.assertTrue
 
 class BuilderTest {
 
-    // --- checkCommand ---
-
     @Test
     fun checkCommandDoesNotIncludeRuntimeOrOutput() {
         val cmd = checkCommand(testConfig())
@@ -55,17 +53,12 @@ class BuilderTest {
         )
     }
 
-    // --- checkCommand (kotlincPath) ---
-
     @Test
     fun checkCommandWithManagedKotlincPathUsesItAsCompiler() {
-        // Given: a managed kotlinc binary path
         val managedKotlincBin = "/home/user/.kolt/toolchains/kotlinc/2.1.0/bin/kotlinc"
 
-        // When: checkCommand is called with that path
         val cmd = checkCommand(testConfig(), kotlincPath = managedKotlincBin)
 
-        // Then: the managed path is first in args
         assertEquals(
             listOf(managedKotlincBin, "src", "-jvm-target", "17"),
             cmd
@@ -74,16 +67,13 @@ class BuilderTest {
 
     @Test
     fun checkCommandWithNullKotlincPathDefaultsToSystemKotlinc() {
-        // Given: no managed toolchain (null)
         val cmd = checkCommand(testConfig(), kotlincPath = null)
 
-        // Then: falls back to system "kotlinc"
         assertEquals("kotlinc", cmd.first())
     }
 
     @Test
     fun checkCommandWithManagedKotlincAndClasspath() {
-        // Given: managed kotlinc + classpath
         val managedKotlincBin = "/home/user/.kolt/toolchains/kotlinc/2.1.0/bin/kotlinc"
 
         val cmd = checkCommand(testConfig(), classpath = "/cache/a.jar", kotlincPath = managedKotlincBin)
@@ -93,8 +83,6 @@ class BuilderTest {
             cmd
         )
     }
-
-    // --- jarCommand ---
 
     @Test
     fun jarCommandPackagesClassesDirToJar() {
@@ -120,7 +108,6 @@ class BuilderTest {
 
     @Test
     fun jarCommandSourceDirectoryIsAlwaysClassesDir() {
-        // jar source is always build/classes regardless of project name
         val cmd1 = jarCommand(testConfig(name = "app-a"))
         val cmd2 = jarCommand(testConfig(name = "app-b"))
 
@@ -130,13 +117,10 @@ class BuilderTest {
 
     @Test
     fun jarCommandWithManagedJarPathUsesItAsJar() {
-        // Given: a managed jar binary path
         val managedJarBin = "/home/user/.kolt/toolchains/jdk/21/bin/jar"
 
-        // When: jarCommand is called with that path
         val cmd = jarCommand(testConfig(), jarPath = managedJarBin)
 
-        // Then: managed path is used as the first arg, not system "jar"
         assertEquals(
             listOf(managedJarBin, "cf", "build/my-app.jar", "-C", "build/classes", "."),
             cmd.args
@@ -145,15 +129,10 @@ class BuilderTest {
 
     @Test
     fun jarCommandWithNullJarPathDefaultsToSystemJar() {
-        // Given: no managed JDK (null)
-        // When: jarCommand is called with explicit null jarPath
         val cmd = jarCommand(testConfig(), jarPath = null)
 
-        // Then: falls back to system "jar"
         assertEquals("jar", cmd.args.first())
     }
-
-    // --- nativeLibraryCommand (Stage 1: sources -> klib) ---
 
     @Test
     fun nativeLibraryCommandProducesKlibDirectory() {
@@ -241,8 +220,6 @@ class BuilderTest {
 
         assertFalse(cmd.args.contains("-l"))
     }
-
-    // --- nativeLinkCommand (Stage 2: klib -> kexe) ---
 
     @Test
     fun nativeLinkCommandLinksKlibToProgramKexe() {
@@ -342,8 +319,6 @@ class BuilderTest {
         assertEquals("main", cmd.args[eIndex + 1])
     }
 
-    // --- nativeTestLibraryCommand (Stage 1: main+test sources -> klib) ---
-
     @Test
     fun nativeTestLibraryCommandIncludesMainAndTestSources() {
         val cmd = nativeTestLibraryCommand(testConfig(target = "native"))
@@ -432,8 +407,6 @@ class BuilderTest {
         assertEquals(managedKonanc, cmd.args.first())
     }
 
-    // --- nativeTestLinkCommand (Stage 2: klib -> test kexe) ---
-
     @Test
     fun nativeTestLinkCommandLinksWithGeneratedRunner() {
         val cmd = nativeTestLinkCommand(testConfig(target = "native"))
@@ -509,13 +482,10 @@ class BuilderTest {
 
     @Test
     fun jarCommandWithManagedJarPathPreservesOutputPath() {
-        // Given: a managed jar binary path
         val managedJarBin = "/home/user/.kolt/toolchains/jdk/21/bin/jar"
 
-        // When: jarCommand is called with jarPath
         val cmd = jarCommand(testConfig(name = "hello-world"), jarPath = managedJarBin)
 
-        // Then: outputPath is still derived from project name, not affected by jarPath
         assertEquals("build/hello-world.jar", cmd.outputPath)
         assertEquals(
             listOf(managedJarBin, "cf", "build/hello-world.jar", "-C", "build/classes", "."),

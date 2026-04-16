@@ -15,10 +15,6 @@ import kolt.resolve.PluginFetcherDeps
 import kolt.resolve.fetchEnabledPluginJars
 import kotlin.system.exitProcess
 
-// Production wiring for the plugin jar fetcher's I/O seam. Every method
-// is a passthrough to the matching `kolt.infra` helper — isolated in one
-// place so unit tests can substitute a fake, and so the fetcher has a
-// single "production" construction site.
 private fun defaultPluginFetcherDeps(): PluginFetcherDeps = object : PluginFetcherDeps {
     override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)
     override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> =
@@ -34,16 +30,6 @@ private fun defaultPluginFetcherDeps(): PluginFetcherDeps = object : PluginFetch
     override fun warn(message: String) = eprintln("warning: $message")
 }
 
-// Resolve every enabled `kolt.toml [plugins]` entry to its cached jar
-// path as a flat `alias → path` map. Callers that need the derived
-// shapes (`-Xplugin=…` strings or the daemon-shaped
-// `alias → List<path>`) should call this once and map the result so a
-// rebuild does not pay the file-exists + re-hash cost per enabled
-// plugin twice. Errors: an unknown alias is a user config bug
-// (`EXIT_CONFIG_ERROR`); any other failure (download, mkdir, hash,
-// stamp write) is an operational error pinned to the caller-provided
-// [operationalExitCode] so `build` and `test` paths can distinguish
-// their own exit statuses.
 internal fun resolveEnabledPluginJarPaths(
     config: KoltConfig,
     paths: KoltPaths,
@@ -67,25 +53,7 @@ private fun resolveEnabledPluginJarsOrExit(
     }
 }
 
-// #65 review findings #3 + #8: the error-to-exit translation is a pure
-// function so every branch (including the HTTP 404 → EXIT_CONFIG_ERROR
-// special case) is unit-testable without process exit. The wrapper
-// above handles the eprintln + exitProcess side effects; every test
-// that wants to pin the mapping calls this function directly.
-//
-// Mapping rules:
-// - UnknownPlugin → config bug (EXIT_CONFIG_ERROR). User mistyped an
-//   alias in `kolt.toml [plugins]`.
-// - DownloadFailed / HttpFailed 404 → config bug. A 404 on a stable
-//   `org.jetbrains.kotlin:kotlin-*-compiler-plugin:<ver>` coordinate
-//   effectively always means the `kotlin = "<ver>"` pin in `kolt.toml`
-//   is wrong (or a rare JetBrains un-publish, which is indistinguishable
-//   from the user's perspective and still requires a config edit).
-// - DownloadFailed / other → operational. Network / write / TLS errors
-//   are not the user's fault and should propagate as the caller's
-//   operational exit code (build vs test).
-// - Cache dir / hash / stamp failures → operational. Local filesystem
-//   failures bubble up the same way the resolver treats them.
+// 404 on a plugin jar → EXIT_CONFIG_ERROR (bad kotlin version in kolt.toml).
 internal data class PluginFetchExit(val exitCode: Int, val message: String)
 
 internal fun mapPluginFetchErrorToExit(
@@ -124,9 +92,6 @@ private fun formatDownloadError(err: DownloadError): String = when (err) {
     is DownloadError.WriteFailed -> "write failed to ${err.path}"
 }
 
-// #65: derive `-Xplugin=<jar>` arguments for kotlinc / konanc subprocess
-// calls. Used by the JVM subprocess fallback path and the native konanc
-// build / test paths — none of which talk to the warm daemon.
 internal fun resolvePluginArgs(
     config: KoltConfig,
     paths: KoltPaths,
@@ -134,11 +99,6 @@ internal fun resolvePluginArgs(
 ): List<String> =
     resolveEnabledPluginJarsOrExit(config, paths, exitCode).values.map { "-Xplugin=$it" }
 
-// #65 daemon path: alias → jar classpath (single-element list per alias
-// today, since plugin jars are shaded singletons). Consumed by
-// `resolveCompilerBackend(pluginJars=…)` → `DaemonCompilerBackend`'s
-// `--plugin-jars` argv builder. The list shape is forward-compatible
-// with a future plugin that ships multiple jars.
 internal fun resolvePluginJarsMap(
     config: KoltConfig,
     paths: KoltPaths,

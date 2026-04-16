@@ -98,7 +98,6 @@ class TransitiveResolverTest {
 
     @Test
     fun diamondDependencyHighestVersionWins() {
-        // A -> C:1.0, B -> C:2.0 => C:2.0 should win
         val config = testConfig().copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
@@ -217,7 +216,6 @@ class TransitiveResolverTest {
         )
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
-        // Should have lib + compile-dep + runtime-dep (3 total), no junit or servlet-api
         assertEquals(3, resolved.deps.size)
         val names = resolved.deps.map { it.groupArtifact }.toSet()
         assertTrue("com.example:compile-dep" in names)
@@ -275,7 +273,6 @@ class TransitiveResolverTest {
 
     @Test
     fun cycleDetection() {
-        // A -> B -> A (cycle)
         val config = testConfig().copy(
             dependencies = mapOf("com.example:a" to "1.0.0")
         )
@@ -320,7 +317,6 @@ class TransitiveResolverTest {
         )
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
-        // Should resolve both without infinite loop
         assertEquals(2, resolved.deps.size)
     }
 
@@ -400,7 +396,6 @@ class TransitiveResolverTest {
 
     @Test
     fun directDepsWinOverTransitiveVersionConflict() {
-        // Direct: C:1.0.0. Transitive via A: C:2.0.0. Direct should win.
         val config = testConfig().copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
@@ -444,7 +439,6 @@ class TransitiveResolverTest {
 
     @Test
     fun multiLevelTransitivity() {
-        // A -> B -> C (two levels deep)
         val config = testConfig().copy(
             dependencies = mapOf("com.example:a" to "1.0.0")
         )
@@ -491,8 +485,6 @@ class TransitiveResolverTest {
 
     @Test
     fun pomLookupCachesSharedParentPom() {
-        // child-a and child-b share the same parent POM.
-        // The parent POM should be read only once.
         val config = testConfig().copy(
             dependencies = mapOf(
                 "com.example:child-a" to "1.0.0",
@@ -621,12 +613,10 @@ class TransitiveResolverTest {
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
 
-        // kmp-lib should use kmp-lib-jvm JAR
         val kmpDep = resolved.deps.first { it.groupArtifact == "com.example:kmp-lib" }
         assertEquals("/cache/com/example/kmp-lib-jvm/1.0.0/kmp-lib-jvm-1.0.0.jar", kmpDep.cachePath)
         assertFalse(kmpDep.transitive)
 
-        // Transitive dep from kmp-lib-jvm POM should be resolved
         val util = resolved.deps.first { it.groupArtifact == "com.example:util" }
         assertEquals("2.0.0", util.version)
         assertTrue(util.transitive)
@@ -644,7 +634,6 @@ class TransitiveResolverTest {
                 <version>1.0.0</version>
             </project>
         """.trimIndent()
-        // Module file exists but has no JVM redirect (like Guava)
         val moduleJson = """
         {
           "formatVersion": "1.1",
@@ -670,7 +659,6 @@ class TransitiveResolverTest {
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
         assertEquals(1, resolved.deps.size)
-        // Should use original artifact JAR path
         assertEquals("/cache/com/example/lib/1.0.0/lib-1.0.0.jar", resolved.deps[0].cachePath)
     }
 
@@ -741,7 +729,6 @@ class TransitiveResolverTest {
         val config = testConfig().copy(
             dependencies = mapOf("com.example:kmp-lib" to "1.0.0")
         )
-        // Lockfile stores original groupArtifact key with hash of redirected JAR
         val lock = Lockfile(
             version = 2,
             kotlin = "2.1.0",
@@ -795,7 +782,6 @@ class TransitiveResolverTest {
         assertFalse(resolved.lockChanged)
     }
 
-    // Helper: creates a fake ResolverDeps with POM content support
     private fun fakeTransitiveDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),
         sha256Results: Map<String, String> = emptyMap(),
@@ -825,15 +811,11 @@ class TransitiveResolverTest {
         }
     }
 
-    // ---- Multi-repository fallback tests ----
-
     @Test
     fun downloadFromRepositoriesSucceedsOnFirstRepo() {
-        // Given: two repos, first repo returns the artifact
         val coord = Coordinate("com.example", "lib", "1.0.0")
         val downloadedUrls = mutableListOf<String>()
 
-        // When: downloading with two repos
         val result = downloadFromRepositories(
             repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
             destPath = "/cache/lib.jar",
@@ -841,7 +823,6 @@ class TransitiveResolverTest {
             download = { url, _ -> downloadedUrls.add(url); Ok(Unit) }
         )
 
-        // Then: succeeds, only contacts first repo
         assertNotNull(result.get())
         assertEquals(1, downloadedUrls.size)
         assertEquals(
@@ -852,13 +833,11 @@ class TransitiveResolverTest {
 
     @Test
     fun downloadFromRepositoriesFallsBackToSecondRepoOn404() {
-        // Given: first repo returns 404, second repo has the artifact
         val coord = Coordinate("com.example", "lib", "1.0.0")
         val downloadedUrls = mutableListOf<String>()
         val repo1Base = "https://repo1.example.com"
         val repo2Base = "https://repo2.example.com"
 
-        // When: downloading with two repos
         val result = downloadFromRepositories(
             repos = listOf(repo1Base, repo2Base),
             destPath = "/cache/lib.jar",
@@ -869,7 +848,6 @@ class TransitiveResolverTest {
             }
         )
 
-        // Then: succeeds using second repo
         assertNotNull(result.get())
         assertEquals(2, downloadedUrls.size)
         assertEquals("https://repo1.example.com/com/example/lib/1.0.0/lib-1.0.0.jar", downloadedUrls[0])
@@ -878,10 +856,8 @@ class TransitiveResolverTest {
 
     @Test
     fun downloadFromRepositoriesReturnsErrWhenAllRepos404() {
-        // Given: all repos return 404
         val coord = Coordinate("com.example", "lib", "1.0.0")
 
-        // When: all repos 404
         val result = downloadFromRepositories(
             repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
             destPath = "/cache/lib.jar",
@@ -889,18 +865,15 @@ class TransitiveResolverTest {
             download = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) }
         )
 
-        // Then: returns the last 404 error
         val error = assertIs<DownloadError.HttpFailed>(result.getError())
         assertEquals(404, error.statusCode)
     }
 
     @Test
     fun downloadFromRepositoriesStopsOnNon404Error() {
-        // Given: first repo returns a non-404 error (network failure)
         val coord = Coordinate("com.example", "lib", "1.0.0")
         val downloadedUrls = mutableListOf<String>()
 
-        // When: first repo has a non-404 error
         val result = downloadFromRepositories(
             repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
             destPath = "/cache/lib.jar",
@@ -911,14 +884,12 @@ class TransitiveResolverTest {
             }
         )
 
-        // Then: stops immediately, returns the network error without trying second repo
         assertIs<DownloadError.NetworkError>(result.getError())
         assertEquals(1, downloadedUrls.size)
     }
 
     @Test
     fun resolveWithCustomRepositoryUrl() {
-        // Given: config with a custom repository instead of Maven Central
         val customRepoBase = "https://nexus.example.com/repository/maven-public"
         val config = testConfig(
             dependencies = mapOf("com.example:lib" to "1.0.0"),
@@ -953,18 +924,15 @@ class TransitiveResolverTest {
             }
         }
 
-        // When: resolving dependencies
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
 
-        // Then: downloaded from custom repo
         assertEquals(1, resolved.deps.size)
         assertTrue(downloadedUrls.any { it.startsWith(customRepoBase) })
     }
 
     @Test
     fun resolveWithMultipleRepositoriesFallsBackOn404() {
-        // Given: config with two repos; jar is only in the second repo
         val repo1Base = "https://repo1.example.com"
         val repo2Base = "https://repo2.example.com"
         val config = testConfig(
@@ -1002,16 +970,13 @@ class TransitiveResolverTest {
             }
         }
 
-        // When: resolving with first repo returning 404 for jar
         val result = resolveTransitive(config, null, "/cache", deps)
         val resolved = assertNotNull(result.get())
 
-        // Then: resolves successfully using the second repo
         assertEquals(1, resolved.deps.size)
         assertEquals("com.example:lib", resolved.deps[0].groupArtifact)
     }
 
-    // Helper: like fakeTransitiveDeps but tracks readFileContent call counts
     private fun countingDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),
         sha256Results: Map<String, String> = emptyMap(),

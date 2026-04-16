@@ -8,14 +8,6 @@ import kolt.config.KoltPaths
 import kolt.infra.*
 import kotlinx.serialization.json.*
 
-// Failures from any toolchain install / ensure step. Carries a
-// pre-formatted, user-facing message so callers can `eprintln("error: ${err.message}")`
-// without re-deriving wording per error kind. A flat carrier is enough
-// because nothing downstream classifies these: the CLI entry points
-// map them 1:1 to an exit, and the daemon bring-up path wraps
-// `message` into a fallback warning. Keeping it a single value class
-// also means new failure sites do not have to touch callers — they
-// just produce a new `ToolchainError(...)`.
 internal data class ToolchainError(val message: String)
 
 internal fun jdkDownloadUrl(version: String): String =
@@ -84,7 +76,6 @@ internal fun installJdkToolchain(
         return Err(ToolchainError(formatDownloadError("jdk", version, tarPath, error)))
     }
 
-    // SHA256 verification via Adoptium metadata API
     downloadFile(jdkMetadataUrl(version), metadataPath).getOrElse { error ->
         deleteFile(tarPath)
         val msg = when (error) {
@@ -133,7 +124,6 @@ internal fun installJdkToolchain(
     }
     deleteFile(tarPath)
 
-    // Adoptium tar.gz contains a single top-level dir like "jdk-21.0.2+13/" — find and move it
     val lsOutput = executeAndCapture("ls '$extractTempDir'").getOrElse { _ ->
         removeDirectoryRecursive(extractTempDir).getOrElse { e ->
             eprintln("warning: could not remove temp directory ${e.path}")
@@ -241,7 +231,6 @@ internal fun installKotlincToolchain(
         deleteFile(sha256Path)
         return Err(ToolchainError("could not read ${error.path}"))
     }
-    // SHA256 files can be "<hash>  <filename>" or just "<hash>"
     val expectedHash = sha256Content.trim().split(Regex("\\s+")).first()
     deleteFile(sha256Path)
 

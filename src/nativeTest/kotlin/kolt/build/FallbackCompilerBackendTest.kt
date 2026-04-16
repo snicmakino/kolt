@@ -171,9 +171,6 @@ class FallbackCompilerBackendTest {
 
     @Test
     fun onFallbackDefaultsToNoOp() {
-        // Constructing without the observer must compile and must not
-        // throw when fallback fires; the fallback's outcome must still
-        // be returned verbatim.
         val outcome = CompileOutcome(stdout = "subprocess ok", stderr = "")
         val primary = FakeBackend(Err(CompileError.BackendUnavailable.ForkFailed))
         val fallback = FakeBackend(Ok(outcome))

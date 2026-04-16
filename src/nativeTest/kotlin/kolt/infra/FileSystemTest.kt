@@ -296,7 +296,6 @@ class FileSystemTest {
         writeTestFile("$root/notes.md", "ignored")
         try {
             val files = assertNotNull(expandKotlinSources(listOf(root)).get())
-            // Only .kt files; sorted; nested dir walked.
             assertEquals(listOf("$root/A.kt", "$sub/B.kt"), files)
         } finally {
             remove("$root/A.kt")
@@ -313,8 +312,6 @@ class FileSystemTest {
         platform.posix.mkdir(root, 0b111111101u)
         writeTestFile("$root/Main.kt", "fun main() {}")
         try {
-            // A caller-supplied individual file must pass through
-            // verbatim — no flattening, no walk.
             val files = assertNotNull(expandKotlinSources(listOf("$root/Main.kt")).get())
             assertEquals(listOf("$root/Main.kt"), files)
         } finally {
@@ -331,10 +328,6 @@ class FileSystemTest {
         writeTestFile("$dir/Inside.kt", "fun inside() {}")
         writeTestFile(loose, "fun loose() {}")
         try {
-            // Mixing a dir and a standalone file: the caller's
-            // positional order must be preserved so kotlinc / BTA see
-            // the same module-boundary order a hand-written CLI would
-            // produce.
             val files = assertNotNull(expandKotlinSources(listOf(dir, loose)).get())
             assertEquals(listOf("$dir/Inside.kt", loose), files)
         } finally {
@@ -346,13 +339,6 @@ class FileSystemTest {
 
     @Test
     fun expandKotlinSourcesPassesThroughNonExistentEntriesUnchanged() {
-        // A path that is neither an existing directory nor an existing
-        // file is treated as "caller's intent" and passed through
-        // verbatim. The backend (kotlinc / BTA) then surfaces a real
-        // "no such file" error, which is strictly more informative
-        // than a wrapped `ListFilesFailed` would be. The test pins
-        // this policy so a future rewrite does not silently drop
-        // missing entries.
         val missing = "/tmp/kolt_expand_sources_missing_${platform.posix.getpid()}.kt"
         val files = assertNotNull(expandKotlinSources(listOf(missing)).get())
         assertEquals(listOf(missing), files)
@@ -360,17 +346,14 @@ class FileSystemTest {
 
     @Test
     fun copyDirectoryContentsCopiesFilesToDest() {
-        // Given: source dir with one file
         val src = "/tmp/kolt_copy_src_basic"
         val dest = "/tmp/kolt_copy_dest_basic"
         platform.posix.mkdir(src, 0b111111101u)
         platform.posix.mkdir(dest, 0b111111101u)
         writeTestFile("$src/hello.txt", "hello")
         try {
-            // When: copyDirectoryContents is called
             val result = copyDirectoryContents(src, dest)
 
-            // Then: file exists in dest
             assertNotNull(result.get())
             assertTrue(fileExists("$dest/hello.txt"))
             assertEquals("hello", assertNotNull(readFileAsString("$dest/hello.txt").get()))
@@ -384,7 +367,6 @@ class FileSystemTest {
 
     @Test
     fun copyDirectoryContentsPreservesRelativePaths() {
-        // Given: source dir with a nested file
         val src = "/tmp/kolt_copy_src_nested"
         val sub = "$src/config"
         val dest = "/tmp/kolt_copy_dest_nested"
@@ -393,10 +375,8 @@ class FileSystemTest {
         platform.posix.mkdir(dest, 0b111111101u)
         writeTestFile("$sub/app.properties", "key=value")
         try {
-            // When: copyDirectoryContents is called
             val result = copyDirectoryContents(src, dest)
 
-            // Then: nested file exists at same relative path in dest
             assertNotNull(result.get())
             assertTrue(fileExists("$dest/config/app.properties"))
             assertEquals("key=value", assertNotNull(readFileAsString("$dest/config/app.properties").get()))
@@ -412,7 +392,6 @@ class FileSystemTest {
 
     @Test
     fun copyDirectoryContentsCopiesMultipleFiles() {
-        // Given: source dir with multiple files
         val src = "/tmp/kolt_copy_src_multi"
         val dest = "/tmp/kolt_copy_dest_multi"
         platform.posix.mkdir(src, 0b111111101u)
@@ -420,10 +399,8 @@ class FileSystemTest {
         writeTestFile("$src/a.txt", "aaa")
         writeTestFile("$src/b.conf", "bbb")
         try {
-            // When: copyDirectoryContents is called
             val result = copyDirectoryContents(src, dest)
 
-            // Then: all files exist in dest
             assertNotNull(result.get())
             assertTrue(fileExists("$dest/a.txt"))
             assertTrue(fileExists("$dest/b.conf"))
@@ -441,7 +418,6 @@ class FileSystemTest {
 
     @Test
     fun copyDirectoryContentsOverwritesExistingFile() {
-        // Given: dest already has a file with old content
         val src = "/tmp/kolt_copy_src_overwrite"
         val dest = "/tmp/kolt_copy_dest_overwrite"
         platform.posix.mkdir(src, 0b111111101u)
@@ -449,10 +425,8 @@ class FileSystemTest {
         writeTestFile("$src/data.txt", "new content")
         writeTestFile("$dest/data.txt", "old content")
         try {
-            // When: copyDirectoryContents is called
             copyDirectoryContents(src, dest)
 
-            // Then: dest file has new content
             assertEquals("new content", assertNotNull(readFileAsString("$dest/data.txt").get()))
         } finally {
             remove("$src/data.txt")
@@ -464,29 +438,24 @@ class FileSystemTest {
 
     @Test
     fun copyDirectoryContentsForNonExistentSrcReturnsErr() {
-        // Given: source dir does not exist
         val result = copyDirectoryContents(
             src = "/tmp/kolt_copy_nonexistent_src",
             dest = "/tmp/kolt_copy_dest_err"
         )
 
-        // Then: returns Err
         assertNull(result.get())
         assertIs<CopyFailed>(result.getError())
     }
 
     @Test
     fun copyDirectoryContentsForEmptySrcSucceeds() {
-        // Given: source dir exists but is empty
         val src = "/tmp/kolt_copy_src_empty"
         val dest = "/tmp/kolt_copy_dest_empty"
         platform.posix.mkdir(src, 0b111111101u)
         platform.posix.mkdir(dest, 0b111111101u)
         try {
-            // When: copyDirectoryContents is called
             val result = copyDirectoryContents(src, dest)
 
-            // Then: succeeds with no files copied
             assertNotNull(result.get())
         } finally {
             platform.posix.rmdir(src)
@@ -494,21 +463,16 @@ class FileSystemTest {
         }
     }
 
-    // --- listSubdirectories ---
-
     @Test
     fun listSubdirectoriesReturnsSortedNames() {
-        // Given: directory with multiple subdirectories
         val base = "/tmp/kolt_list_subdirs_sorted"
         platform.posix.mkdir(base, 0b111111101u)
         platform.posix.mkdir("$base/beta", 0b111111101u)
         platform.posix.mkdir("$base/alpha", 0b111111101u)
         platform.posix.mkdir("$base/gamma", 0b111111101u)
         try {
-            // When: listing subdirectories
             val result = listSubdirectories(base)
 
-            // Then: returns sorted directory names
             assertEquals(listOf("alpha", "beta", "gamma"), result.get())
         } finally {
             platform.posix.rmdir("$base/alpha")
@@ -520,14 +484,11 @@ class FileSystemTest {
 
     @Test
     fun listSubdirectoriesReturnsEmptyForEmptyDir() {
-        // Given: empty directory
         val base = "/tmp/kolt_list_subdirs_empty"
         platform.posix.mkdir(base, 0b111111101u)
         try {
-            // When: listing subdirectories
             val result = listSubdirectories(base)
 
-            // Then: returns empty list
             assertEquals(emptyList(), result.get())
         } finally {
             platform.posix.rmdir(base)
@@ -536,26 +497,21 @@ class FileSystemTest {
 
     @Test
     fun listSubdirectoriesReturnsErrForNonExistentDir() {
-        // Given: non-existent directory
         val result = listSubdirectories("/tmp/kolt_list_subdirs_nonexistent")
 
-        // Then: returns Err
         assertNull(result.get())
         assertIs<ListFilesFailed>(result.getError())
     }
 
     @Test
     fun listSubdirectoriesExcludesFiles() {
-        // Given: directory with a file and a subdirectory
         val base = "/tmp/kolt_list_subdirs_mixed"
         platform.posix.mkdir(base, 0b111111101u)
         platform.posix.mkdir("$base/subdir", 0b111111101u)
         writeTestFile("$base/file.txt", "content")
         try {
-            // When: listing subdirectories
             val result = listSubdirectories(base)
 
-            // Then: includes only subdirectories, not files
             assertEquals(listOf("subdir"), result.get())
         } finally {
             remove("$base/file.txt")
@@ -563,8 +519,6 @@ class FileSystemTest {
             platform.posix.rmdir(base)
         }
     }
-
-    // --- listJarFiles ---
 
     @Test
     fun listJarFilesReturnsSortedJarPathsOnly() {
@@ -574,7 +528,7 @@ class FileSystemTest {
         writeTestFile("$base/alpha.jar", "a")
         writeTestFile("$base/beta.jar", "b")
         writeTestFile("$base/notes.txt", "ignored")
-        platform.posix.mkdir("$base/nested.jar", 0b111111101u) // directory, not a file
+        platform.posix.mkdir("$base/nested.jar", 0b111111101u)
         try {
             val result = listJarFiles(base)
             assertEquals(
@@ -611,8 +565,6 @@ class FileSystemTest {
         assertNull(result.get())
         assertIs<ListFilesFailed>(result.getError())
     }
-
-    // --- absolutise ---
 
     @Test
     fun absolutisePreservesAbsolutePath() {

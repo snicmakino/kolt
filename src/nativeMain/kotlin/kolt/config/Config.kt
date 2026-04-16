@@ -59,7 +59,7 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
             ))
         }
         validateMainFqn(config.main).getError()?.let { return Err(it) }
-        // ktoml preserves quotes in map keys; strip them
+        // ktoml preserves quotes in map keys; strip them.
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedRepos = config.repositories

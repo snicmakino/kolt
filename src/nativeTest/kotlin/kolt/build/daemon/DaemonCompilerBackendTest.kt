@@ -20,8 +20,6 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-// Fake frame-level connection used as the seam for DaemonCompilerBackend
-// tests. Records the last request sent and replays a configured reply.
 private class FakeConnection(
     val reply: Result<Message, FrameError> = Ok(
         Message.CompileResult(
@@ -48,9 +46,6 @@ private class FakeConnection(
     }
 }
 
-// Test clock: `nowMs` advances by the argument each time `sleep` is
-// invoked. Lets us verify retry-budget exhaustion without burning
-// wall-clock seconds.
 private class FakeClock(var nowMs: Long = 0) {
     val clock: () -> Long = { nowMs }
     val sleeper: (Int) -> Unit = { ms -> nowMs += ms.toLong() }
@@ -109,9 +104,6 @@ class DaemonCompilerBackendHappyPathTest {
 
     @Test
     fun compileRequestFieldsAreForwardedVerbatimToWireMessage() {
-        // Wire contract: no adapter layer between CompileRequest and
-        // Message.Compile. A regression here would break JVM/native
-        // protocol parity and is cheap to catch at the unit-test level.
         val fake = FakeConnection()
         val backend = newBackend(connector = { Ok(fake) })
 
@@ -129,9 +121,6 @@ class DaemonCompilerBackendHappyPathTest {
 
     @Test
     fun nonZeroExitCodeMapsToCompilationFailed() {
-        // Daemon ran kotlinc but user's Kotlin did not compile. This
-        // is not fallback-eligible — retrying with a subprocess
-        // kotlinc would produce the same user-visible failure.
         val fake = FakeConnection(
             reply = Ok(
                 Message.CompileResult(
@@ -152,15 +141,6 @@ class DaemonCompilerBackendHappyPathTest {
 
     @Test
     fun diagnosticsFieldIsThreadedThroughToCompilationFailed() {
-        // ADR 0019 §7 + B-2c: `DaemonServer.icErrorToReply` parses
-        // kotlinc's `path:L:C: severity: msg` lines into the
-        // `Message.CompileResult.diagnostics` field and routes
-        // unparsable remains to `stderr`. This test pins that the
-        // native-side mapping propagates the structured list into
-        // `CompileError.CompilationFailed.diagnostics` so the
-        // `BuildCommands` rendering path can actually reach the user.
-        // Before this change the diagnostics field was silently
-        // dropped and dogfood users saw only the one-line summary.
         val fake = FakeConnection(
             reply = Ok(
                 Message.CompileResult(
@@ -197,12 +177,8 @@ class DaemonCompilerBackendHappyPathTest {
 
     @Test
     fun daemonProtocolErrorMapsToBackendUnavailable() {
-        // The JVM daemon's writeProtocolError wire contract emits
-        // exitCode=2, empty diagnostics, empty stdout, and a stderr
-        // prefixed "protocol error: ". Route those to
-        // BackendUnavailable so FallbackCompilerBackend falls through
-        // to subprocess compile instead of surfacing a confusing
-        // CompilationFailed.
+        // exitCode=2 + "protocol error: " prefix is the daemon's writeProtocolError
+        // wire shape; route to BackendUnavailable so the fallback fires.
         val fake = FakeConnection(
             reply = Ok(
                 Message.CompileResult(
@@ -225,10 +201,8 @@ class DaemonCompilerBackendHappyPathTest {
 
     @Test
     fun kotlincInternalErrorExitCode2DoesNotFalsePositive() {
-        // A real kotlinc internal error can also produce exitCode=2
-        // but carries real compiler output, not the "protocol error:"
-        // prefix. Make sure the sniff is narrow enough to leave that
-        // path as CompilationFailed.
+        // Real kotlinc internal error also exits 2 but without the
+        // "protocol error:" prefix — must stay CompilationFailed.
         val fake = FakeConnection(
             reply = Ok(
                 Message.CompileResult(
@@ -260,14 +234,8 @@ class DaemonCompilerBackendConnectAndSpawnTest {
         assertEquals(0, spawnCalls, "daemon should not be spawned when already listening")
     }
 
-    // Regression guard for issue #112: the Phase B daemon cannot initialise
-    // BtaIncrementalCompiler without the kotlin-build-tools-impl classpath,
-    // so `spawnArgv()` MUST include `--bta-impl-jars` alongside the existing
-    // `--compiler-jars`. If someone deletes the block in spawnArgv, every
-    // dev-fallback `kolt build` silently falls back to the subprocess
-    // compile path via `BtaImplJarsMissing` — green CI, quiet regression.
-    // Pinning the flag in argv catches that class of deletion at unit-test
-    // time instead of in a field bug report.
+    // #112: spawnArgv must include --bta-impl-jars; without it the daemon
+    // silently falls back to subprocess compile (green CI, quiet regression).
     @Test
     fun spawnArgvIncludesBtaImplJarsFlag() {
         var captured: List<String>? = null
@@ -297,11 +265,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
         )
     }
 
-    // #65 native client wiring: when kolt.toml [plugins] is empty (or all
-    // disabled) the native client must NOT pass --plugin-jars to the daemon.
-    // The daemon parser collapses an absent flag to an empty map, so omitting
-    // the flag is the canonical "no plugins" wire shape and avoids any risk of
-    // a malformed entry in the common path.
     @Test
     fun spawnArgvOmitsPluginJarsFlagWhenEmpty() {
         var captured: List<String>? = null
@@ -329,11 +292,7 @@ class DaemonCompilerBackendConnectAndSpawnTest {
         )
     }
 
-    // #65 native client wiring: a single enabled plugin must be serialised as
-    // `alias=cp1:cp2` (':' on linuxX64 == File.pathSeparator on the daemon
-    // side, see Main.kt:160). Pinning the wire format in a unit test means
-    // a future contributor cannot silently desync the two sides without
-    // failing CI.
+    // #65: wire format is `alias=cp1:cp2` — ':' matches File.pathSeparator on the daemon side.
     @Test
     fun spawnArgvSerialisesSinglePluginWithColonSeparatedClasspath() {
         var captured: List<String>? = null
@@ -360,14 +319,8 @@ class DaemonCompilerBackendConnectAndSpawnTest {
         assertEquals("serialization=/kt/lib/ser1.jar:/kt/lib/ser2.jar", argv[flagIdx + 1])
     }
 
-    // #65 native client wiring: multiple aliases are joined with ';' so that
-    // the daemon's parsePluginJars can re-split them. The serialised order
-    // mirrors the input map's iteration order — `linkedMapOf` is used here
-    // and `resolvePluginJarsMap` returns a `LinkedHashMap` in production, so
-    // the assertion below pins the exact wire string. A future caller that
-    // hands `DaemonCompilerBackend` a non-LinkedHashMap would break this
-    // test, which is the point: that change would also break the
-    // pluginsFingerprint stability and the warm-daemon reuse story.
+    // #65: multiple aliases joined with ';'. Iteration order matters —
+    // a non-LinkedHashMap would break pluginsFingerprint stability.
     @Test
     fun spawnArgvSerialisesMultiplePluginsSemicolonSeparated() {
         var captured: List<String>? = null
@@ -399,9 +352,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 
     @Test
     fun enoentTriggersSpawnAndThenRetrySucceeds() {
-        // First connect fails with ENOENT (socket missing) so the
-        // backend spawns a daemon; the second connect (after the
-        // simulated sleep) succeeds.
         var attempts = 0
         var spawnCalls = 0
         val fake = FakeConnection()
@@ -442,10 +392,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 
     @Test
     fun eaccesIsFatalAndDoesNotTriggerSpawn() {
-        // EACCES on the socket path means the daemon cannot bind to
-        // the user's ~/.kolt/daemon/ either — retrying under a fresh
-        // spawn will fail identically. Short-circuit to
-        // BackendUnavailable immediately so the build falls back.
         var spawnCalls = 0
         val connector: DaemonConnector = {
             Err(UnixSocketError.ConnectFailed(it, platform.posix.EACCES, "Permission denied"))
@@ -461,9 +407,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 
     @Test
     fun invalidArgumentIsMappedToInternalMisuse() {
-        // kolt itself built a bad socket path (e.g. the rendered path
-        // exceeds sun_path capacity). This is a kolt bug, not a user
-        // bug — surface it loudly rather than silently fall back.
         val connector: DaemonConnector = {
             Err(UnixSocketError.InvalidArgument("path exceeds sun_path capacity"))
         }
@@ -475,9 +418,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 
     @Test
     fun spawnFailureIsMappedToBackendUnavailable() {
-        // Simulate an unplausible-but-possible spawn failure: fork
-        // returned -1. The retry loop never starts and the build
-        // falls back cleanly.
         val connector: DaemonConnector = {
             Err(UnixSocketError.ConnectFailed(it, platform.posix.ENOENT, "No such file"))
         }
@@ -492,10 +432,6 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 
     @Test
     fun retryExhaustedAfterBudgetReturnsBackendUnavailable() {
-        // Every retry attempt returns ENOENT. Each fake sleep
-        // advances the clock by the requested amount, so the 3000 ms
-        // budget is blown after a finite number of iterations — no
-        // wall-clock wait in the test.
         val clock = FakeClock()
         var attempts = 0
         val connector: DaemonConnector = {
@@ -547,10 +483,6 @@ class DaemonCompilerBackendReplyMappingTest {
 
     @Test
     fun sendSerializationFailureIsInternalMisuse() {
-        // A Malformed error on the write path means our own codec
-        // refused to serialise the request — i.e. kolt built a
-        // structurally invalid message. That is an internal bug,
-        // distinct from the daemon rejecting the wire.
         val fake = FakeConnection(sendResult = Err(FrameError.Malformed("not serialisable")))
         val backend = newBackend(connector = { Ok(fake) })
         val err = assertNotNull(backend.compile(sampleRequest()).getError())

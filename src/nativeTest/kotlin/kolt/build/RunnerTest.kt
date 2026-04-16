@@ -44,13 +44,10 @@ class RunnerTest {
 
     @Test
     fun runCommandWithManagedJavaPathUsesItAsJava() {
-        // Given: a managed java binary path
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        // When: runCommand is called with that path
         val cmd = runCommand(testConfig(), null, javaPath = managedJavaBin)
 
-        // Then: the managed path is used as the first arg, not system "java"
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes", "com.example.MainKt"),
             cmd.args
@@ -59,30 +56,22 @@ class RunnerTest {
 
     @Test
     fun runCommandWithNullJavaPathDefaultsToSystemJava() {
-        // Given: no managed JDK (null)
-        // When: runCommand is called with explicit null javaPath
         val cmd = runCommand(testConfig(), null, javaPath = null)
 
-        // Then: falls back to system "java"
         assertEquals("java", cmd.args.first())
     }
 
     @Test
     fun runCommandWithManagedJavaAndClasspath() {
-        // Given: managed java + dependency classpath
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        // When: runCommand is called with both
         val cmd = runCommand(testConfig(), "/cache/lib.jar", javaPath = managedJavaBin)
 
-        // Then: managed path is first, classpath is appended after build/classes
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes:/cache/lib.jar", "com.example.MainKt"),
             cmd.args
         )
     }
-
-    // --- nativeRunCommand ---
 
     @Test
     fun nativeRunCommandExecutesKexeBinary() {
@@ -101,8 +90,6 @@ class RunnerTest {
         val cmd = nativeRunCommand(testConfig(name = "hello", target = "native"))
         assertEquals(listOf("build/hello.kexe"), cmd.args)
     }
-
-    // --- nativeTestRunCommand ---
 
     @Test
     fun nativeTestRunCommandExecutesTestKexeBinary() {
@@ -130,13 +117,10 @@ class RunnerTest {
 
     @Test
     fun runCommandWithManagedJavaAndAppArgs() {
-        // Given: managed java + app arguments
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        // When: runCommand is called with javaPath and appArgs
         val cmd = runCommand(testConfig(), null, listOf("--port", "8080"), javaPath = managedJavaBin)
 
-        // Then: managed java path is first, appArgs are appended at the end
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes", "com.example.MainKt", "--port", "8080"),
             cmd.args

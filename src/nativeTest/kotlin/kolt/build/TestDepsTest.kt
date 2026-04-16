@@ -47,7 +47,6 @@ class TestDepsTest {
         ))
         val allDeps = mergeAllDeps(config)
 
-        // User's [test-dependencies] version wins
         assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
     }
 
@@ -58,7 +57,6 @@ class TestDepsTest {
         ))
         val allDeps = mergeAllDeps(config)
 
-        // User's [dependencies] version wins over auto-injected
         assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
     }
 
@@ -74,7 +72,6 @@ class TestDepsTest {
         )
         val allDeps = mergeAllDeps(config)
 
-        // [test-dependencies] has highest priority
         assertEquals("1.9.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
     }
 

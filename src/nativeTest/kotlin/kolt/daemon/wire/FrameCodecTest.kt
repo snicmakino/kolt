@@ -90,9 +90,6 @@ class FrameCodecTest {
 
     @Test
     fun readFrameReturnsEofOnCleanClose() {
-        // Handler returns no bytes; the server closes the connection
-        // immediately after the client half-closes. readFrame sees a
-        // clean EOF at the start of the header.
         UnixEchoServer.start(handler = { ByteArray(0) })
             .getOrElse { fail("start failed: $it") }
             .use { server -> withReadFrame(server) { it.shutdownWrite() } }
@@ -130,9 +127,6 @@ class FrameCodecTest {
 
     @Test
     fun readFrameReturnsTruncatedOnPartialBody() {
-        // Valid header claiming 10 bytes but the server delivers only 3
-        // — exercises the body-side `UnexpectedEof -> Truncated` branch
-        // that the header-truncated test cannot reach.
         val claimedLen = 10
         val framed = encodeBigEndianU32(claimedLen) + byteArrayOf(1, 2, 3)
         UnixEchoServer.start(handler = { framed })
@@ -171,14 +165,6 @@ class FrameCodecTest {
             }
     }
 
-    /**
-     * Sends the encoded frame to a byte-echo fixture, half-closes the
-     * write side, and reads back what should be the same frame — this
-     * proves that `writeFrame` emits bytes that `readFrame` can parse,
-     * which is the only property the codec owes its callers in S4.
-     * A true Compile -> CompileResult fake daemon is deferred to S5
-     * when DaemonCompilerBackend needs it.
-     */
     private fun roundTripViaByteEcho(message: Message): Message {
         UnixEchoServer.start().getOrElse { fail("start failed: $it") }.use { server ->
             UnixSocket.connect(server.socketPath)
@@ -194,12 +180,6 @@ class FrameCodecTest {
         }
     }
 
-    /**
-     * Opens one client connection against [server], lets [prime]
-     * kick the server's byte-echo handler (typically by half-closing),
-     * calls `readFrame`, and returns its error — all failing-path
-     * tests above share this shape.
-     */
     private fun withReadFrame(
         server: UnixEchoServer,
         prime: (UnixSocket) -> Unit,

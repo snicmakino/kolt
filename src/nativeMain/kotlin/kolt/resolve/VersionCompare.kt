@@ -1,10 +1,5 @@
 package kolt.resolve
 
-/**
- * Compares two Maven-style version strings.
- * Splits on `.` and `-`. Numeric segments are compared numerically.
- * Known qualifiers are ordered: SNAPSHOT < alpha < beta < rc < "" (release).
- */
 fun compareVersions(a: String, b: String): Int {
     val partsA = splitVersion(a)
     val partsB = splitVersion(b)
@@ -59,10 +54,8 @@ private fun splitVersion(version: String): List<VersionSegment> {
 }
 
 private fun parseSegment(token: String): VersionSegment {
-    // Pure numeric
     token.toLongOrNull()?.let { return VersionSegment.Numeric(it) }
 
-    // Qualifier with optional numeric suffix (e.g. "alpha2", "rc1")
     val lower = token.lowercase()
     val qualifierMatch = Regex("""^(snapshot|alpha|beta|rc)(\d*)$""").find(lower)
     if (qualifierMatch != null) {
@@ -78,15 +71,9 @@ private fun parseSegment(token: String): VersionSegment {
         return VersionSegment.Qualifier(rank, suffix)
     }
 
-    // Unknown qualifier treated as release-level
     return VersionSegment.Qualifier(VersionSegment.RANK_RELEASE, 0L)
 }
 
-// --- Version intervals (Maven version range syntax) ---
-
-/**
- * Represents a Maven version interval, e.g. `[1.0,2.0)`.
- */
 data class VersionInterval(
     val from: String?,
     val fromInclusive: Boolean,
@@ -108,21 +95,11 @@ data class VersionInterval(
     }
 }
 
-/**
- * A parsed version constraint — either a preferred (exact) version
- * or a version interval.
- */
 data class VersionConstraint(
     val preferred: String?,
     val interval: VersionInterval?
 )
 
-/**
- * Parses a Maven version constraint string.
- * - `1.0.0` → preferred version
- * - `[1.0,2.0)` → interval
- * - `[1.5]` → pinned interval (from == to, both inclusive)
- */
 fun parseVersionConstraint(constraint: String): VersionConstraint {
     val trimmed = constraint.trim()
     if (trimmed.isEmpty()) return VersionConstraint(trimmed, null)
@@ -139,7 +116,6 @@ fun parseVersionConstraint(constraint: String): VersionConstraint {
 
     val commaIndex = inner.indexOf(',')
     if (commaIndex == -1) {
-        // Pinned: [1.5.0]
         val version = inner.trim()
         return VersionConstraint(null, VersionInterval(version, true, version, true))
     }
@@ -158,13 +134,6 @@ fun parseVersionConstraint(constraint: String): VersionConstraint {
     )
 }
 
-/**
- * Selects a concrete version from a version constraint string.
- * - Exact version: returned as-is
- * - Interval with lower bound: uses lower bound
- * - Interval with only upper bound: uses upper bound
- * - Pinned interval `[X]`: uses X
- */
 fun selectVersion(constraint: String): String {
     val vc = parseVersionConstraint(constraint)
     if (vc.preferred != null) return vc.preferred

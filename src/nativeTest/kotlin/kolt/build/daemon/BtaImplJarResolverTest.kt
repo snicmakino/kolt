@@ -4,10 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
-// Pure unit tests for the -impl jar resolver. Mirrors the structure of
-// DaemonJarResolverTest — the pure entry point (`resolveBtaImplJarsPure`)
-// takes the env var, the /proc/self/exe probe, and a file-lister as lambdas
-// so every branch of the probe chain can be exercised without touching disk.
 class BtaImplJarResolverTest {
 
     @Test
@@ -27,9 +23,6 @@ class BtaImplJarResolverTest {
 
     @Test
     fun envOverrideEmptyDirectorySurfacesAsNotFound() {
-        // A user who sets the env var but points it at an empty or unreadable
-        // directory should see that exact path in the warning, not a fallback
-        // libexec path they did not ask for.
         val result = resolveBtaImplJarsPure(
             envDirValue = "/fake/empty",
             selfExePath = "/opt/kolt/bin/kolt",
@@ -41,7 +34,6 @@ class BtaImplJarResolverTest {
 
     @Test
     fun libexecLayoutResolvesRelativeToSelfExe() {
-        // A `kolt` binary at /opt/kolt/bin/kolt implies /opt/kolt/libexec/kolt-bta-impl.
         val fakeJars = listOf("/opt/kolt/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar")
         val result = resolveBtaImplJarsPure(
             envDirValue = null,
@@ -57,16 +49,12 @@ class BtaImplJarResolverTest {
 
     @Test
     fun devFallbackResolvesFiveParentsUpFromTestBinary() {
-        // Dev layout: <repo>/build/bin/linuxX64/debugTest/test.kexe →
-        // <repo>/kolt-compiler-daemon/build/bta-impl-jars/*.jar
         val fakeJars = listOf("/repo/kolt-compiler-daemon/build/bta-impl-jars/a.jar")
         val result = resolveBtaImplJarsPure(
             envDirValue = null,
             selfExePath = "/repo/build/bin/linuxX64/debugTest/test.kexe",
             listJarFiles = { dir ->
                 when (dir) {
-                    // libexec probe returns nothing here — the debugTest binary
-                    // is not under a <prefix>/bin/ layout.
                     "/repo/build/bin/linuxX64/debugTest/libexec/kolt-bta-impl" -> null
                     "/repo/kolt-compiler-daemon/build/bta-impl-jars" -> fakeJars
                     else -> null
@@ -86,9 +74,6 @@ class BtaImplJarResolverTest {
             listJarFiles = { null },
         )
         val notFound = assertIs<BtaImplJarsResolution.NotFound>(result)
-        // The dev-fallback probe is the last one attempted, so its path is
-        // what the user sees — an actionable hint for the `stageBtaImplJars`
-        // Gradle task.
         assertEquals("/repo/kolt-compiler-daemon/build/bta-impl-jars", notFound.probedDir)
     }
 
