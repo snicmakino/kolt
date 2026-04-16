@@ -7,9 +7,7 @@
 
 A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
 
-The tool itself starts instantly. Actual compilation delegates to `kotlinc` / `konanc`, so build times track the Kotlin compiler directly. Incremental builds via mtime-based caching skip unchanged sources entirely.
-
-A `kotlinc` daemon integration is planned for an upcoming release to amortize JVM startup across successive builds.
+The tool itself starts instantly. Actual compilation delegates to `kotlinc` / `konanc`, so build times track the Kotlin compiler directly. Incremental builds via mtime-based caching skip unchanged sources entirely. A warm JVM compiler daemon amortizes JVM startup across successive builds — typical warm-build latency is ~0.3 s.
 
 ## Installation
 
@@ -55,21 +53,31 @@ kolt init custom-name
 ## Commands
 
 ```
-kolt init [name]   Create a new project
-kolt build         Compile the project
-kolt run           Build and run (kolt run -- args for app arguments)
-kolt test          Build and run tests (kolt test -- args for JUnit Platform arguments)
-kolt check         Type-check without producing artifacts
-kolt add           Add a dependency (see below)
-kolt install       Resolve dependencies and download JARs
-kolt fmt           Format source files with ktfmt
-kolt fmt --check   Check formatting (CI mode)
-kolt clean         Remove build artifacts
-kolt deps tree     Show dependency tree
-kolt update        Re-resolve dependencies and update lockfile
-kolt toolchain install  Install kotlinc version defined in kolt.toml
-kolt --version     Show version
+kolt init [name]       Create a new project
+kolt build             Compile the project
+kolt run               Build and run (kolt run -- args for app arguments)
+kolt test              Build and run tests (kolt test -- args for JUnit Platform arguments)
+kolt check             Type-check without producing artifacts
+kolt add <dep>         Add a dependency (alias for deps add)
+kolt fmt               Format source files with ktfmt
+kolt fmt --check       Check formatting (CI mode)
+kolt clean             Remove build artifacts
+
+kolt deps add <dep>    Add a dependency
+kolt deps install      Resolve dependencies and download JARs
+kolt deps update       Re-resolve dependencies and update lockfile
+kolt deps tree         Show dependency tree
+
+kolt toolchain install Install kotlinc version defined in kolt.toml
+
+kolt daemon stop       Stop the compiler daemon for this project
+kolt daemon stop --all Stop all compiler daemons
+kolt daemon reap       Remove stale daemon directories and orphaned sockets
+
+kolt --version         Show version
 ```
+
+`install`, `update`, and `tree` are also available as top-level aliases (e.g. `kolt install`).
 
 ## Configuration
 

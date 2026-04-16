@@ -31,7 +31,9 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 |---|---|---|
 | cli | Main.kt | CLI entrypoint, command dispatch |
 | cli | BuildCommands.kt | Build pipeline orchestration (check, build, run, test, clean) |
-| cli | DependencyCommands.kt | Dependency commands (init, add, install, update, tree) |
+| cli | DependencyCommands.kt | Dependency commands (deps add, install, update, tree) |
+| cli | DaemonCommands.kt | Daemon management commands (daemon stop, daemon reap) |
+| cli | DaemonReaper.kt | Probe-based reaper for orphaned daemon sockets |
 | cli | ToolchainCommands.kt | Toolchain management commands (install) |
 | cli | FormatCommands.kt | Format command (kolt fmt) |
 | cli | PluginSupport.kt | Compiler plugin argument resolution |
