@@ -2,13 +2,17 @@
 
 ## Status
 
-Accepted (2026-04-15). Depends on #103 (Phase B-1a bench-scaling ceiling,
-merged as c722dcc) and #104 (Phase B-1b `kotlin-build-tools-api` spike,
-merged as f652eb1). This ADR is the deliverable of #105 (Phase B-1c) and
-covers the design of Phase B-2; B-2a (#112, adapter skeleton through the
-full-recompile path) merged as c321615 and B-2b (#113) promotes this ADR
-from Proposed to Accepted by enabling the incremental configuration,
-state layout, and self-heal described below.
+Implemented (2026-04-16). All follow-up items are resolved or explicitly
+deferred to their respective scopes — see §Follow-ups below.
+
+Previously Accepted (2026-04-15). Depends on #103 (Phase B-1a
+bench-scaling ceiling, merged as c722dcc) and #104 (Phase B-1b
+`kotlin-build-tools-api` spike, merged as f652eb1). This ADR is the
+deliverable of #105 (Phase B-1c) and covers the design of Phase B-2;
+B-2a (#112, adapter skeleton through the full-recompile path) merged as
+c321615 and B-2b (#113) promoted this ADR from Proposed to Accepted by
+enabling the incremental configuration, state layout, and self-heal
+described below.
 
 The parent issue #105 titles the work "kotlin-build-tools-**impl**", but
 the spike confirmed that the callable entry point is the
@@ -491,11 +495,8 @@ deliberately **not** decisions made here. Filing them as separate
 issues before B-2 starts would risk bit-rot; filing them inside B-2
 scope keeps them attached to the person doing the work.
 
-**Status (B-2c, #114):** the three required-for-declared-done validations
-and the `CapturingKotlinLogger` / structured-diagnostic plumbing have
-landed in #114. The remaining bullets are deliberately post-B-2 — they
-are operational-hygiene or future-wire-client items with no blocking
-dependency on the current B-2 surface.
+**Status (2026-04-16):** all items are resolved or explicitly deferred.
+The ADR is Implemented.
 
 - ~~**Prototype `kotlinx.serialization` through the adapter**~~ —
   done in B-2c (`BtaSerializationPluginTest`). Spike residual risk
@@ -520,18 +521,16 @@ dependency on the current B-2 surface.
   under `<icRoot>/<kotlinVersion>/classpath-snapshots/`. Phase 0
   measurement showed kotlin-stdlib snapshotting costs ~310ms steady
   state, confirming caching is load-bearing.
-- **Scaling run on jvm-100 / jvm-250**: point the
-  `spike/bench-scaling/` harness at a B-2 daemon to confirm the
-  per-file slope drops as predicted. #103's ceiling and #96's slope
-  are the two reference numbers to beat. B-2c drops results under
-  `spike/bench-scaling/results-*` for the available fixture sizes;
-  extending the harness to jvm-100 / jvm-250 is a separate harness-
-  scaling concern and is filed as a dedicated follow-up.
-- **`~/.kolt/daemon/ic/` reaper**: periodically remove old Kotlin
-  version segments and old project-hash subdirs. Shares design with
-  the Phase A socket-dir reaper follow-up.
-- **Post-B-2 wire extension for `SourcesChanges.Known(...)`**: only if
-  a file-watcher client ever materializes (e.g. `kolt watch`, #15).
+- ~~**Scaling run on jvm-100 / jvm-250**~~ — not pursued. The
+  slope-collapse claim is decidable on jvm-1..50: per-file slope is
+  ~0ms across all four fixture sizes (B-2c results). Extending the
+  harness to larger fixtures would confirm "flat is still flat" but
+  cannot change the conclusion.
+- ~~**`~/.kolt/daemon/ic/` reaper**~~ — done in #125 (PR #126,
+  `cdf5da9`). Wholesale delete of non-current `<kotlinVersion>`
+  segments + breadcrumb-based delete of dangling projectId dirs.
+- **Post-B-2 wire extension for `SourcesChanges.Known(...)`**: deferred
+  to Phase C `kolt watch` (#15). Not an ADR 0019 deliverable.
 
 ## Related
 
