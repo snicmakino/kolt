@@ -27,7 +27,7 @@ The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy i
 cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
 ```
 
-Gradle is the bootstrap path only. Once you have a kolt binary on PATH, kolt builds itself from its own `kolt.toml` — `kolt build` from the repo root produces an equivalent `build/kolt.kexe` without Gradle. A CI smoke test keeps this loop green on every commit.
+kolt is built with Gradle. Partial self-hosting works (kolt can compile the native binary from `kolt.toml`), but the compiler daemon JAR still requires Gradle to build ([#97](https://github.com/snicmakino/kolt/issues/97)).
 
 ## Quick Start
 

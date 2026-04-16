@@ -27,7 +27,7 @@ cd kolt
 cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
 ```
 
-Gradle はブートストラップ用のみです。PATH 上に kolt バイナリがあれば、kolt は自身の `kolt.toml` から自分自身をビルドできます。リポジトリルートで `kolt build` を実行すると、Gradle なしで同等の `build/kolt.kexe` が生成されます。CI のスモークテストがコミットごとにこのループの正常性を確認しています。
+kolt は Gradle でビルドします。部分的なセルフホスティングは動作しますが（kolt は `kolt.toml` からネイティブバイナリをコンパイルできます）、コンパイラデーモン JAR のビルドにはまだ Gradle が必要です（[#97](https://github.com/snicmakino/kolt/issues/97)）。
 
 ## クイックスタート
 
