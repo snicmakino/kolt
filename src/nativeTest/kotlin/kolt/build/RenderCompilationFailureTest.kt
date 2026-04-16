@@ -6,14 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// Pins the multi-line rendering of CompileError.CompilationFailed so the
-// body the daemon path hands back actually reaches the user. B-2c's
-// DaemonServer.icErrorToReply populates `Message.CompileResult.diagnostics`
-// (structured) and `stderr` (plain text for unparsable lines); the
-// native client must reunite the two streams before printing the
-// one-line `formatCompileError` summary, otherwise kotlinc diagnostics
-// disappear and the user sees only "error: compilation failed with
-// exit code 1". Dogfood on B-2c is what surfaced the bug.
 class RenderCompilationFailureTest {
 
     @Test
@@ -63,10 +55,6 @@ class RenderCompilationFailureTest {
 
     @Test
     fun appendsPlainStderrAfterStructuredDiagnostics() {
-        // DiagnosticParser leaves unparsable lines (e.g. trailing
-        // stack frames appended by CapturingKotlinLogger) in the
-        // stderr string. They still need to surface, after the
-        // structured lines for readability.
         val error = CompileError.CompilationFailed(
             exitCode = 1,
             stdout = "",
@@ -84,11 +72,6 @@ class RenderCompilationFailureTest {
 
     @Test
     fun subprocessPathProducesEmptyBody() {
-        // SubprocessCompilerBackend leaves both fields empty because
-        // kotlinc already wrote to the inherited terminal. The
-        // renderer must gracefully return an empty string rather than
-        // a lone "\n" or a synthetic placeholder, so the caller's
-        // `isNotEmpty()` skip works.
         val error = CompileError.CompilationFailed(
             exitCode = 1,
             stdout = "",
@@ -112,9 +95,7 @@ class RenderCompilationFailureTest {
 
     @Test
     fun fileNullWithLineColumnStillCollapsesToNoLocation() {
-        // Belt-and-suspenders: even if a future producer forgets to
-        // populate `file` but still passes line/column, the renderer
-        // must not emit a leading-colon `:5:3: error: msg` shape.
+        // Must not emit a leading-colon `:5:3: error: msg` when file is null.
         val error = CompileError.CompilationFailed(
             exitCode = 1,
             stdout = "",
@@ -128,10 +109,6 @@ class RenderCompilationFailureTest {
 
     @Test
     fun rendersStderrOnlyWhenDiagnosticsAreEmpty() {
-        // Pre-B-2c daemon behaviour and subprocess path with
-        // ProcessError.NonZeroExit carrying captured stderr both land
-        // here. The renderer must not synthesise an empty structured
-        // block when the diagnostic list is empty.
         val error = CompileError.CompilationFailed(
             exitCode = 1,
             stdout = "",

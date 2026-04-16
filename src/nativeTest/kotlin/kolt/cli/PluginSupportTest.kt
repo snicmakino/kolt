@@ -8,19 +8,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// After #65 the plugin jar fetcher is the single source of truth for
-// compiler plugin jars on every compile path. `resolvePluginArgs` /
-// `resolvePluginJarsMap` are thin wrappers that delegate to
-// `fetchEnabledPluginJars` and translate errors into `exitProcess`
-// calls, so unit tests can only cover the "no network I/O" short-
-// circuit here — anything beyond that hits Maven Central and belongs
-// in `PluginJarFetcherTest`.
-//
-// These tests use a bogus `KoltPaths("/nonexistent-…")` as a defence:
-// if the short-circuit regresses and a zero-enabled-plugin build starts
-// touching the network or the filesystem, the mkdir / download attempt
-// under the bogus cache base will exit the test process and fail the
-// test.
+// Bogus KoltPaths: if the zero-plugin short-circuit regresses, any I/O
+// attempt under this path will fail the test.
 class PluginSupportTest {
 
     private val bogusPaths = KoltPaths("/nonexistent-home-for-test")
@@ -65,13 +54,6 @@ class PluginSupportTest {
         assertEquals(emptyMap(), result)
     }
 
-    // The native path used to have a separate `resolveNativePluginArgs`
-    // that called `ensureKotlincBin` before resolving plugin args. That
-    // split is gone: the native konanc path and the JVM subprocess
-    // fallback both call the same `resolvePluginArgs` now, and neither
-    // needs the kotlinc sidecar. `target = "native"` is intentionally
-    // exercised here to pin that the short-circuit has no target-specific
-    // branches left.
     @Test
     fun resolvePluginArgsNativeTargetSharesTheSameShortCircuit() {
         val config = testConfig(plugins = emptyMap(), target = "native")
@@ -81,22 +63,8 @@ class PluginSupportTest {
         assertTrue(result.isEmpty())
     }
 
-    // --- mapPluginFetchErrorToExit ---
-    //
-    // The error-to-exit translation is a pure function so every branch
-    // is exercised here without the `exitProcess` wrapper. The tests
-    // pin two invariants:
-    // 1. User-facing config mistakes (unknown alias, 404 on a coordinate
-    //    that kolt builds from `config.kotlin`) exit with
-    //    `EXIT_CONFIG_ERROR` regardless of the caller's operational
-    //    exit code. A `build` or `test` command that would otherwise
-    //    return EXIT_BUILD_ERROR / EXIT_TEST_ERROR still returns
-    //    EXIT_CONFIG_ERROR for these cases so wrapper scripts can
-    //    distinguish "network / build failure, retry" from "your
-    //    kolt.toml is wrong, fix it and re-run".
-    // 2. Everything else propagates to the caller-provided operational
-    //    code so `build` vs `test` can keep their own exit-status
-    //    conventions.
+    // Config mistakes (unknown alias, 404) always EXIT_CONFIG_ERROR;
+    // transient failures propagate the caller's operational exit code.
 
     @Test
     fun mapUnknownPluginIsConfigError() {
@@ -110,11 +78,6 @@ class PluginSupportTest {
 
     @Test
     fun mapHttp404DownloadFailureIsConfigErrorAndNamesTheKotlinPin() {
-        // A 404 on a `kolt-*-compiler-plugin:<ver>` coordinate means
-        // `kotlin = "<ver>"` in kolt.toml was set to a version that
-        // JetBrains never published. The error message must point the
-        // user at the right knob — "change kolt.toml", not "retry
-        // later".
         val exit = mapPluginFetchErrorToExit(
             PluginFetchError.DownloadFailed(
                 alias = "serialization",

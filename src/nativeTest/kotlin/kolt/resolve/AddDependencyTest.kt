@@ -121,7 +121,6 @@ class AddDependencyTest {
         val result = addDependencyToToml(toml, "com.squareup.okhttp3:okhttp", "4.12.0", false)
         val updated = assertNotNull(result.get())
         val lines = updated.lines()
-        // The blank line between sections should still be present
         val testSectionIndex = lines.indexOfFirst { it == "[test-dependencies]" }
         assertTrue(testSectionIndex > 0)
         assertEquals("", lines[testSectionIndex - 1])

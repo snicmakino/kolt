@@ -176,7 +176,6 @@ class BuildCacheTest {
 
     @Test
     fun upToDateWhenResourcesMtimesMatch() {
-        // Given: both current and cached have the same resourcesNewestMtime
         val state = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -189,7 +188,6 @@ class BuildCacheTest {
 
     @Test
     fun notUpToDateWhenResourcesMtimeChanged() {
-        // Given: cached has older resourcesNewestMtime
         val cached = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -203,7 +201,6 @@ class BuildCacheTest {
 
     @Test
     fun notUpToDateWhenResourcesMtimeChangedFromNullToValue() {
-        // Given: cached has null (no resources), current has resources
         val cached = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -217,7 +214,6 @@ class BuildCacheTest {
 
     @Test
     fun upToDateWhenBothResourcesMtimesNull() {
-        // Given: neither current nor cached have resources
         val state = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -257,18 +253,14 @@ class BuildCacheTest {
 
     @Test
     fun resourcesNewestMtimeDefaultsToNullForOlderStateJson() {
-        // Given: older JSON without resources_newest_mtime
         val oldJson = """{"config_mtime":1000,"sources_newest_mtime":2000,"classes_dir_mtime":3000,"lockfile_mtime":null}"""
         val parsed = parseBuildState(oldJson)
         assertNotNull(parsed)
         assertNull(parsed.resourcesNewestMtime)
     }
 
-    // --- defNewestMtime ---
-
     @Test
     fun upToDateWhenDefMtimesMatch() {
-        // Given: both current and cached have the same defNewestMtime
         val state = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -281,7 +273,6 @@ class BuildCacheTest {
 
     @Test
     fun notUpToDateWhenDefMtimeChanged() {
-        // Given: cached has older defNewestMtime (def file was modified)
         val cached = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -295,7 +286,6 @@ class BuildCacheTest {
 
     @Test
     fun notUpToDateWhenDefMtimeChangedFromNullToValue() {
-        // Given: cached has no def file (null), current has one (cinterop entry added)
         val cached = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -309,7 +299,6 @@ class BuildCacheTest {
 
     @Test
     fun notUpToDateWhenDefMtimeChangedFromValueToNull() {
-        // Given: cached had a def file, current has none (cinterop entry removed)
         val cached = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -323,7 +312,6 @@ class BuildCacheTest {
 
     @Test
     fun upToDateWhenBothDefMtimesNull() {
-        // Given: no cinterop entries in either current or cached
         val state = BuildState(
             configMtime = 1000L,
             sourcesNewestMtime = 2000L,
@@ -363,7 +351,6 @@ class BuildCacheTest {
 
     @Test
     fun defNewestMtimeDefaultsToNullForOlderStateJson() {
-        // Given: older JSON without def_newest_mtime (pre-cinterop state file)
         val oldJson = """{"config_mtime":1000,"sources_newest_mtime":2000,"classes_dir_mtime":3000,"lockfile_mtime":null}"""
         val parsed = parseBuildState(oldJson)
         assertNotNull(parsed)

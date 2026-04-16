@@ -129,8 +129,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseJvmRedirectReturnsNullWhenJvmVariantWithoutAvailableAtComesFirst() {
-        // kotlin-test has jvmApiElements (no available-at) before jvmJUnitApiElements (with available-at).
-        // When the library itself provides a JVM jar, we should NOT redirect.
         val json = """
         {
           "formatVersion": "1.1",
@@ -171,8 +169,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseJvmRedirectReturnsNullWhenJvmVariantWithoutAvailableAtComesAfter() {
-        // Reverse of the above: available-at variant comes first, then a plain JVM variant.
-        // Should still return null because the library provides its own JVM jar.
         val json = """
         {
           "formatVersion": "1.1",
@@ -211,11 +207,8 @@ class GradleMetadataTest {
         assertNull(redirect)
     }
 
-    // --- parseNativeRedirect ---
-
     @Test
     fun parseNativeRedirectExtractsLinuxX64AvailableAt() {
-        // Based on kotlinx-coroutines-core:1.9.0 actual .module structure.
         val json = """
         {
           "formatVersion": "1.1",
@@ -271,7 +264,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectReturnsNullForDifferentTarget() {
-        // Only linuxX64 variant present; asked for macos_arm64 → null
         val json = """
         {
           "formatVersion": "1.1",
@@ -302,7 +294,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectSkipsNonNativePlatformTypes() {
-        // jvm variants with native.target attribute should not match
         val json = """
         {
           "formatVersion": "1.1",
@@ -330,7 +321,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectRequiresLibraryCategory() {
-        // A native variant in the documentation category should be skipped
         val json = """
         {
           "formatVersion": "1.1",
@@ -361,8 +351,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectRequiresKotlinApiUsage() {
-        // Non-api usages (e.g. kotlin-metadata, kotlin-runtime) must be
-        // skipped so we only resolve compile-time klibs.
         val json = """
         {
           "formatVersion": "1.1",
@@ -403,11 +391,8 @@ class GradleMetadataTest {
         assertNull(parseNativeRedirect(json, "linux_x64"))
     }
 
-    // --- parseNativeArtifact ---
-
     @Test
     fun parseNativeArtifactExtractsKlibFileAndDependencies() {
-        // Based on kotlinx-coroutines-core-linuxx64:1.9.0 actual .module structure.
         val json = """
         {
           "formatVersion": "1.1",
@@ -529,7 +514,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeArtifactReturnsNullWhenNoKlibFile() {
-        // Variant matches but files[] has no .klib entry (edge case)
         val json = """
         {
           "formatVersion": "1.1",
@@ -558,8 +542,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeArtifactPicksKlibFileAmongMultiple() {
-        // In practice .module files list only .klib; but if some future
-        // variant lists multiple, we should pick the one ending in .klib.
         val json = """
         {
           "formatVersion": "1.1",
@@ -624,19 +606,11 @@ class GradleMetadataTest {
         assertEquals("1.0", redirect?.version)
     }
 
-    // --- numeric attribute values ---
-    //
-    // kotlinx-datetime:0.7.1-0.6.x-compat emits `"org.gradle.jvm.version": 8`
-    // (integer, not string) on its JVM variants. Gradle Module Metadata does
-    // not require attribute values to be strings, so the resolver must accept
-    // numeric values — treating them as their string form is fine because all
-    // comparisons are against known string literals like "jvm" or "linux_x64".
+    // Gradle Module Metadata attribute values can be non-string JSON primitives
+    // (e.g. kotlinx-datetime:0.7.1-0.6.x-compat emits `"org.gradle.jvm.version": 8`).
 
     @Test
     fun parseNativeRedirectToleratesNumericAttributeValueOnUnrelatedVariant() {
-        // A JVM variant with an integer attribute sits alongside the native
-        // variant we actually want. Previously Map<String, String> deserialization
-        // threw on the integer and the whole document was rejected as invalid.
         val json = """
         {
           "formatVersion": "1.1",
@@ -684,9 +658,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseJvmRedirectToleratesNumericJvmVersionAttribute() {
-        // The JVM variant we actually want carries the integer attribute.
-        // `org.gradle.jvm.version` is checked nowhere, but its mere presence
-        // as a non-string broke decoding before the fix.
         val json = """
         {
           "formatVersion": "1.1",
@@ -719,11 +690,6 @@ class GradleMetadataTest {
 
     @Test
     fun parseNativeRedirectToleratesBooleanAttributeValue() {
-        // Gradle Module Metadata attribute values can be any JSON primitive,
-        // not just strings. Integers are covered above; this pins down the
-        // boolean case so the JsonPrimitive.content contract is exercised
-        // uniformly across JsonLiteral subtypes and future schema evolution
-        // doesn't silently regress.
         val json = """
         {
           "formatVersion": "1.1",

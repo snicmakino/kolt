@@ -133,16 +133,13 @@ class NativeResolverTest {
 
         val result = resolveNative(config, "/cache", deps)
         val resolved = assertNotNull(result.get())
-        // kotlin-stdlib should NOT appear in resolved deps
         assertEquals(1, resolved.deps.size)
         assertEquals("com.example:lib", resolved.deps[0].groupArtifact)
     }
 
     @Test
     fun skipsKotlinStdlibCommonFromTransitives() {
-        // kotlin-stdlib-common has no Gradle module metadata (pre-GMM artifact),
-        // so the resolver must skip it alongside kotlin-stdlib. Appears in the
-        // transitive closure of e.g. org.kotlincrypto.hash:sha2-256.
+        // kotlin-stdlib-common has no Gradle module metadata (pre-GMM artifact).
         val config = testConfig(target = "native").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
@@ -245,7 +242,6 @@ class NativeResolverTest {
             dependencies = mapOf("com.example:jvmonly" to "1.0.0")
         )
 
-        // Module only has a jvm variant
         val jvmOnlyModule = """
         {
           "formatVersion": "1.1",
@@ -306,7 +302,6 @@ class NativeResolverTest {
 
     @Test
     fun diamondDependencyHighestVersionWins() {
-        // a -> shared:1.0, b -> shared:2.0 => shared:2.0 should win
         val config = testConfig(target = "native").copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
@@ -354,7 +349,6 @@ class NativeResolverTest {
 
     @Test
     fun directDepVersionWinsOverTransitive() {
-        // direct: shared:1.0, transitive from a: shared:2.0 => direct wins
         val config = testConfig(target = "native").copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
@@ -404,8 +398,6 @@ class NativeResolverTest {
 
     @Test
     fun failsOnInvalidJsonWithMetadataParseFailed() {
-        // Broken JSON must not surface as NoNativeVariant — the user would
-        // mistake it for "this library has no linux_x64 build".
         val config = testConfig(target = "native").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
@@ -420,8 +412,6 @@ class NativeResolverTest {
         val error = assertIs<ResolveError.MetadataParseFailed>(result.getError())
         assertEquals("com.example:lib", error.groupArtifact)
     }
-
-    // --- fixtures ---
 
     private fun rootModuleJson(
         redirectGroup: String,
@@ -495,7 +485,6 @@ class NativeResolverTest {
         contents: Map<String, String> = emptyMap(),
         sha256: Map<String, String> = emptyMap()
     ): ResolverDeps {
-        // Files whose content is provided are considered already cached on disk.
         cachedFiles.addAll(contents.keys)
         return object : ResolverDeps {
             override fun fileExists(path: String): Boolean = path in cachedFiles

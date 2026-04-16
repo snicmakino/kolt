@@ -122,13 +122,6 @@ class DepsTreeTest {
         assertEquals(expected, output)
     }
 
-    // --- buildNativeDependencyTree ---
-    //
-    // Native tree walks Gradle Module Metadata (not POMs): each lookup returns
-    // the redirected *native* display coordinate (e.g. ...-linuxx64) and the
-    // transitive list from the linux_x64 variant. kotlin-stdlib is skipped to
-    // mirror NativeResolver.
-
     private fun nativeInfo(
         displayGroupArtifact: String,
         displayVersion: String,
@@ -137,8 +130,6 @@ class DepsTreeTest {
 
     @Test
     fun nativeTreeDisplaysRedirectedCoordinate() {
-        // The user declared kotlinx-serialization-json but what actually gets
-        // linked is the -linuxx64 redirect target. The tree must reflect that.
         val directDeps = mapOf("org.jetbrains.kotlinx:kotlinx-serialization-json" to "1.7.3")
         val lookup = { ga: String, v: String ->
             if (ga == "org.jetbrains.kotlinx:kotlinx-serialization-json" && v == "1.7.3") {
@@ -182,7 +173,6 @@ class DepsTreeTest {
 
     @Test
     fun nativeTreeSkipsKotlinStdlibAsDirect() {
-        // Mirrors NativeResolver's stdlib skip (ADR 0011).
         val directDeps = mapOf(
             "org.jetbrains.kotlin:kotlin-stdlib" to "2.0.20",
             "org.jetbrains.kotlinx:kotlinx-serialization-json" to "1.7.3"
@@ -201,8 +191,6 @@ class DepsTreeTest {
 
     @Test
     fun nativeTreeSkipsKotlinStdlibAsTransitive() {
-        // Gradle module metadata declares kotlin-stdlib as a transitive dep on
-        // every native variant; the tree must not render it as a child either.
         val directDeps = mapOf("org.jetbrains.kotlinx:kotlinx-serialization-json" to "1.7.3")
         val lookup = { ga: String, _: String ->
             if (ga == "org.jetbrains.kotlinx:kotlinx-serialization-json") nativeInfo(
@@ -239,24 +227,18 @@ class DepsTreeTest {
 
         val tree = buildNativeDependencyTree(directDeps, lookup)
 
-        // First visit of lib-a should walk to lib-b, which walks back to lib-a
-        // but cuts off (no grandchildren). The tree terminates rather than
-        // recursing forever.
         assertEquals(1, tree.size)
         val libA = tree[0]
         assertEquals("com.example:lib-a-linuxx64", libA.groupArtifact)
         assertEquals(1, libA.children.size)
         val libB = libA.children[0]
         assertEquals("com.example:lib-b-linuxx64", libB.groupArtifact)
-        // lib-b's only dep is lib-a, which was already visited → no children.
         assertEquals(1, libB.children.size)
         assertEquals(0, libB.children[0].children.size)
     }
 
     @Test
     fun nativeTreeRendersOriginalCoordinateWhenLookupReturnsNull() {
-        // If metadata can't be fetched or parsed, the tree should still show
-        // what the user declared (so they see something), with no children.
         val directDeps = mapOf("com.example:missing" to "9.9.9")
         val lookup = { _: String, _: String -> null }
 

@@ -159,8 +159,6 @@ class DependencyTest {
         )
     }
 
-    // --- klib helpers ---
-
     @Test
     fun buildKlibDownloadUrlProducesCorrectMavenCentralUrl() {
         val coord = Coordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core-linuxx64", "1.9.0")

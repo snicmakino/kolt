@@ -84,7 +84,6 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithTestResourceDirs() {
-        // Given: a single test resource directory
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -92,7 +91,6 @@ class TestRunnerTest {
             testResourceDirs = listOf("test-resources")
         )
 
-        // Then: test resource dir is inserted between test-classes and deps
         assertEquals(
             listOf(
                 "java", "-jar", "/tools/launcher.jar",
@@ -105,7 +103,6 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithMultipleTestResourceDirs() {
-        // Given: multiple test resource directories
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -125,7 +122,6 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithTestResourceDirsAndClasspath() {
-        // Given: both test resource dirs and dependency classpath
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -134,7 +130,6 @@ class TestRunnerTest {
             classpath = "/cache/dep.jar"
         )
 
-        // Then: order is classes:test-classes:test-resources:deps
         assertEquals(
             listOf(
                 "java", "-jar", "/tools/launcher.jar",
@@ -147,7 +142,6 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithEmptyTestResourceDirs() {
-        // Given: empty testResourceDirs (same as not providing it)
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -167,10 +161,8 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithManagedJavaPathUsesItAsJava() {
-        // Given: a managed java binary path
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        // When: testRunCommand is called with javaPath
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -178,7 +170,6 @@ class TestRunnerTest {
             javaPath = managedJavaBin
         )
 
-        // Then: managed path is used as the first arg, not system "java"
         assertEquals(
             listOf(
                 managedJavaBin, "-jar", "/tools/launcher.jar",
@@ -191,8 +182,6 @@ class TestRunnerTest {
 
     @Test
     fun testRunCommandWithNullJavaPathDefaultsToSystemJava() {
-        // Given: no managed JDK (null)
-        // When: testRunCommand is called with explicit null javaPath
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -200,16 +189,13 @@ class TestRunnerTest {
             javaPath = null
         )
 
-        // Then: falls back to system "java"
         assertEquals("java", cmd.args.first())
     }
 
     @Test
     fun testRunCommandWithManagedJavaAndClasspath() {
-        // Given: managed java + classpath
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        // When: testRunCommand is called with both javaPath and classpath
         val cmd = testRunCommand(
             classesDir = "build/classes",
             testClassesDir = "build/test-classes",
@@ -218,7 +204,6 @@ class TestRunnerTest {
             javaPath = managedJavaBin
         )
 
-        // Then: managed java is first, classpath includes dependency
         assertEquals(
             listOf(
                 managedJavaBin, "-jar", "/tools/launcher.jar",

@@ -10,8 +10,6 @@ import kotlin.test.assertTrue
 
 class MainTest {
 
-    // --- jvmMainClass ---
-
     @Test
     fun jvmMainClassForRootPackage() {
         assertEquals("MainKt", jvmMainClass("main"))
@@ -27,8 +25,6 @@ class MainTest {
         assertEquals("com.example.app.MainKt", jvmMainClass("com.example.app.main"))
     }
 
-    // --- validateMainFqn: accepts ---
-
     @Test
     fun validateMainFqnAcceptsRootMain() {
         assertNull(validateMainFqn("main").getError())
@@ -43,8 +39,6 @@ class MainTest {
     fun validateMainFqnAcceptsDeeplyPackagedMain() {
         assertNull(validateMainFqn("foo.bar.baz.main").getError())
     }
-
-    // --- validateMainFqn: rejects JVM class style with the migration hint ---
 
     @Test
     fun validateMainFqnRejectsRootMainKtWithHint() {
@@ -65,13 +59,9 @@ class MainTest {
 
     @Test
     fun validateMainFqnRejectsArbitraryKtFacade() {
-        // Non-"MainKt" Kt-suffixed class names (e.g. from an App.kt file) are
-        // also rejected — they're still JVM class names, not Kotlin FQNs.
         val err = assertNotNull(validateMainFqn("com.example.AppKt").getError())
         assertTrue(err.message.contains("JVM class name"))
     }
-
-    // --- validateMainFqn: rejects other malformed values ---
 
     @Test
     fun validateMainFqnRejectsEmpty() {
@@ -80,21 +70,17 @@ class MainTest {
 
     @Test
     fun validateMainFqnRejectsCapitalizedNonKt() {
-        // "Main" looks like a JVM class but doesn't end with Kt. Still invalid
-        // because it's neither "main" nor "<pkg>.main".
         val err = assertNotNull(validateMainFqn("Main").getError())
         assertTrue(err.message.contains("Kotlin function FQN"))
     }
 
     @Test
     fun validateMainFqnRejectsNonMainSuffix() {
-        // Ends with a different function name.
         assertNotNull(validateMainFqn("com.example.run").getError())
     }
 
     @Test
     fun validateMainFqnRejectsEndingInRemain() {
-        // "remain" ends in "main" as a substring but not as a dotted segment.
         assertNotNull(validateMainFqn("remain").getError())
     }
 }

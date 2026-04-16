@@ -237,15 +237,12 @@ class ResolutionTest {
             mapOf("com.example:lib" to "1.0.0")
         ) { _, _ -> null }  // No POMs available
         val nodes = assertNotNull(result.get())
-        // Direct dep is still resolved, just no transitive deps
         assertEquals(1, nodes.size)
         assertEquals("com.example:lib", nodes[0].groupArtifact)
     }
 
     @Test
     fun resolveGraphExcludesSpecificTransitiveDep() {
-        // lib depends on a (with exclusion of b), a depends on b
-        // b should be excluded
         val poms = mapOf(
             "com.example:lib:1.0.0" to pomInfo(
                 "com.example", "lib", "1.0.0",
@@ -273,7 +270,6 @@ class ResolutionTest {
 
     @Test
     fun resolveGraphWildcardExclusionExcludesAllTransitives() {
-        // lib depends on a (with *:* exclusion), a depends on b and c
         val poms = mapOf(
             "com.example:lib:1.0.0" to pomInfo(
                 "com.example", "lib", "1.0.0",
@@ -300,14 +296,12 @@ class ResolutionTest {
         val names = nodes.map { it.groupArtifact }.toSet()
         assertTrue("com.example:lib" in names)
         assertTrue("com.example:a" in names)
-        // b and c excluded by wildcard
         assertFalse("com.example:b" in names)
         assertFalse("com.example:c" in names)
     }
 
     @Test
     fun resolveGraphExclusionsPropagateTransitively() {
-        // lib excludes c, lib -> a -> b -> c. c should be excluded at any depth.
         val poms = mapOf(
             "com.example:lib:1.0.0" to pomInfo(
                 "com.example", "lib", "1.0.0",
@@ -339,8 +333,6 @@ class ResolutionTest {
 
     @Test
     fun resolveGraphExclusionDoesNotAffectOtherPaths() {
-        // a excludes c, but b does not. Both a and b are direct deps.
-        // a -> c (excluded), b -> c (not excluded) => c should be included
         val poms = mapOf(
             "com.example:a:1.0.0" to pomInfo(
                 "com.example", "a", "1.0.0",
@@ -368,7 +360,6 @@ class ResolutionTest {
             ),
             "com.example:c:1.0.0" to pomInfo("com.example", "c", "1.0.0")
         )
-        // Both a and b depend on c without exclusions → c is included
         val result = resolveGraph(
             mapOf("com.example:a" to "1.0.0", "com.example:b" to "1.0.0"),
             pomsWithExclusion.pomLookup()
@@ -377,8 +368,6 @@ class ResolutionTest {
         val names = nodes.map { it.groupArtifact }.toSet()
         assertTrue("com.example:c" in names)
     }
-
-    // --- Test helpers ---
 
     private fun pomDep(
         group: String,
@@ -408,7 +397,6 @@ class ResolutionTest {
 
     @Test
     fun resolveGraphVersionRangeSelectsConcreteVersion() {
-        // lib depends on util with version range [1.0.0,2.0.0)
         val poms = mapOf(
             "com.example:lib:1.0.0" to pomInfo(
                 "com.example", "lib", "1.0.0",

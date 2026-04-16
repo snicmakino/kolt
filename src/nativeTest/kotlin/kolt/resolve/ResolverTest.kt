@@ -87,7 +87,6 @@ class ResolverTest {
         val resolved = assertNotNull(result.get())
         assertEquals(1, resolved.deps.size)
         assertFalse(resolved.lockChanged)
-        // Verify no JAR downloads occurred (module metadata downloads are expected)
         val jarDownloads = downloaded.keys.filter { it.endsWith(".jar") }
         assertTrue(jarDownloads.isEmpty())
     }
@@ -280,7 +279,6 @@ class ResolverTest {
     private fun simplePom(group: String, artifact: String, version: String): String =
         "<project><groupId>$group</groupId><artifactId>$artifact</artifactId><version>$version</version></project>"
 
-    // Fake side-effect injection for testing
     private fun fakeDeps(
         cachedFiles: MutableSet<String> = mutableSetOf(),
         downloadedFiles: MutableMap<String, String> = mutableMapOf(),

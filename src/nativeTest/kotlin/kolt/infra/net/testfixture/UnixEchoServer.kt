@@ -43,18 +43,7 @@ import platform.posix.stderr
 import platform.posix.strerror
 import platform.posix.unlink
 
-/**
- * Test-only AF_UNIX server used as the "other side" for UnixSocket tests.
- *
- * Each instance owns a listening socket plus a dedicated accept thread
- * that serves one connection at a time using the configured handler.
- * The request side of every connection is read until EOF (the client
- * must half-close its write side via `UnixSocket.shutdownWrite()`),
- * the handler produces a response, and the response is written back
- * before the worker closes the client fd and loops.
- *
- * Not thread-safe; each test owns its own instance.
- */
+// Client must half-close write side via shutdownWrite() to signal request end.
 // Class-level opt-in: every method on UnixEchoServer touches cinterop,
 // so function-level annotations would be pure noise here. The free
 // helpers below stay at function level since there is no enclosing

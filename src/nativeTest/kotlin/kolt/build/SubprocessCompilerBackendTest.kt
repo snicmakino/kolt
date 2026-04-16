@@ -121,10 +121,7 @@ class SubprocessCompilerBackendMapProcessErrorTest {
     }
 }
 
-// Wording parity: every CompileError case produced by SubprocessCompilerBackend
-// must format to the same user-facing string that formatProcessError produced
-// pre-refactor. Legacy wording is reproduced here verbatim so a regression is
-// caught at test time rather than in user-visible output.
+// Pins user-facing wording against the pre-refactor formatProcessError strings.
 class FormatCompileErrorWordingTest {
 
     @Test
@@ -165,8 +162,6 @@ class FormatCompileErrorWordingTest {
 
     @Test
     fun backendUnavailableOtherIncludesDetail() {
-        // Free-form variant reserved for DaemonCompilerBackend (socket closed, protocol error etc.).
-        // No legacy wording to match — this is daemon-only and formats with a descriptive prefix.
         val message = formatCompileError(
             CompileError.BackendUnavailable.Other("daemon socket closed"),
             "compilation",
@@ -203,22 +198,16 @@ class SubprocessCompilerBackendIntegrationTest {
 
     @Test
     fun compileReturnsOkWhenBinaryExitsZero() {
-        // /bin/true ignores all args and exits 0. Exercises the success path of
-        // executeCommand → CompileOutcome mapping without needing a real kotlinc.
         val backend = SubprocessCompilerBackend(kotlincBin = "/bin/true")
         val result = backend.compile(trivialRequest)
         val outcome = assertNotNull(result.get())
-        // TODO(#14 S5+): once DaemonCompilerBackend returns populated stdout/stderr,
-        // this contract will diverge. Subprocess backend intentionally returns ""
-        // because kotlinc inherits our stdout/stderr directly.
+        // Subprocess backend returns "" because kotlinc inherits our stdout/stderr directly.
         assertEquals("", outcome.stdout)
         assertEquals("", outcome.stderr)
     }
 
     @Test
     fun compileReturnsCompilationFailedWhenBinaryExitsNonZero() {
-        // /bin/false ignores all args and exits 1. This is how a real kotlinc
-        // compile error surfaces at the process layer.
         val backend = SubprocessCompilerBackend(kotlincBin = "/bin/false")
         val result = backend.compile(trivialRequest)
         val error = assertNotNull(result.getError())

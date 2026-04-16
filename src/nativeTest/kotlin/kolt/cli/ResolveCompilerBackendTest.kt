@@ -19,14 +19,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Drives every branch of [resolveCompilerBackend] with fake seams.
- * The helper itself contains no I/O, but every production path it
- * touches (precondition resolution, daemon state directory creation,
- * daemon backend construction, warning sink) is exposed as a lambda
- * so the test can observe warning wording and backend identity
- * directly without standing up a real daemon.
- */
 class ResolveCompilerBackendTest {
 
     private val paths = KoltPaths(home = "/fake/home")
@@ -90,13 +82,9 @@ class ResolveCompilerBackendTest {
         )
     }
 
+    // ADR 0016 §5: daemon is never load-bearing for correctness.
     @Test
     fun bootstrapJdkInstallFailureFallsBackWithCauseInWarning() {
-        // Binds ADR 0016 §5 "daemon is never load-bearing for
-        // correctness" for the auto-install path: a download failure
-        // during first-run bootstrap JDK provisioning must produce a
-        // one-line warning naming the cause and degrade to the
-        // subprocess backend, never propagate as a build failure.
         val warnings = mutableListOf<String>()
         val backend = resolveCompilerBackend(
             config = config,
@@ -153,12 +141,6 @@ class ResolveCompilerBackendTest {
         assertEquals(listOf(WARNING_DAEMON_DIR_UNWRITABLE), warnings)
     }
 
-    // #65 native client wiring: the `pluginJars` map flows through
-    // `resolveCompilerBackend` into `daemonBackendFactory` verbatim, so the
-    // daemon backend can serialise it onto `--plugin-jars` when it spawns
-    // the JVM. Pinning the pass-through here means a future contributor
-    // cannot silently drop the wiring between `doBuild` and the daemon
-    // spawn — the JVM build path's plugin support depends on it.
     @Test
     fun pluginJarsArgumentIsForwardedToDaemonBackendFactory() {
         val warnings = mutableListOf<String>()
@@ -215,20 +197,11 @@ class ResolveCompilerBackendTest {
 
         assertEquals(emptyList(), warnings)
         val fallback = assertNotNull(backend as? FallbackCompilerBackend)
-        // Tightness: asserting `as FallbackCompilerBackend` alone
-        // would still pass if the factory were called but its
-        // return value thrown away and primary wired to something
-        // else. The identity checks below pin the wiring.
         assertSame(daemonSentinel, fallback.primary)
         assertSame(subprocess, fallback.fallback)
         assertEquals(okSetup, createdFrom)
     }
 
-    // #65 native client wiring: editing kolt.toml [plugins] between builds
-    // must NOT reuse a warm daemon spawned with a stale plugin set. The
-    // socket and log paths get a plugin-set fingerprint suffix so a
-    // different plugin set probes a different (absent) socket and trips
-    // the ENOENT spawn path in DaemonCompilerBackend.connectOrSpawn.
     @Test
     fun pluginsFingerprintIsStableForSamePluginMap() {
         val a = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")))
@@ -238,9 +211,6 @@ class ResolveCompilerBackendTest {
 
     @Test
     fun pluginsFingerprintIsOrderInsensitiveOnAliases() {
-        // Iteration order of a caller's map must not affect the fingerprint —
-        // otherwise a future caller swapping a `linkedMapOf` for a `mapOf`
-        // would orphan all warm daemons for no semantic change.
         val a = pluginsFingerprint(linkedMapOf("a" to listOf("/x"), "b" to listOf("/y")))
         val b = pluginsFingerprint(linkedMapOf("b" to listOf("/y"), "a" to listOf("/x")))
         assertEquals(a, b)
@@ -255,8 +225,6 @@ class ResolveCompilerBackendTest {
 
     @Test
     fun pluginsFingerprintEmptyMapHasFixedMarker() {
-        // The no-plugin path must collapse to a single, stable bucket so the
-        // common case keeps a single warm daemon across repeated builds.
         assertEquals("noplugins", pluginsFingerprint(emptyMap()))
     }
 

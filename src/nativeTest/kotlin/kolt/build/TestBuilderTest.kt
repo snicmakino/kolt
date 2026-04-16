@@ -63,7 +63,6 @@ class TestBuilderTest {
 
     @Test
     fun testBuildCommandOutputPathIsTestClassesDir() {
-        // outputPath is always build/test-classes regardless of project name
         val cmd = testBuildCommand(
             config = testConfig(name = "hello-world"),
             classesDir = "build/classes"
@@ -140,21 +139,16 @@ class TestBuilderTest {
         )
     }
 
-    // --- kotlincPath parameter ---
-
     @Test
     fun testBuildCommandWithManagedKotlincPathUsesItAsCompiler() {
-        // Given: a managed kotlinc binary path
         val managedKotlincBin = "/home/user/.kolt/toolchains/kotlinc/2.1.0/bin/kotlinc"
 
-        // When: testBuildCommand is called with that path
         val cmd = testBuildCommand(
             config = testConfig(),
             classesDir = "build/classes",
             kotlincPath = managedKotlincBin
         )
 
-        // Then: the managed path is used as the first arg, not system "kotlinc"
         assertEquals(
             listOf(managedKotlincBin, "-cp", "build/classes", "test", "-jvm-target", "17", "-d", "build/test-classes"),
             cmd.args
@@ -163,20 +157,17 @@ class TestBuilderTest {
 
     @Test
     fun testBuildCommandWithNullKotlincPathDefaultsToSystemKotlinc() {
-        // Given: no managed toolchain (null)
         val cmd = testBuildCommand(
             config = testConfig(),
             classesDir = "build/classes",
             kotlincPath = null
         )
 
-        // Then: falls back to system "kotlinc"
         assertEquals("kotlinc", cmd.args.first())
     }
 
     @Test
     fun testBuildCommandWithManagedKotlincAndClasspath() {
-        // Given: managed kotlinc + extra classpath
         val managedKotlincBin = "/home/user/.kolt/toolchains/kotlinc/2.1.0/bin/kotlinc"
 
         val cmd = testBuildCommand(

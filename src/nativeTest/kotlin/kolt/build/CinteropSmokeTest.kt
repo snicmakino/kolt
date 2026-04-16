@@ -14,24 +14,15 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import platform.posix.getpid
 
-// E2E smoke test: exercises the full cinterop → konanc → kexe pipeline against
-// a real libcurl fixture. Requires the managed konanc toolchain (2.1.0) and
-// libcurl headers (curl/curl.h) to be present at one of several well-known
-// locations. Skips when either prerequisite is missing.
 class CinteropSmokeTest {
 
-    // Candidate include directories that may contain curl/curl.h. Covers:
-    // - Debian/Ubuntu multiarch (/usr/include/x86_64-linux-gnu)
-    // - Default /usr/include (Fedora/Arch/Alpine and most other Linux)
-    // - /usr/local/include (source/manual installs)
+    // Debian/Ubuntu multiarch, default /usr/include, and /usr/local/include
     private val curlIncludeCandidates = listOf(
         "/usr/include/x86_64-linux-gnu",
         "/usr/include",
         "/usr/local/include",
     )
 
-    // Candidate library directories that may contain libcurl.so. Matches the
-    // same host layouts as the include candidates above.
     private val curlLibCandidates = listOf(
         "/usr/lib/x86_64-linux-gnu",
         "/usr/lib64",
@@ -47,15 +38,11 @@ class CinteropSmokeTest {
         val cinteropBin = paths.cinteropBin(kotlinVersion)
         val konancBin = paths.konancBin(kotlinVersion)
 
-        // Skip when managed toolchain is absent (CI without pre-installed konanc).
         if (!fileExists(cinteropBin) || !fileExists(konancBin)) {
             println("SKIP: managed konanc toolchain not found at ${paths.konancPath(kotlinVersion)}")
             return
         }
 
-        // Skip when libcurl headers are absent (non-Debian hosts without libcurl-dev).
-        // We always include /usr/include (base glibc headers) and add the directory
-        // holding curl/curl.h if it differs — on Debian/Ubuntu that's the multiarch path.
         val curlIncludeDir = curlIncludeCandidates.firstOrNull { fileExists("$it/curl/curl.h") }
         if (curlIncludeDir == null) {
             println(
@@ -81,7 +68,6 @@ class CinteropSmokeTest {
         ensureDirectoryRecursive(buildDir)
 
         try {
-            // --- Fixture: libcurl.def ---
             val defFile = "$tmpDir/libcurl.def"
             writeFileAsString(
                 defFile,
@@ -92,7 +78,6 @@ class CinteropSmokeTest {
                 """.trimIndent()
             )
 
-            // --- Fixture: Main.kt (calls curl_version()) ---
             val mainFile = "$tmpDir/Main.kt"
             writeFileAsString(
                 mainFile,
@@ -109,7 +94,6 @@ class CinteropSmokeTest {
                 """.trimIndent()
             )
 
-            // --- Step 1: cinterop — .def → libcurl.klib ---
             val klibBase = "$buildDir/libcurl"
             val cinteropResult = executeCommand(listOf(cinteropBin, "-def", defFile, "-o", klibBase))
             assertNotNull(
@@ -119,7 +103,6 @@ class CinteropSmokeTest {
             val klibFile = "$klibBase.klib"
             assertTrue(fileExists(klibFile), "Expected .klib at $klibFile after cinterop")
 
-            // --- Step 2: konanc stage 1 — sources + cinterop klib → project klib ---
             val appKlibBase = "$buildDir/smoke-klib"
             val stage1Result = executeCommand(
                 listOf(
@@ -135,7 +118,6 @@ class CinteropSmokeTest {
             )
             assertTrue(fileExists(appKlibBase), "Expected project klib at $appKlibBase")
 
-            // --- Step 3: konanc stage 2 — project klib → executable ---
             val exeBase = "$buildDir/smoke"
             val stage2Result = executeCommand(
                 listOf(
@@ -153,7 +135,6 @@ class CinteropSmokeTest {
             val exeFile = "$exeBase.kexe"
             assertTrue(fileExists(exeFile), "Expected executable at $exeFile after link")
 
-            // --- Step 4: run and verify curl_version() output ---
             val runResult = executeAndCapture("$exeFile 2>&1")
             val output = assertNotNull(runResult.get(), "executable run failed: $runResult")
             assertTrue(
