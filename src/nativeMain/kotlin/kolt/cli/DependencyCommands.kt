@@ -255,13 +255,30 @@ internal fun doTree() {
     }
 }
 
+private val DEPS_SUBCOMMANDS = setOf("add", "install", "update", "tree")
+
 internal fun validateDepsSubcommand(args: List<String>): Boolean =
-    args.isNotEmpty() && args[0] == "tree"
+    args.isNotEmpty() && args[0] in DEPS_SUBCOMMANDS
 
 internal fun doDeps(args: List<String>) {
     if (!validateDepsSubcommand(args)) {
-        eprintln("usage: kolt deps tree")
+        printDepsUsage()
         exitProcess(EXIT_BUILD_ERROR)
     }
-    doTree()
+    when (args[0]) {
+        "add" -> doAdd(args.drop(1))
+        "install" -> doInstall()
+        "update" -> doUpdate()
+        "tree" -> doTree()
+    }
+}
+
+private fun printDepsUsage() {
+    eprintln("usage: kolt deps <command>")
+    eprintln("")
+    eprintln("commands:")
+    eprintln("  add        Add a dependency (e.g. kolt deps add group:artifact:version)")
+    eprintln("  install    Resolve dependencies and download JARs")
+    eprintln("  update     Re-resolve dependencies and update lockfile")
+    eprintln("  tree       Show dependency tree")
 }

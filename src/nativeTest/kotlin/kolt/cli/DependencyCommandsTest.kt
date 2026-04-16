@@ -12,6 +12,21 @@ class ValidateDepsSubcommandTest {
     }
 
     @Test
+    fun validAddSubcommand() {
+        assertTrue(validateDepsSubcommand(listOf("add", "com.example:lib:1.0")))
+    }
+
+    @Test
+    fun validInstallSubcommand() {
+        assertTrue(validateDepsSubcommand(listOf("install")))
+    }
+
+    @Test
+    fun validUpdateSubcommand() {
+        assertTrue(validateDepsSubcommand(listOf("update")))
+    }
+
+    @Test
     fun emptyArgsReturnsInvalid() {
         assertFalse(validateDepsSubcommand(emptyList()))
     }
