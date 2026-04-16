@@ -171,11 +171,6 @@ kolt toolchain install   # Download kotlinc version from kolt.toml
 
 Stored at `~/.kolt/toolchains/kotlinc/{version}/`. Used automatically when available, falls back to system `kotlinc`.
 
-## Prerequisites
-
-- `kotlinc` on PATH (or managed via `kolt toolchain install`)
-- `java` on PATH (for running JVM targets and tests)
-
 ## Exit Codes
 
 | Code | Meaning |
