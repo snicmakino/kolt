@@ -5,6 +5,20 @@
 
 > v0.10.0 — Early-stage project. Expect breaking changes.
 
+### Not yet supported
+
+Planned for v1.0:
+
+- Library packaging (currently `app` only)
+- `kolt publish` / `kolt new`
+- macOS and linuxArm64 targets
+- Private Maven repository authentication
+
+Planned post-1.0:
+
+- Multi-module projects
+- Mixed Kotlin/Java source compilation
+
 A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
 
 The tool itself starts instantly. Actual compilation delegates to `kotlinc` / `konanc`, so build times track the Kotlin compiler directly. Incremental builds via mtime-based caching skip unchanged sources entirely. A warm JVM compiler daemon amortizes JVM startup across successive builds — typical warm-build latency is ~0.3 s.
