@@ -316,6 +316,10 @@ kolt aims to be what `go build` is to Go or `cargo build` is to Rust — a fast,
 | 5 | Format error |
 | 127 | Command not found |
 
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the internal design — component overview, build flow, daemon lifecycle, and architectural decisions.
+
 ## Claude Code Integration
 
 This project includes [Claude Code](https://claude.ai/code) skills. If you use Claude Code, the `/kolt-usage` skill provides interactive help with kolt commands, configuration, and dependency management. You can also [read it directly](.claude/skills/kolt-usage/SKILL.md) as a reference.
