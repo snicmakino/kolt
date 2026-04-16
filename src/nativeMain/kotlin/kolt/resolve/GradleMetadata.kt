@@ -5,23 +5,12 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 
-/**
- * Redirect target when a Kotlin Multiplatform module's .module file
- * redirects the JVM variant to a platform-specific artifact.
- */
 data class JvmRedirect(
     val group: String,
     val module: String,
     val version: String
 )
 
-/**
- * Parses a Gradle Module Metadata JSON string and extracts the JVM
- * platform redirect if present. Returns null when:
- * - the JSON is invalid
- * - no variant has `org.jetbrains.kotlin.platform.type` = "jvm"
- * - the JVM variant has no `available-at` redirect
- */
 fun parseJvmRedirect(moduleJson: String): JvmRedirect? {
     val metadata = try {
         lenientJson.decodeFromString<GradleModuleMetadata>(moduleJson)
@@ -36,8 +25,6 @@ fun parseJvmRedirect(moduleJson: String): JvmRedirect? {
 
         val availableAt = variant.availableAt
         if (availableAt == null) {
-            // A JVM variant without available-at means the library itself
-            // provides a JVM jar — no redirect needed.
             return null
         }
         if (redirect == null) {
@@ -51,22 +38,12 @@ fun parseJvmRedirect(moduleJson: String): JvmRedirect? {
     return redirect
 }
 
-/**
- * Redirect target for a Kotlin/Native platform variant. A multiplatform root
- * module redirects each native target to a separate module, e.g.
- * `kotlinx-coroutines-core` → `kotlinx-coroutines-core-linuxx64` for linux_x64.
- */
 data class NativeRedirect(
     val group: String,
     val module: String,
     val version: String
 )
 
-/**
- * A resolved native variant from a platform-specific module file. Carries the
- * `.klib` file reference (relative URL and sha256) and the transitive dependencies
- * declared in the Gradle module metadata.
- */
 data class NativeArtifact(
     val klibFileUrl: String,
     val klibSha256: String,
@@ -79,23 +56,8 @@ data class NativeDependency(
     val version: String
 )
 
-/**
- * Parses a Gradle Module Metadata JSON and extracts the available-at redirect
- * for the given Kotlin/Native target (e.g. "linux_x64"). Returns null when the
- * JSON is invalid, no matching variant exists, or matching variants exist but
- * none have an available-at redirect.
- *
- * A variant matches when ALL of these attributes are present:
- * - `org.jetbrains.kotlin.platform.type` == "native"
- * - `org.jetbrains.kotlin.native.target` == <nativeTarget>
- * - `org.gradle.usage` == "kotlin-api"
- * - `org.gradle.category` == "library"
- *
- * Unlike [parseJvmRedirect], a matching variant without `available-at` is
- * skipped rather than aborting: native modules list many targets in parallel,
- * and an earlier target with no redirect does not imply the requested target
- * is missing.
- */
+// Unlike parseJvmRedirect, a variant without available-at is skipped (not aborted)
+// because native modules list many targets in parallel.
 fun parseNativeRedirect(moduleJson: String, nativeTarget: String): NativeRedirect? {
     val metadata = try {
         lenientJson.decodeFromString<GradleModuleMetadata>(moduleJson)
@@ -115,12 +77,6 @@ fun parseNativeRedirect(moduleJson: String, nativeTarget: String): NativeRedirec
     return null
 }
 
-/**
- * Parses a Gradle Module Metadata JSON (a platform-specific redirect target)
- * and extracts the `.klib` file and dependencies for the given Kotlin/Native
- * target. Returns null when the JSON is invalid, no matching variant exists,
- * or the matching variant has no `.klib` file entry.
- */
 fun parseNativeArtifact(moduleJson: String, nativeTarget: String): NativeArtifact? {
     val metadata = try {
         lenientJson.decodeFromString<GradleModuleMetadata>(moduleJson)
@@ -143,13 +99,6 @@ fun parseNativeArtifact(moduleJson: String, nativeTarget: String): NativeArtifac
     return null
 }
 
-/**
- * Returns true when the JSON decodes as a well-formed Gradle Module Metadata
- * document (v1.1 schema, the subset kolt cares about). Use this to distinguish
- * "JSON is broken" from "JSON is valid but no variant matches our target",
- * since [parseNativeRedirect] and [parseNativeArtifact] both return null in
- * both cases.
- */
 internal fun isValidGradleModuleJson(moduleJson: String): Boolean =
     try {
         lenientJson.decodeFromString<GradleModuleMetadata>(moduleJson)

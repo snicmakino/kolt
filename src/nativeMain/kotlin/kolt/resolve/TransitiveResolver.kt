@@ -8,15 +8,6 @@ import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
 import kolt.infra.DownloadError
 
-/**
- * Resolves dependencies transitively. Orchestrates I/O (POM/JAR fetching,
- * hashing) around the pure [resolveGraph] algorithm.
- *
- * 1. Creates a POM lookup function backed by cache + download
- * 2. Calls [resolveGraph] to resolve the dependency graph
- * 3. Downloads JARs and computes SHA256 hashes
- * 4. Detects lockfile changes
- */
 fun resolveTransitive(
     config: KoltConfig,
     existingLock: Lockfile?,
@@ -25,10 +16,8 @@ fun resolveTransitive(
 ): Result<ResolveResult, ResolveError> {
     val repos = config.repositories.values.toList()
 
-    // Create POM lookup backed by cache + download
     val basePomLookup = createPomLookup(repos, cacheBase, deps)
 
-    // Track KMP redirects: original groupArtifact -> redirected groupArtifact
     val redirects = mutableMapOf<String, String>()
     val moduleLookup = createModuleLookup(repos, cacheBase, deps)
 
@@ -43,19 +32,14 @@ fun resolveTransitive(
         }
     }
 
-    // Pure resolution
     val nodes = resolveGraph(config.dependencies, pomLookup).getOrElse { error ->
         return Err(error)
     }
 
-    // Download JARs and compute hashes
     return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos)
 }
 
-/**
- * Tries each repository in order, downloading to [destPath].
- * Falls back to the next repository only on HTTP 404. Any other error stops immediately.
- */
+// Falls back to next repo only on 404; any other error stops immediately.
 internal fun downloadFromRepositories(
     repos: List<String>,
     destPath: String,
@@ -76,11 +60,6 @@ internal fun downloadFromRepositories(
     return Err(lastError ?: DownloadError.NetworkError("", "no repositories configured"))
 }
 
-/**
- * Creates a POM lookup function that downloads, caches, and parses POM files.
- * Parsed POM metadata is cached in memory to avoid re-reading and re-parsing
- * the same POM (e.g., shared parent POMs in diamond dependencies).
- */
 internal fun createPomLookup(
     repos: List<String>,
     cacheBase: String,
@@ -96,7 +75,6 @@ internal fun createPomLookup(
                 val coord = Coordinate(parts[0], parts[1], version)
                 val pomCachePath = "$cacheBase/${buildPomCachePath(coord)}"
 
-                // Download POM if not cached on disk
                 if (!deps.fileExists(pomCachePath)) {
                     val parentDir = pomCachePath.substringBeforeLast('/')
                     val dirOk = deps.ensureDirectoryRecursive(parentDir).getOrElse { null }
@@ -105,7 +83,6 @@ internal fun createPomLookup(
                     }
                 }
 
-                // Read and parse POM
                 val content = deps.readFileContent(pomCachePath).getOrElse { null }
                 content?.let { parsePom(it).getOrElse { null } }
             } else {
@@ -115,11 +92,6 @@ internal fun createPomLookup(
     }
 }
 
-/**
- * Creates a memoized lookup function for Gradle Module Metadata JVM redirects.
- * Results (including "no redirect") are cached in memory to avoid redundant
- * .module file downloads for the same coordinate.
- */
 private fun createModuleLookup(
     repos: List<String>,
     cacheBase: String,
@@ -154,7 +126,6 @@ private fun checkModuleFile(
     val coord = Coordinate(parts[0], parts[1], version)
     val moduleCachePath = "$cacheBase/${buildModuleCachePath(coord)}"
 
-    // Download .module file if not cached on disk
     if (!deps.fileExists(moduleCachePath)) {
         val parentDir = moduleCachePath.substringBeforeLast('/')
         deps.ensureDirectoryRecursive(parentDir).getOrElse { return null }
@@ -165,16 +136,7 @@ private fun checkModuleFile(
     return parseJvmRedirect(content)
 }
 
-/**
- * Downloads JARs, computes SHA256 hashes, and checks lockfile for changes.
- * Converts pure [DependencyNode] list into [ResolveResult] with I/O.
- *
- * For KMP libraries, [redirects] maps the original groupArtifact (e.g.,
- * "com.squareup.okhttp3:okhttp") to the JVM-specific artifact (e.g.,
- * "com.squareup.okhttp3:okhttp-jvm"). The lockfile and ResolvedDep keep
- * the original groupArtifact as the key, but the SHA256 hash and cache
- * path correspond to the redirected JAR.
- */
+// KMP redirects: lockfile keys use original groupArtifact, but hash/path use the redirected JAR.
 private fun materialize(
     nodes: List<DependencyNode>,
     redirects: Map<String, String>,
@@ -188,7 +150,6 @@ private fun materialize(
     val resolvedDeps = mutableListOf<ResolvedDep>()
 
     for (node in nodes) {
-        // Use redirected artifact for JAR download (KMP libraries)
         val jarGroupArtifact = redirects[node.groupArtifact] ?: node.groupArtifact
         val coord = parseCoordinate(jarGroupArtifact, node.version).getOrElse {
             return Err(ResolveError.InvalidDependency(node.groupArtifact))
@@ -198,7 +159,6 @@ private fun materialize(
         val fullCachePath = "$cacheBase/$relativePath"
         val lockEntry = existingLock?.dependencies?.get(node.groupArtifact)
 
-        // Download JAR if not cached
         if (!deps.fileExists(fullCachePath)) {
             val parentDir = fullCachePath.substringBeforeLast('/')
             deps.ensureDirectoryRecursive(parentDir).getOrElse {
@@ -210,12 +170,10 @@ private fun materialize(
             lockChanged = true
         }
 
-        // Compute SHA256
         val hash = deps.computeSha256(fullCachePath).getOrElse { error ->
             return Err(ResolveError.HashComputeFailed(node.groupArtifact, error))
         }
 
-        // Verify against lockfile
         if (lockEntry != null) {
             if (lockEntry.version != node.version) {
                 lockChanged = true

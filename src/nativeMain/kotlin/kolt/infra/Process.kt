@@ -15,12 +15,6 @@ sealed class ProcessError {
     data object PopenFailed : ProcessError()
 }
 
-// Formats a [ProcessError] into a short, lowercase, prefix-free
-// message. Callers are responsible for prepending their own
-// "error:" / "warning:" tag at the output site — keeping the
-// prefix out here lets the same message round-trip through
-// [ToolchainError] (which re-prepends "error:" at eprintln time)
-// without a fragile `.removePrefix("error: ")`.
 fun formatProcessError(error: ProcessError, context: String): String = when (error) {
     is ProcessError.NonZeroExit -> "$context failed with exit code ${error.exitCode}"
     is ProcessError.EmptyArgs -> "no command to execute"
@@ -39,7 +33,6 @@ fun executeCommand(args: List<String>): Result<Int, ProcessError> {
         return Err(ProcessError.ForkFailed)
     }
     if (pid == 0) {
-        // child process
         memScoped {
             val argv = allocArray<CPointerVar<ByteVar>>(args.size + 1)
             for (i in args.indices) {
@@ -47,18 +40,15 @@ fun executeCommand(args: List<String>): Result<Int, ProcessError> {
             }
             argv[args.size] = null
             execvp(args[0], argv)
-            // execvp only returns on error
             _exit(127)
         }
     }
-    // parent process
     memScoped {
         val status = alloc<IntVar>()
         while (waitpid(pid, status.ptr, 0) == -1) {
             if (errno != EINTR) return Err(ProcessError.WaitFailed)
         }
         val raw = status.value
-        // WIFEXITED: (status & 0x7F) == 0
         return if ((raw and 0x7F) == 0) {
             val exitCode = (raw shr 8) and 0xFF
             if (exitCode == 0) Ok(0) else Err(ProcessError.NonZeroExit(exitCode))
@@ -68,37 +58,8 @@ fun executeCommand(args: List<String>): Result<Int, ProcessError> {
     }
 }
 
-// Spawn a child that keeps running after the parent exits. Used by
-// DaemonCompilerBackend to start the warm compiler JVM: the kolt
-// process that initiates the spawn is short-lived, but the daemon it
-// creates must survive across builds.
-//
-// Double-fork idiom: fork → setsid → fork → exec. The intermediate
-// child calls setsid() to become the leader of a new session with no
-// controlling terminal, then forks a grandchild. The intermediate
-// child immediately _exit(0), leaving the grandchild reparented to
-// PID 1 (so our original parent never has to reap it) and detached
-// from the session it inherited. [logPath], if non-null, receives the
-// grandchild's stdout and stderr (append mode) — stdin is always
-// redirected away from the parent's terminal. The intermediate child
-// is reaped synchronously so the caller observes no zombie.
-//
-// **`Ok(Unit)` does not mean `execvp` succeeded.** It means the
-// fork/setsid/fork/intermediate-reap chain completed; the grandchild
-// has started running but may `_exit(127)` when `execvp` fails on a
-// missing or non-executable target (for example, the daemon jar is
-// the wrong path). Callers that care (DaemonCompilerBackend does)
-// must observe spawn success indirectly by polling the socket: if
-// the grandchild died before binding, the retry loop hits the budget
-// and returns `BackendUnavailable`. We deliberately do not pass the
-// grandchild's pid back — reaping the intermediate already means the
-// grandchild is reparented to init, so waitpid() from the kolt parent
-// would return ECHILD regardless.
-//
-// This is separate from [executeCommand] because reusing fork+execvp
-// from there would entangle the managed-subprocess path (parent waits
-// for completion) with the detached-daemon path (parent must not
-// wait).
+// Double-fork detach. Ok(Unit) means the fork chain completed, not
+// that execvp succeeded — callers must poll the socket to confirm.
 @OptIn(ExperimentalForeignApi::class)
 fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, ProcessError> {
     if (args.isEmpty()) return Err(ProcessError.EmptyArgs)
@@ -107,11 +68,6 @@ fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, Pro
     if (pid1 < 0) return Err(ProcessError.ForkFailed)
 
     if (pid1 == 0) {
-        // Intermediate child. `setsid` fails only if we are already a
-        // session leader, which should not happen post-fork; when it
-        // does, the grandchild still inherits the parent's process
-        // group and controlling terminal, which is acceptable for a
-        // daemon that never reads a tty, so we log rather than abort.
         if (setsid() < 0) {
             fputs("spawnDetached: setsid() failed, errno=$errno\n", stderr)
         }
@@ -119,16 +75,6 @@ fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, Pro
         if (pid2 < 0) _exit(127)
         if (pid2 > 0) _exit(0)
 
-        // Grandchild. Redirect fds 0/1/2 before execvp so the daemon
-        // never inherits our terminal. If /dev/null is unavailable or
-        // the log file cannot be opened, fall through to whichever
-        // descriptor did open — we never leave stdin pointing at the
-        // caller's terminal.
-        //
-        // open() is variadic in C (the mode argument is only
-        // consulted when O_CREAT is set); K/N exposes the third slot
-        // as `vararg Any?`, so we pass the mode as an Int value and
-        // let the vararg plumbing box it.
         val devNull = open("/dev/null", O_RDWR)
         val logFd = if (logPath != null) {
             val mode = S_IRUSR or S_IWUSR
@@ -141,9 +87,6 @@ fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, Pro
         if (stdinFd >= 0) {
             dup2(stdinFd, STDIN_FILENO)
         } else {
-            // Neither /dev/null nor the log file opened. Close fd 0
-            // explicitly so the daemon cannot accidentally read from
-            // whatever descriptor the caller had on stdin.
             platform.posix.close(STDIN_FILENO)
         }
         if (outFd >= 0) {
@@ -164,9 +107,6 @@ fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, Pro
         }
     }
 
-    // Parent: reap the intermediate child. The grandchild has already
-    // been reparented to PID 1 by the time the intermediate exits, so
-    // this wait completes as soon as _exit(0) runs above.
     memScoped {
         val status = alloc<IntVar>()
         while (waitpid(pid1, status.ptr, 0) == -1) {
@@ -188,7 +128,6 @@ fun executeAndCapture(command: String): Result<String, ProcessError> {
         }
     }
     val status = pclose(fp)
-    // WIFEXITED check
     val exitCode = if ((status and 0x7F) == 0) {
         (status shr 8) and 0xFF
     } else {

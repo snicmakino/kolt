@@ -9,9 +9,6 @@ import platform.posix.*
 
 data class Sha256Error(val path: String)
 
-// In-memory SHA-256 hex digest. Callers that need only a byte-array hash
-// (e.g. hashing a project path for the daemon socket directory name) use
-// this instead of dragging bytes through a temporary file.
 fun sha256Hex(bytes: ByteArray): String {
     val digest = SHA256()
     digest.update(bytes)

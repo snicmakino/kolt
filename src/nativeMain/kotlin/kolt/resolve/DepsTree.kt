@@ -47,36 +47,14 @@ private fun isIncludedDep(dep: PomDependency): Boolean {
     return scope == "compile" || scope == "runtime"
 }
 
-/**
- * Information required to render a single node in the native dependency tree.
- * The display coordinate is the *redirected* target (e.g. `...-linuxx64`), so
- * users see the klib that will actually be linked rather than the root module
- * coordinate they declared in `kolt.toml`. Transitive deps are the contents of
- * the linux_x64 variant's `dependencies[]` from Gradle Module Metadata.
- */
 data class NativeNodeInfo(
     val displayGroupArtifact: String,
     val displayVersion: String,
     val dependencies: List<Pair<String, String>> = emptyList()
 )
 
-/**
- * Native counterpart of [buildDependencyTree]. Walks Gradle Module Metadata
- * via [nativeLookup] instead of POMs, rendering the redirected `-linuxx64`
- * display names and skipping kotlin-stdlib / kotlin-stdlib-common (ADR 0011)
- * at both direct and transitive positions.
- *
- * Note: this is a *display* walker, not a resolver. It does not perform the
- * "highest-version-wins" conflict resolution that [kolt.resolve.resolveNative]
- * applies across the whole graph, so two branches of the rendered tree can
- * show different versions of the same coordinate while the actual link would
- * pick only the highest. Matches the behaviour of [buildDependencyTree] for
- * JVM targets.
- *
- * When [nativeLookup] returns null (metadata missing or unparseable for a
- * coordinate), the tree renders that coordinate as a leaf with no children
- * rather than aborting — a partial tree is still useful.
- */
+// Display-only walker — no conflict resolution; two branches may show different
+// versions of the same coordinate. Skips kotlin-stdlib (ADR 0011).
 fun buildNativeDependencyTree(
     directDeps: Map<String, String>,
     nativeLookup: (groupArtifact: String, version: String) -> NativeNodeInfo?
@@ -110,9 +88,7 @@ private fun buildNativeNode(
     return TreeNode(info.displayGroupArtifact, info.displayVersion, children)
 }
 
-// Mirrors NativeResolver's stdlib skip policy (ADR 0011). Duplicated here so
-// the tree walker can be used with a stub lookup in tests without pulling in
-// NativeResolver; the two predicates must stay in sync.
+// Must stay in sync with NativeResolver's stdlib skip (ADR 0011).
 private fun isNativeStdlibSkipped(groupArtifact: String): Boolean =
     groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib" ||
         groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib-common"

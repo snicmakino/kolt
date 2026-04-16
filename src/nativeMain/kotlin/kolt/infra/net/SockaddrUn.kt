@@ -11,24 +11,9 @@ import platform.posix.AF_UNIX
 import platform.posix.memset
 import platform.posix.socklen_t
 
-// Linux caps AF_UNIX pathnames at 108 bytes including the NUL terminator;
-// see unix(7). Shared between UnixSocket (production) and UnixEchoServer
-// (test fixture) so both agree on the same pre-flight length check.
+// unix(7): AF_UNIX pathnames capped at 108 bytes including NUL.
 internal const val SUN_PATH_CAPACITY = 108
 
-/**
- * Populate a pre-allocated [sockaddr_un] with an AF_UNIX filesystem path
- * and return the matching `socklen_t` for `connect` / `bind` calls.
- *
- * Callers must ensure [pathBytes] is strictly shorter than
- * [SUN_PATH_CAPACITY] (room for the trailing NUL) — the oversize case is
- * reported with path-specific error variants at the call sites, so this
- * helper does not re-validate.
- *
- * The returned length is `offsetof(sockaddr_un, sun_path) + strlen + 1`
- * rather than `sizeof(sockaddr_un)`, keeping the door open for Linux
- * abstract sockets (leading NUL in `sun_path`) later.
- */
 @OptIn(ExperimentalForeignApi::class)
 internal fun fillSockaddrUn(addr: sockaddr_un, pathBytes: ByteArray): socklen_t {
     memset(addr.ptr, 0, sizeOf<sockaddr_un>().convert())

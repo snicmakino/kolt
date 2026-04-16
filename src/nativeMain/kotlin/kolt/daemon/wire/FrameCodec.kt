@@ -16,22 +16,7 @@ sealed interface FrameError {
     data class Transport(val cause: UnixSocketError) : FrameError
 }
 
-/**
- * Length-prefix + JSON framing over a [UnixSocket] stream.
- *
- * Wire contract (see ADR 0016 §3 — the native and JVM sides must stay
- * in lockstep or the daemon breaks):
- *
- * - 4-byte big-endian unsigned length prefix, counting body bytes only.
- * - UTF-8 JSON body produced by `kotlinx.serialization` with
- *   `classDiscriminator = "type"`; sealed variants are identified by
- *   their `@SerialName`.
- * - Frames larger than [MAX_BODY_BYTES] are rejected symmetrically on
- *   both the write and read paths.
- *
- * All fallible paths return a [FrameError] — consistent with ADR 0001,
- * no exception ever escapes.
- */
+// Wire format: ADR 0016 §3. Native and JVM sides must stay in lockstep.
 object FrameCodec {
 
     const val MAX_BODY_BYTES: Int = 64 * 1024 * 1024
@@ -91,9 +76,6 @@ object FrameCodec {
         }
     }
 
-    // A clean EOF at the very start of a frame (zero bytes before the
-    // header arrives) is a normal shutdown; a partial header is a
-    // truncated frame. Everything else is a transport-level failure.
     private fun headerTransportError(err: UnixSocketError): FrameError = when (err) {
         is UnixSocketError.UnexpectedEof ->
             if (err.received == 0) FrameError.Eof

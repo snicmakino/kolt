@@ -27,70 +27,15 @@ import platform.posix.clock_gettime
 import platform.posix.timespec
 import platform.posix.usleep
 
-/**
- * Warm JVM daemon path for compilation (see ADR 0016, issue #14).
- *
- * The first `compile()` call after a cold boot connects to (or spawns
- * and then connects to) a long-lived helper JVM that keeps the Kotlin
- * compiler's classloader warm. Subsequent compiles reuse the same
- * daemon and pay microseconds of IPC instead of seconds of JVM startup.
- *
- * This backend is **not** load-bearing for correctness. Every failure
- * mode — daemon spawn fails, daemon crashes mid-compile, socket path
- * is unreachable, reply is malformed — is mapped to a [CompileError]
- * that `FallbackCompilerBackend` is free to translate into a
- * subprocess fallback (S6/S7). The only error that is returned as
- * "don't fall back" is [CompileError.CompilationFailed]: that means
- * the daemon ran kotlinc and the user's Kotlin source did not
- * compile, and retrying with a subprocess kotlinc would produce the
- * same failure.
- *
- * ### Connect / spawn / retry policy
- *
- * 1. One optimistic `connect()`. If it succeeds, the daemon was
- *    already running — send the frame and return.
- * 2. If `connect()` fails with `ENOENT` (socket file absent) or
- *    `ECONNREFUSED` (no listener yet), the daemon is assumed to be
- *    down. Call [spawner] and enter the retry loop.
- * 3. If `connect()` fails with any other errno, the failure is fatal
- *    for this build — `EACCES`, `ENAMETOOLONG`, `EADDRNOTAVAIL` etc.
- *    all indicate environment or path problems that more retries
- *    will not resolve. [UnixSocketError.InvalidArgument] from path
- *    length validation is mapped to [CompileError.InternalMisuse]
- *    because it means kolt itself built a bad path.
- * 4. The retry loop uses exponential backoff (10 / 20 / 40 / ... ms,
- *    capped at 200 ms per iteration) inside a fixed total budget of
- *    [connectTotalBudgetMs] ms. The budget is wall-clock, not
- *    attempt-counted, so a laggy spawn does not burn the budget in
- *    one iteration and a fast spawn is not limited by a minimum
- *    retry count.
- *
- * ### Seams
- *
- * The constructor takes a [connector] and a [spawner] as defaulted
- * function parameters. In production both default to real
- * implementations ([UnixSocket.connect] wrapped in a
- * [SocketDaemonConnection] and [spawnDetached]); in tests they are
- * substituted with fakes so retry policy, spawn behaviour, and reply
- * mapping can be exercised without bringing up a real JVM daemon.
- * The same seam lets a future integration test swap in a real daemon
- * as a second configuration without duplicating the compile pipeline.
- */
+// ADR 0016, #14. Not load-bearing for correctness — all failures are fallback-eligible
+// except CompilationFailed. Retry policy: exponential backoff (10..200ms) within 3s budget.
 class DaemonCompilerBackend internal constructor(
     private val javaBin: String,
     private val daemonJarPath: String,
     private val compilerJars: List<String>,
-    // kotlin-build-tools-impl classpath shipped separately from the fat jar
-    // per ADR 0019 §3. Passed verbatim on `--bta-impl-jars` when spawning
-    // the daemon; the daemon loads these through a URLClassLoader parented
-    // by `SharedApiClassesClassLoader`.
     private val btaImplJars: List<String>,
     private val socketPath: String,
     private val logPath: String? = null,
-    // ADR 0019 §9 + #65: enabled `kolt.toml [plugins]` alias → compiler
-    // plugin classpath. Serialised onto `--plugin-jars` when spawning the
-    // daemon (see Main.parsePluginJars). Empty map omits the flag entirely
-    // so the common no-plugin path stays trivial.
     private val pluginJars: Map<String, List<String>> = emptyMap(),
     private val connector: DaemonConnector = defaultDaemonConnector,
     private val spawner: DaemonSpawner = defaultDaemonSpawner,
@@ -135,7 +80,6 @@ class DaemonCompilerBackend internal constructor(
     }
 
     private fun connectOrSpawn(): Result<DaemonConnection, CompileError> {
-        // Fast path: a daemon is already listening from a previous build.
         val first = connector(socketPath)
         first.getError()?.let { err ->
             if (!isRetryableConnectError(err)) {
@@ -143,10 +87,6 @@ class DaemonCompilerBackend internal constructor(
             }
         } ?: return Ok(first.get()!!)
 
-        // Daemon is (probably) not up — double-fork-exec and then
-        // wait for it to `bind()` the socket. [spawnDetached] returns
-        // as soon as the intermediate child exits, so we still need
-        // the retry loop before the first real connect succeeds.
         val spawnErr = spawner(
             spawnArgv(),
             logPath,
@@ -192,9 +132,6 @@ class DaemonCompilerBackend internal constructor(
         add("--socket")
         add(socketPath)
         add("--compiler-jars")
-        // JVM `kolt-compiler-daemon` CLI splits this on `File.pathSeparator`,
-        // which on Linux is ':'. Hard-code rather than pull in a platform
-        // detect: kolt is linuxX64-only today (see CLAUDE.md non-goals).
         add(compilerJars.joinToString(":"))
         add("--bta-impl-jars")
         add(btaImplJars.joinToString(":"))
@@ -215,12 +152,6 @@ class DaemonCompilerBackend internal constructor(
     }
 }
 
-/**
- * Frame-level daemon endpoint. Extracted as an internal seam so tests
- * can replace real socket I/O with a fake that returns pre-canned
- * [Message] responses, and so the compile pipeline does not need to
- * know about [UnixSocket] directly.
- */
 internal interface DaemonConnection : AutoCloseable {
     fun sendRequest(message: Message): Result<Unit, FrameError>
     fun receiveReply(): Result<Message, FrameError>
@@ -251,10 +182,6 @@ internal val defaultDaemonSpawner: DaemonSpawner = { argv, logPath -> spawnDetac
 
 internal val defaultSleeper: (Int) -> Unit = { ms -> usleep((ms * 1000).toUInt()) }
 
-// Monotonic milliseconds, used as the retry-budget clock. TimeSource
-// would have required a captured TimeMark and could not be swapped in
-// tests without an extra indirection; clock_gettime returns an
-// absolute monotonic value that is trivial to fake.
 @OptIn(ExperimentalForeignApi::class)
 internal fun monotonicMs(): Long = memScoped {
     val ts = alloc<timespec>()
@@ -262,11 +189,7 @@ internal fun monotonicMs(): Long = memScoped {
     ts.tv_sec * 1000L + ts.tv_nsec / 1_000_000L
 }
 
-// ENOENT: socket file does not exist yet (daemon has not bound).
-// ECONNREFUSED: socket file exists but nobody is listening (daemon is
-// shutting down mid-bind, or crashed between cleanup and rebind). Both
-// are expected transients in the spawn window; all other errnos are
-// treated as environment failures and short-circuit.
+// ENOENT / ECONNREFUSED are expected transients in the spawn window.
 internal fun isRetryableConnectError(err: UnixSocketError): Boolean {
     if (err !is UnixSocketError.ConnectFailed) return false
     return err.errno == ENOENT || err.errno == ECONNREFUSED
@@ -278,10 +201,6 @@ internal fun mapFatalConnectError(err: UnixSocketError): CompileError = when (er
         CompileError.BackendUnavailable.Other(
             "connect(${err.path}) failed: errno=${err.errno} ${err.message}",
         )
-    // Non-connect variants cannot reach this path (connector returns
-    // only ConnectFailed / InvalidArgument today), but the exhaustive
-    // when keeps the compiler honest if a future UnixSocketError
-    // variant is added without updating this mapping.
     is UnixSocketError.SendFailed,
     is UnixSocketError.RecvFailed,
     is UnixSocketError.UnexpectedEof,
@@ -309,17 +228,6 @@ internal fun mapReplyToOutcome(reply: Message): Result<CompileOutcome, CompileEr
             reply.exitCode == 0 ->
                 Ok(CompileOutcome(stdout = reply.stdout, stderr = reply.stderr))
             isDaemonProtocolError(reply) ->
-                // The JVM daemon's `writeProtocolError` wire contract
-                // (ADR 0016 §3, `DaemonServer.writeProtocolError`)
-                // emits exactly this shape on host-level failures:
-                // exitCode=2, empty diagnostics, empty stdout, and a
-                // stderr prefixed with "protocol error: ". Route it
-                // to BackendUnavailable so FallbackCompilerBackend can
-                // drop to subprocess compile instead of surfacing a
-                // confusing "compilation failed: protocol error" to
-                // the user. Narrow enough to not false-positive on a
-                // real kotlinc internal-error exitCode=2, because the
-                // stderr prefix is unique to the daemon contract.
                 Err(CompileError.BackendUnavailable.Other("daemon protocol error: ${reply.stderr}"))
             else ->
                 Err(
@@ -350,10 +258,6 @@ private fun isDaemonProtocolError(reply: Message.CompileResult): Boolean =
         reply.stdout.isEmpty() &&
         reply.stderr.startsWith(DAEMON_PROTOCOL_ERROR_PREFIX)
 
-// Wire contract: the fields of Message.Compile must stay aligned with
-// CompileRequest so the native client and the JVM server can talk
-// through FrameCodec without a lossy adapter. See ADR 0016 §3 and
-// the note on CompileRequest in kolt.build.CompilerBackend.kt.
 internal fun CompileRequest.toWireMessage(): Message.Compile = Message.Compile(
     workingDir = workingDir,
     classpath = classpath,

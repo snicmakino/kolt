@@ -44,9 +44,7 @@ internal fun loadProjectConfig(): KoltConfig {
 internal fun doCheck(useDaemon: Boolean = true) {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig()
-    // For native target, check is equivalent to a full build (konanc has no
-    // syntax-only mode). Delegate to doBuild and discard its BuildResult —
-    // check has no further use for it.
+    // konanc has no syntax-only mode; a full build is the only option.
     if (config.target == "native") {
         doBuild(useDaemon = useDaemon)
         return
@@ -104,32 +102,13 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
     if (isBuildUpToDate(current = currentState, cached = cachedState)) {
         val elapsed = startMark.elapsedNow()
         println("${config.name} is up to date (${formatDuration(elapsed)})")
-        // #65 review finding #2: the up-to-date path deliberately does
-        // NOT resolve plugin jars, and (as of the second review pass)
-        // does NOT provision the kotlinc toolchain either. Plugin jar
-        // resolution re-hashes every cached jar against its stamp (TOFU
-        // self-heal, see PluginJarFetcher) and falls through to re-
-        // download on corruption, which would hard-exit an offline
-        // build that otherwise would have succeeded. kotlinc is only
-        // needed for the subprocess-fallback compile path (below), so
-        // deferring both keeps this branch a pure mtime compare, which
-        // is the invariant dogfood offline builds depend on. `doTest`
-        // resolves plugin args on its own for test compilation, so
-        // nothing downstream of `BuildResult` needs them here.
+        // Invariant: the up-to-date path must stay a pure mtime compare —
+        // no plugin jar resolution or toolchain provisioning — so offline
+        // cached builds don't hard-exit on a failed fetch.
         return BuildResult(config, cachedState!!.classpath, managedJavaBin)
     }
-    // Only provisioned when we actually need to run a compile. Matches
-    // the `ensureKonancBin` ordering in `doNativeBuild`, which has had
-    // the same "provision after the cache check" shape since it
-    // landed.
     val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
     val classpath = resolveDependencies(config)
-    // #65 review finding #1: resolve enabled plugin jars once per
-    // rebuild and derive both the subprocess `-Xplugin=` form and the
-    // daemon `--plugin-jars` alias map from the same map. The previous
-    // version called `resolvePluginArgs` + `resolvePluginJarsMap` back
-    // to back and paid the file-exists + re-hash cost per enabled plugin
-    // twice on every warm-cache rebuild.
     val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR)
     val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
     val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
@@ -138,29 +117,12 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         exitProcess(EXIT_BUILD_ERROR)
     }
 
-    // Resolve cwd once, up front. Both the daemon path (which keys
-    // per-project state on the absolute project path) and the
-    // absolutise pass below need it, and there is no sensible
-    // recovery if kolt itself cannot read its own cwd: any relative
-    // path in config.sources or CLASSES_DIR would resolve
-    // inconsistently from that point on. Hard-exit is the honest
-    // behaviour — this is not a "fall back to the daemon-less path"
-    // failure mode, it is "kolt cannot function" — and it unifies
-    // the failure policy with resolveCompilerBackend, which no
-    // longer needs a cwd seam of its own.
     val cwd = currentWorkingDirectory() ?: run {
         eprintln("error: could not determine current working directory")
         exitProcess(EXIT_BUILD_ERROR)
     }
 
     val subprocessBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
-    // #65 native client wiring: `pluginJarsForDaemon` (built just above
-    // from `resolveEnabledPluginJarPaths`) is fed to the daemon via
-    // `--plugin-jars`. The subprocess fallback still picks up plugins
-    // through `-Xplugin=...` in extraArgs (`pArgs`); the daemon ignores
-    // extraArgs entirely (DaemonServer.toIcRequest drops the field) and
-    // reads the plugin classpath from this map instead, so the two
-    // channels coexist without double-loading.
     val backend: CompilerBackend = resolveCompilerBackend(
         config = config,
         paths = paths,
@@ -169,40 +131,14 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
         absProjectPath = cwd,
         pluginJars = pluginJarsForDaemon,
     )
-    // Sources and outputPath are relative to the project root in
-    // kolt.toml. The subprocess backend inherits cwd via fork+exec,
-    // but the daemon JVM persists across builds and ignores
-    // `CompileRequest.workingDir` (SharedCompilerHost.buildArgs does
-    // not consult it — ADR 0016 §3 leaves the daemon's cwd
-    // unspecified on purpose). Absolutise every path the backend
-    // receives so the result is identical regardless of whether the
-    // daemon or the subprocess backend serves the compile, and so a
-    // future daemon-side change (e.g. chdir or relative resolution)
-    // cannot silently desynchronise the two paths.
+    // Absolutise all paths: the daemon JVM persists across builds and
+    // does not honour CompileRequest.workingDir (ADR 0016 §3).
     val request = CompileRequest(
-        // TODO(#14): `workingDir` is populated with the project root
-        // as a forward-compatible anchor, but no backend reads it
-        // today — the native subprocess path inherits cwd via
-        // fork+exec and the JVM SharedCompilerHost.buildArgs ignores
-        // the field. Kept in the wire so a future daemon-side
-        // chdir-per-compile can honour it without a wire migration.
         workingDir = cwd,
-        // TODO(#14 S5+): resolveDependencies currently returns a ':'-joined
-        // String for legacy reasons, so we split it here to hand the backend a
-        // List<String>. When the daemon path lands and the legacy string form
-        // is no longer needed, teach resolveDependencies to return List<String>
+        // TODO(#14 S5+): teach resolveDependencies to return List<String>
         // directly and delete this split.
         classpath = if (classpath.isNullOrEmpty()) emptyList() else classpath.split(":").filter { it.isNotEmpty() },
-        // Expand directory entries in `config.sources` to their
-        // constituent .kt files before handing them to the backend.
-        // The Phase A kotlin-compiler-embeddable subprocess path
-        // tolerated directories via kotlinc's CLI, but Phase B's BTA
-        // requires individual files (`jvmCompilationOperationBuilder`
-        // reports `Is a directory` on the first directory entry). See
-        // issue #117 for the dogfood trace that surfaced this. The
-        // expansion runs on absolute paths so subsequent `absolutise`
-        // calls are a no-op; we do them inline with flatMap to keep
-        // the single-Result shape this block used before the fix.
+        // BTA requires individual .kt files, not directories (#117).
         sources = expandKotlinSources(config.sources.map { absolutise(it, cwd) })
             .getOrElse { err ->
                 eprintln("error: could not list Kotlin sources under ${err.path}")
@@ -219,12 +155,6 @@ internal fun doBuild(useDaemon: Boolean = true): BuildResult {
 
     println("compiling ${config.name}...")
     backend.compile(request).getOrElse { error ->
-        // Daemon path captures kotlinc diagnostics into
-        // `CompilationFailed.diagnostics` + leftover `stderr`; the
-        // subprocess path inherits fds and leaves both fields empty
-        // because kotlinc already wrote to the terminal. Printing the
-        // rendered body before the one-line summary handles both
-        // shapes without double-printing.
         if (error is CompileError.CompilationFailed) {
             val body = renderCompilationFailure(error)
             if (body.isNotEmpty()) eprintln(body)
@@ -288,12 +218,6 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
         return BuildResult(config, classpath = null, javaPath = null)
     }
 
-    // Resolved only on a real rebuild so cached builds don't hit Maven
-    // Central for the plugin jar fetch. Per #65: native builds no longer
-    // provision the full kotlinc sidecar just to borrow plugin jars —
-    // `resolvePluginArgs` pulls the shaded compiler-plugin jars directly
-    // from Maven Central into `~/.kolt/cache` and feeds `-Xplugin=...`
-    // to konanc from there.
     val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR)
 
     ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
@@ -333,23 +257,12 @@ private fun doNativeBuild(config: KoltConfig): BuildResult {
     return BuildResult(config, classpath = null, javaPath = null)
 }
 
-/** Returns the newest mtime among all .def files declared in cinterop entries, or null if none. */
 private fun newestDefMtime(config: KoltConfig): Long? {
     if (config.cinterop.isEmpty()) return null
     val mtimes = config.cinterop.mapNotNull { fileMtime(it.def) }
     return if (mtimes.isEmpty()) null else mtimes.max()
 }
 
-/**
- * Runs `cinterop` for each [[cinterop]] entry in the config.
- *
- * Per-entry freshness check: if the previously generated klib and its sidecar
- * `.klib.stamp` file both exist and the stamp matches the stamp that would be
- * produced by the current entry + its .def mtime, the cinterop invocation is
- * skipped and the cached klib is reused.
- *
- * Returns the list of generated .klib paths to pass to konanc via -l.
- */
 private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
     if (config.cinterop.isEmpty()) return emptyList()
     val managedCinteropBin = paths.cinteropBin(config.kotlin)
@@ -374,8 +287,6 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
         }
         if (currentStamp != null) {
             writeFileAsString(stampPath, currentStamp).getOrElse { error ->
-                // Stamp write failure is non-fatal: the next build will simply
-                // re-run cinterop instead of reusing the cached klib.
                 eprintln("warning: failed to write cinterop stamp ${error.path}")
             }
         }
@@ -383,11 +294,6 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): List<String> {
     }
 }
 
-/**
- * Resolves direct + transitive Kotlin/Native dependencies and returns their
- * on-disk `.klib` paths. Unlike [resolveDependencies] for jvm, this does not
- * read or write `kolt.lock` (lockfile support for native lands later).
- */
 internal fun resolveNativeDependencies(config: KoltConfig, paths: KoltPaths): List<String> {
     if (config.dependencies.isEmpty()) return emptyList()
 
@@ -415,7 +321,6 @@ internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String>
         }
         return
     }
-
     if (!fileExists(CLASSES_DIR)) {
         eprintln("error: $CLASSES_DIR not found. Run 'kolt build' first.")
         exitProcess(EXIT_BUILD_ERROR)
@@ -431,10 +336,6 @@ internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String>
 }
 
 internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = true) {
-    // Load the config once up front so we can dispatch on target before doing
-    // any compilation work. The native path compiles main + test in a single
-    // konanc invocation and therefore bypasses doBuild() entirely, unlike the
-    // jvm path which reuses the build artifacts from doBuild().
     val config = loadProjectConfig()
     if (config.target == "native") {
         doNativeTest(config, testArgs)
@@ -454,12 +355,6 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
     val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC, EXIT_TEST_ERROR)
     val managedKotlincBin = ensureKotlincBin(config.kotlin, paths).getOrElse { exitWithToolchainError(it, EXIT_TEST_ERROR) }
 
-    // #65 review finding #2: resolve plugin args at test time, not via
-    // `BuildResult.pluginArgs` threaded through `doBuild`. The up-to-
-    // date compile path deliberately skips plugin resolution so that an
-    // offline cached build stays offline; test compilation always runs
-    // a kotlinc subprocess, so the fetch is both unavoidable and
-    // bounded to test runs.
     val pArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR)
 
     val testConfig = config.copy(testSources = existingTestSources)
@@ -559,63 +454,22 @@ internal fun ensureJdkBinsFromConfig(config: KoltConfig, paths: KoltPaths): JdkB
     return ensureJdkBins(version, paths).getOrElse { exitWithToolchainError(it, EXIT_BUILD_ERROR) }
 }
 
-/**
- * Single sink that maps a [ToolchainError] to an `eprintln` + exit.
- * Every CLI entry point that unwraps a toolchain `Result` funnels
- * through here so the pre-daemon UX (one line of "error: …" on
- * stderr, then exit with the step-appropriate exit code) is
- * preserved verbatim. Callers in `ToolchainCommands`,
- * `PluginSupport`, and `BuildCommands` all share this helper.
- */
 internal fun exitWithToolchainError(err: ToolchainError, exitCode: Int): Nothing {
     eprintln("error: ${err.message}")
     exitProcess(exitCode)
 }
 
-// Warning wording pinned as a constant so unit tests can assert on
-// the exact string without hard-coding it a second time in each
-// branch's test. Kept internal so the tests in the same module can
-// reference it without exposing it on the public API.
 internal const val WARNING_DAEMON_DIR_UNWRITABLE =
     "warning: could not create daemon state directory — falling back to subprocess compile"
 
-/**
- * Picks the backend [doBuild] will hand the compile request to. If
- * [useDaemon] is false (user passed `--no-daemon`), the subprocess
- * backend is returned directly — no fallback wrapper, no precondition
- * probing, so the code path is exactly the pre-daemon one. Otherwise
- * the daemon preconditions are checked; on success we return a
- * [FallbackCompilerBackend] wrapping a freshly-constructed
- * [DaemonCompilerBackend] with [subprocessBackend] as the fallback and
- * [reportFallback] as the observer. On any precondition or wiring
- * failure we print a one-line warning via [warningSink] and degrade
- * to the subprocess backend — daemon is never load-bearing for
- * correctness (ADR 0016 §5).
- *
- * [absProjectPath] is **required** and must be the current absolute
- * cwd. It is passed in by [doBuild] after that routine has already
- * decided a failure to read cwd is a kolt-cannot-function condition
- * and hard-exited the process; [resolveCompilerBackend] therefore
- * does not need a separate cwd-unavailable branch of its own.
- *
- * Seams ([preconditionResolver], [daemonDirCreator],
- * [daemonBackendFactory], [warningSink]) are defaulted to production
- * helpers so callers pass only the first five arguments. Unit tests
- * substitute fakes to drive each degradation branch without touching
- * the filesystem or bringing up a real daemon.
- */
+// Daemon is never load-bearing for correctness (ADR 0016 §5): any
+// precondition or wiring failure degrades to the subprocess backend.
 internal fun resolveCompilerBackend(
     config: KoltConfig,
     paths: KoltPaths,
     subprocessBackend: CompilerBackend,
     useDaemon: Boolean,
     absProjectPath: String,
-    // #65 native client wiring: enabled `kolt.toml [plugins]` alias →
-    // compiler plugin jar classpath. The map is built by the caller
-    // (doBuild) so resolveCompilerBackend stays decoupled from the
-    // concrete jar lookup mechanism (kotlinc sidecar today, Maven fetch
-    // once the rest of #65 lands). An empty map means "no plugins" and
-    // collapses to spawnArgv omitting `--plugin-jars` entirely.
     pluginJars: Map<String, List<String>> = emptyMap(),
     preconditionResolver: (KoltPaths, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
         { p, kotlincVersion, cwd -> resolveDaemonPreconditions(p, kotlincVersion, cwd) },
@@ -630,13 +484,8 @@ internal fun resolveCompilerBackend(
         return subprocessBackend
     }
 
-    // spawnDetached opens the log path with O_CREAT but not the
-    // intermediate directory — if ~/.kolt/daemon/<projectHash>/ is
-    // missing the log file is silently dropped and the daemon's
-    // stderr lands in /dev/null. The JVM side already creates the
-    // directory for the socket bind (ADR 0016 §Socket path
-    // lifecycle), but that happens after the client has already
-    // tried to open the log, so we create it eagerly here.
+    // spawnDetached opens the log with O_CREAT but not the parent dir;
+    // create it before the daemon tries to bind the socket.
     if (daemonDirCreator(setup.daemonDir).getError() != null) {
         warningSink(WARNING_DAEMON_DIR_UNWRITABLE)
         return subprocessBackend
@@ -653,22 +502,8 @@ internal fun createDaemonBackend(
     setup: DaemonSetup,
     pluginJars: Map<String, List<String>>,
 ): CompilerBackend {
-    // #65 native client wiring: a daemon spawned with one plugin set keeps
-    // that set for its entire JVM lifetime (`--plugin-jars` is parsed once
-    // in `Main.parseArgs` and stored on `CliArgs.pluginJars`). If the user
-    // edits `kolt.toml [plugins]` between builds, naively reusing the same
-    // socket would attach the warm daemon's stale plugin classpath — for an
-    // alias that wasn't in the original spawn, `pluginJarResolver` returns
-    // `emptyList()` and `PluginTranslator` emits a `CompilerPlugin` with an
-    // empty classpath, which BTA either silently drops or fails on with a
-    // diagnostic unrelated to the user's source.
-    //
-    // Mixing a plugin-set fingerprint into the socket / log filename forces
-    // a different (and absent) socket on a plugin-set change, which in turn
-    // trips the ENOENT path in `connectOrSpawn` and spawns a fresh daemon
-    // with the new args. The old daemon stays running on its own socket
-    // until it idles out (or the next reaper sweep) — harmless: the
-    // ADR 0016 socket layout already isolates per-project state.
+    // Plugin jars are baked into the daemon at spawn time. A fingerprint
+    // in the socket name forces a new daemon when the plugin set changes.
     val fp = pluginsFingerprint(pluginJars)
     val socketPath = applyPluginsFingerprintToFile(setup.socketPath, fp)
     val logPath = applyPluginsFingerprintToFile(setup.logPath, fp)
@@ -683,11 +518,7 @@ internal fun createDaemonBackend(
     )
 }
 
-// Stable 8-hex SHA-256 prefix over the canonicalised plugin map. Sorting
-// the alias keys means iteration order does not affect the fingerprint;
-// the inner classpath order IS significant because BTA treats it as the
-// plugin's own classpath order. Empty input collapses to a fixed marker
-// so the no-plugin path keeps a single socket name.
+// Inner classpath order is significant (BTA plugin classpath order).
 internal fun pluginsFingerprint(pluginJars: Map<String, List<String>>): String {
     if (pluginJars.isEmpty()) return "noplugins"
     val canonical = pluginJars.entries
@@ -696,10 +527,6 @@ internal fun pluginsFingerprint(pluginJars: Map<String, List<String>>): String {
     return kolt.infra.sha256Hex(canonical.encodeToByteArray()).take(8)
 }
 
-// Inserts `-<fingerprint>` between the filename stem and its extension so
-// both `daemon.sock` and `daemon.log` become `daemon-<fp>.sock` /
-// `daemon-<fp>.log`. Confined to this helper so KoltPaths does not need
-// to learn about the plugin channel.
 internal fun applyPluginsFingerprintToFile(path: String, fingerprint: String): String {
     val slash = path.lastIndexOf('/')
     val dir = if (slash >= 0) path.substring(0, slash + 1) else ""

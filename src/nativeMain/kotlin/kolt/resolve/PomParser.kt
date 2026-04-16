@@ -57,7 +57,6 @@ fun parsePom(xml: String): Result<PomInfo, PomParseError> {
         }
     }
 
-    // Build interpolation map: explicit properties + project.* builtins
     val interpolationMap = buildInterpolationMap(properties, projectGroupId, projectVersion)
 
     val parent = root.child("parent")?.let { p ->
@@ -119,7 +118,6 @@ private fun parseDependencyElement(elem: XmlElement, interpolationMap: Map<Strin
 
 private fun interpolate(value: String, properties: Map<String, String>): String {
     var result = value
-    // Iterative interpolation to handle nested references (max 10 passes)
     repeat(10) {
         val next = PROPERTY_REGEX.replace(result) { match ->
             val key = match.groupValues[1]
@@ -132,8 +130,6 @@ private fun interpolate(value: String, properties: Map<String, String>): String 
 }
 
 private val PROPERTY_REGEX = Regex("""\$\{([^}]+)}""")
-
-// --- Minimal XML parser ---
 
 private class XmlElement(
     val name: String,
@@ -156,13 +152,11 @@ private fun parseElement(xml: String, start: Int): XmlElement? {
     val tagStart = xml.indexOf('<', start)
     if (tagStart == -1) return null
 
-    // Self-closing tag
     val selfCloseMatch = Regex("""<(\w[\w.\-]*)(\s[^>]*)?\s*/>""").find(xml, tagStart)
     if (selfCloseMatch != null && selfCloseMatch.range.first == tagStart) {
         return XmlElement(selfCloseMatch.groupValues[1], null, emptyList())
     }
 
-    // Opening tag
     val openMatch = Regex("""<(\w[\w.\-]*)(\s[^>]*)?>""").find(xml, tagStart) ?: return null
     if (openMatch.range.first != tagStart) return null
 
@@ -170,13 +164,11 @@ private fun parseElement(xml: String, start: Int): XmlElement? {
     val closeTag = "</$tagName>"
     val contentStart = openMatch.range.last + 1
 
-    // Find matching close tag (handle nesting)
     val closeIndex = findMatchingClose(xml, tagName, contentStart)
     if (closeIndex == -1) return null
 
     val content = xml.substring(contentStart, closeIndex)
 
-    // Try to parse children
     val children = mutableListOf<XmlElement>()
     var pos = 0
     while (pos < content.length) {
@@ -186,7 +178,6 @@ private fun parseElement(xml: String, start: Int): XmlElement? {
         val child = parseElement(content, nextTag)
         if (child != null) {
             children.add(child)
-            // Advance past this child element
             val childClose = findElementEnd(content, child.name, nextTag)
             pos = if (childClose != -1) childClose else content.length
         } else {
@@ -209,13 +200,10 @@ private fun findMatchingClose(xml: String, tagName: String, start: Int): Int {
         if (nextClose == -1) return -1
 
         if (nextOpen != -1 && nextOpen < nextClose) {
-            // Check it's actually an open tag (not a substring match)
             val afterOpen = nextOpen + openPattern.length
             if (afterOpen < xml.length && (xml[afterOpen] == '>' || xml[afterOpen] == ' ' || xml[afterOpen] == '/')) {
-                // Check for self-closing
                 val closeBracket = xml.indexOf('>', afterOpen)
                 if (closeBracket != -1 && xml[closeBracket - 1] == '/') {
-                    // Self-closing, don't increase depth
                     pos = closeBracket + 1
                 } else {
                     depth++
@@ -234,7 +222,6 @@ private fun findMatchingClose(xml: String, tagName: String, start: Int): Int {
 }
 
 private fun findElementEnd(xml: String, tagName: String, start: Int): Int {
-    // Check self-closing first
     val selfCloseMatch = Regex("""<\w[\w.\-]*(\s[^>]*)?\s*/>""").find(xml, start)
     if (selfCloseMatch != null && selfCloseMatch.range.first == start) {
         return selfCloseMatch.range.last + 1

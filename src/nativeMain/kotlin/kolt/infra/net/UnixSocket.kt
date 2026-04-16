@@ -25,18 +25,7 @@ import platform.posix.sockaddr
 import platform.posix.socket
 import platform.posix.strerror
 
-/**
- * AF_UNIX stream socket client, used by the native daemon client.
- *
- * Raw cinterop types (sockaddr_un, socket/connect/send/recv/close) are
- * confined to this file so callers never see them.
- *
- * Not thread-safe. The close-flag guard is a plain check-then-act, so
- * concurrent `close()` calls can double-close the underlying fd — and
- * once the kernel recycles a descriptor number, the second close will
- * hit an unrelated fd. Callers must confine a `UnixSocket` instance to
- * a single thread, or synchronize externally.
- */
+// Not thread-safe: concurrent close() can double-close the fd.
 class UnixSocket internal constructor(private val fd: Int) : AutoCloseable {
     private var closed = false
 
@@ -105,10 +94,6 @@ class UnixSocket internal constructor(private val fd: Int) : AutoCloseable {
         return Ok(buf)
     }
 
-    /**
-     * Half-close the write side of the socket, signalling EOF to the
-     * peer while still allowing incoming bytes to be read.
-     */
     @OptIn(ExperimentalForeignApi::class)
     fun shutdownWrite(): Result<Unit, UnixSocketError> {
         if (shutdown(fd, SHUT_WR) != 0) {
@@ -129,12 +114,6 @@ class UnixSocket internal constructor(private val fd: Int) : AutoCloseable {
         @OptIn(ExperimentalForeignApi::class)
         fun connect(path: String): Result<UnixSocket, UnixSocketError> {
             val pathBytes = path.encodeToByteArray()
-            // Kolt's own pre-flight (sun_path capacity) is a kolt bug
-            // when it trips, distinct from a kernel-side ENAMETOOLONG
-            // on the connect() syscall — so callers can classify "kolt
-            // built a bad path" as InternalMisuse instead of lumping
-            // it in with environment-level ConnectFailed. See
-            // DaemonCompilerBackend.mapFatalConnectError.
             if (pathBytes.size >= SUN_PATH_CAPACITY) {
                 return Err(
                     UnixSocketError.InvalidArgument(
@@ -152,12 +131,6 @@ class UnixSocket internal constructor(private val fd: Int) : AutoCloseable {
             return memScoped {
                 val addr = alloc<sockaddr_un>()
                 val addrLen = fillSockaddrUn(addr, pathBytes)
-                // Retry EINTR at the primitive layer, consistent with
-                // sendAll / recvExact above. Propagating EINTR to the
-                // caller would force every upstream (DaemonCompilerBackend,
-                // future `kolt watch` clients) to re-implement the same
-                // loop or misclassify transient signal noise as a fatal
-                // backend failure.
                 var rc: Int
                 while (true) {
                     rc = platform.posix.connect(

@@ -6,11 +6,7 @@ import kolt.config.KoltConfig
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 
-// Kotlin/Native target triple. Currently linux_x64 is the only supported
-// target (see #61 non-goals). Passed explicitly on every konanc and cinterop
-// invocation so a future cross-build (e.g. running kolt on macOS targeting
-// linux_x64) cannot silently fall back to the host default and produce a
-// wrong-architecture klib. Mirrors what the Kotlin Gradle plugin does.
+// Passed explicitly so a cross-build cannot silently fall back to host default.
 internal const val NATIVE_TARGET = "linux_x64"
 
 internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
@@ -19,8 +15,6 @@ internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.n
 
 internal fun outputNativeTestKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test.kexe"
 
-// Stage 1 output: the unpacked klib directory produced by `konanc -p library -nopack`.
-// Using a `-klib` suffix keeps it distinct from the sibling `<name>.kexe` file.
 internal fun outputNativeKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-klib"
 
 internal fun outputNativeTestKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test-klib"
@@ -47,13 +41,8 @@ fun checkCommand(
     addAll(pluginArgs)
 }
 
-// Native builds run in two stages because konanc silently no-ops compiler
-// plugins (e.g. kotlinx.serialization) on a single-step `-p program` invocation.
-// Stage 1 compiles sources into an unpacked klib with the plugin applied; Stage
-// 2 links that klib into a program binary. This matches what the Kotlin Gradle
-// plugin does: compileKotlinLinuxX64 produces a klib, linkDebugExecutableLinuxX64
-// produces the executable.
-
+// Two-stage build: konanc silently no-ops compiler plugins on single-step
+// `-p program`, so Stage 1 compiles into a klib (plugin applied), Stage 2 links.
 fun nativeLibraryCommand(
     config: KoltConfig,
     pluginArgs: List<String> = emptyList(),
@@ -80,14 +69,6 @@ fun nativeLibraryCommand(
     return BuildCommand(args = args, outputPath = outputBase)
 }
 
-// Stage 2 consumes the klib produced by nativeLibraryCommand via -Xinclude,
-// which pulls the klib's IR (including the main() function) into the final
-// program. The plugin flag is not needed here — the IR is already transformed.
-//
-// -e points konanc at the entry function. config.main holds the Kotlin
-// function FQN verbatim, so we forward it as-is. Without this, konanc looks
-// for a function named `main` in the root package and fails when main lives
-// in a named package (e.g. `kolt.cli.main`).
 fun nativeLinkCommand(
     config: KoltConfig,
     konancPath: String? = null,
@@ -115,9 +96,6 @@ fun nativeLinkCommand(
     return BuildCommand(args = args, outputPath = outputPath)
 }
 
-// Test Stage 1: compile main + test sources together into a klib. Kotlin/Native
-// test discovery needs the @Test classes to live in a klib so the runner can
-// synthesize a main() that iterates them in Stage 2.
 fun nativeTestLibraryCommand(
     config: KoltConfig,
     pluginArgs: List<String> = emptyList(),
@@ -145,8 +123,6 @@ fun nativeTestLibraryCommand(
     return BuildCommand(args = args, outputPath = outputBase)
 }
 
-// Test Stage 2: -generate-test-runner asks the compiler to synthesize a main()
-// that discovers and runs @Test functions pulled in via -Xinclude from the klib.
 fun nativeTestLinkCommand(
     config: KoltConfig,
     konancPath: String? = null,
@@ -173,7 +149,7 @@ fun nativeTestLinkCommand(
     return BuildCommand(args = args, outputPath = outputPath)
 }
 
-// cinterop appends .klib to the -o path, so outputPath is without the extension.
+// cinterop appends .klib to the -o path, so outputPath omits the extension.
 fun cinteropCommand(
     entry: CinteropConfig,
     cinteropPath: String? = null,
@@ -199,23 +175,10 @@ fun cinteropCommand(
 fun cinteropOutputKlibPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): String =
     "$outputDir/${entry.name}.klib"
 
-// Path of the sidecar stamp file written next to a cinterop klib. The stamp
-// records a canonical serialization of every CinteropConfig field plus the
-// .def file's mtime. runCinterop reads it to decide whether a previously
-// generated klib can be reused without re-invoking the cinterop tool.
 fun cinteropStampPath(entry: CinteropConfig, outputDir: String = BUILD_DIR): String =
     "$outputDir/${entry.name}.klib.stamp"
 
-// Canonical freshness stamp for a cinterop entry. Two stamps compare equal
-// iff a re-run of cinterop would produce an equivalent klib for cache purposes.
-// We observe:
-//   - name / def path / package — rename or relocation must invalidate
-//   - the .def file's mtime — the usual "contents changed" signal; since
-//     compilerOpts / linkerOpts live inside the .def file, editing them
-//     bumps mtime and invalidates the cache for free
-//   - the Kotlin/Native version — bumping `kotlin = "..."` in kolt.toml
-//     switches the cinterop/konanc toolchain, and the klib format is not
-//     guaranteed to be compatible across Kotlin versions
+// Includes kotlinVersion because klib format is not guaranteed compatible across versions.
 fun cinteropStamp(entry: CinteropConfig, defMtime: Long, kotlinVersion: String): String = buildString {
     append("kotlinVersion=").append(kotlinVersion).append('\n')
     append("name=").append(entry.name).append('\n')

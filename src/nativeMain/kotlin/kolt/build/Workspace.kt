@@ -10,10 +10,6 @@ private val prettyJson = Json {
     prettyPrintIndent = "  "
 }
 
-/**
- * Generate workspace.json content for Kotlin/kotlin-lsp.
- * Pure function: no I/O, no side effects.
- */
 fun generateWorkspaceJson(
     config: KoltConfig,
     resolvedDeps: List<ResolvedDep>
@@ -41,10 +37,6 @@ fun generateWorkspaceJson(
     return prettyJson.encodeToString(JsonObject.serializer(), json)
 }
 
-/**
- * Generate kls-classpath content for fwcd/kotlin-language-server.
- * Returns colon-separated JAR paths.
- */
 fun generateKlsClasspath(resolvedDeps: List<ResolvedDep>): String =
     resolvedDeps.joinToString(":") { it.cachePath }
 
@@ -164,7 +156,7 @@ private fun buildKotlinSettings(config: KoltConfig): JsonObject =
         put("isHmppEnabled", true)
         putJsonArray("pureKotlinSourceFolders") {}
         put("kind", "default")
-        // kotlin-lsp uses "J" prefix to indicate JSON-encoded compiler arguments
+        // kotlin-lsp requires "J" prefix for JSON-encoded compiler arguments.
         put("compilerArguments", "J{\"jvmTarget\":\"${config.jvmTarget}\",\"pluginOptions\":[],\"pluginClasspaths\":[]}")
         put("additionalArguments", JsonNull)
         put("scriptTemplates", JsonNull)

@@ -11,11 +11,6 @@ internal data class KoltPaths(val home: String) {
     val toolchainsDir: String = "$home/.kolt/toolchains"
     val daemonBaseDir: String = "$home/.kolt/daemon"
 
-    // Per-project daemon working directory. The hash is an opaque key
-    // derived from the absolute project path (see projectHashOf); it
-    // only has to be stable within a single kolt install. Daemon state
-    // (socket file + stderr log) is confined here so a daemon crash of
-    // project A cannot step on project B.
     fun daemonDir(projectHash: String): String = "$daemonBaseDir/$projectHash"
     fun daemonSocketPath(projectHash: String): String = "${daemonDir(projectHash)}/daemon.sock"
     fun daemonLogPath(projectHash: String): String = "${daemonDir(projectHash)}/daemon.log"
