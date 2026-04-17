@@ -30,17 +30,40 @@ internal sealed interface DaemonPreconditionError {
     data class CompilerJarsMissing(val kotlincLibDir: String) : DaemonPreconditionError
 
     data class BtaImplJarsMissing(val probedDir: String) : DaemonPreconditionError
+
+    // Stop-gap for #136; follow-up per-version daemon spawn tracked in #138.
+    // ADR 0019 §1 pins the daemon's kotlinc (kotlin-compiler-embeddable and
+    // kotlin-build-tools-api/impl) in lockstep at process start, so a
+    // requested `config.kotlin` different from the bundled version cannot be
+    // served by the existing daemon.
+    data class KotlinVersionMismatch(
+        val requested: String,
+        val bundled: String,
+    ) : DaemonPreconditionError
 }
 
 internal fun resolveDaemonPreconditions(
     paths: KoltPaths,
     kotlincVersion: String,
     absProjectPath: String,
+    bundledKotlinVersion: String,
     ensureJavaBin: (KoltPaths) -> Result<String, BootstrapJdkError> = ::ensureBootstrapJavaBin,
     resolveDaemonJar: () -> DaemonJarResolution = ::resolveDaemonJar,
     listCompilerJars: (String) -> List<String>? = { dir -> listJarFiles(dir).getOrElse { null } },
     resolveBtaImplJars: () -> BtaImplJarsResolution = ::resolveBtaImplJars,
 ): Result<DaemonSetup, DaemonPreconditionError> {
+    // Short-circuit before any on-disk probing: on a version mismatch we
+    // would never spawn the daemon, so there is no point touching the JDK,
+    // daemon jar, kotlinc lib dir, or BTA-impl jars first.
+    if (kotlincVersion != bundledKotlinVersion) {
+        return Err(
+            DaemonPreconditionError.KotlinVersionMismatch(
+                requested = kotlincVersion,
+                bundled = bundledKotlinVersion,
+            ),
+        )
+    }
+
     val javaBin = ensureJavaBin(paths).getOrElse { err ->
         return Err(
             DaemonPreconditionError.BootstrapJdkInstallFailed(
@@ -90,4 +113,8 @@ internal fun formatDaemonPreconditionWarning(err: DaemonPreconditionError): Stri
         "warning: no compiler jars found in ${err.kotlincLibDir} — falling back to subprocess compile"
     is DaemonPreconditionError.BtaImplJarsMissing ->
         "warning: kotlin-build-tools-impl jars not found in ${err.probedDir} — falling back to subprocess compile"
+    is DaemonPreconditionError.KotlinVersionMismatch ->
+        "warning: kolt daemon currently bundles Kotlin ${err.bundled}; your kolt.toml requests ${err.requested} — " +
+            "falling back to subprocess compile. This is a temporary restriction; " +
+            "per-version daemon support is tracked in #138."
 }

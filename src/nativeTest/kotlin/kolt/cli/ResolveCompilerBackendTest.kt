@@ -47,7 +47,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = false,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _ -> error("must not resolve preconditions when useDaemon=false") },
+            preconditionResolver = { _, _, _, _ -> error("must not resolve preconditions when useDaemon=false") },
             daemonDirCreator = { error("must not create daemon dir when useDaemon=false") },
             daemonBackendFactory = { _, _ -> error("must not construct daemon backend when useDaemon=false") },
             warningSink = { warnings.add(it) },
@@ -55,6 +55,68 @@ class ResolveCompilerBackendTest {
 
         assertSame(subprocess, backend)
         assertEquals(emptyList(), warnings)
+    }
+
+    // #136 stop-gap: bundled-vs-requested Kotlin version mismatch enters the
+    // same "precondition error" warning rail as every other daemon-probe
+    // failure (ADR 0016 §5). DaemonPreconditionsTest covers that the real
+    // resolver surfaces this error without any probing; this test pins that
+    // resolveCompilerBackend routes the variant into the warning sink.
+    @Test
+    fun kotlinVersionMismatchFromResolverFallsBackWithVersionsAndFollowUpInWarning() {
+        val warnings = mutableListOf<String>()
+        val backend = resolveCompilerBackend(
+            config = minimalConfig(kotlincVersion = "2.1.0"),
+            paths = paths,
+            subprocessBackend = subprocess,
+            useDaemon = true,
+            absProjectPath = absProject,
+            bundledKotlinVersion = "2.3.20",
+            preconditionResolver = { _, requested, _, bundled ->
+                Err(
+                    DaemonPreconditionError.KotlinVersionMismatch(
+                        requested = requested,
+                        bundled = bundled,
+                    ),
+                )
+            },
+            daemonDirCreator = { error("must not create daemon dir after precondition failure") },
+            daemonBackendFactory = { _, _ -> error("must not construct daemon backend after precondition failure") },
+            warningSink = { warnings.add(it) },
+        )
+
+        assertSame(subprocess, backend)
+        val warning = warnings.single()
+        assertTrue(warning.contains("2.1.0"), "warning should cite the requested version: $warning")
+        assertTrue(warning.contains("2.3.20"), "warning should cite the bundled daemon version: $warning")
+        assertTrue(
+            warning.contains("falling back to subprocess compile"),
+            "warning should say the build is falling back: $warning",
+        )
+        assertTrue(warning.contains("temporary"), "warning should flag the restriction as temporary: $warning")
+    }
+
+    @Test
+    fun bundledKotlinVersionIsPassedThroughToPreconditionResolver() {
+        var seenBundled: String? = null
+        val backend = resolveCompilerBackend(
+            config = minimalConfig(kotlincVersion = "2.3.20"),
+            paths = paths,
+            subprocessBackend = subprocess,
+            useDaemon = true,
+            absProjectPath = absProject,
+            bundledKotlinVersion = "2.3.20",
+            preconditionResolver = { _, _, _, bundled ->
+                seenBundled = bundled
+                Ok(okSetup)
+            },
+            daemonDirCreator = { Ok(Unit) },
+            daemonBackendFactory = { _, _ -> daemonSentinel },
+            warningSink = { error("happy path must not warn") },
+        )
+
+        assertEquals("2.3.20", seenBundled)
+        assertNotNull(backend as? FallbackCompilerBackend)
     }
 
     @Test
@@ -66,7 +128,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _ ->
+            preconditionResolver = { _, _, _, _ ->
                 Err(DaemonPreconditionError.DaemonJarMissing)
             },
             daemonDirCreator = { error("must not create daemon dir after precondition failure") },
@@ -92,7 +154,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _ ->
+            preconditionResolver = { _, _, _, _ ->
                 Err(
                     DaemonPreconditionError.BootstrapJdkInstallFailed(
                         jdkInstallDir = "/fake/home/.kolt/toolchains/jdk/21",
@@ -131,7 +193,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _ -> Ok(okSetup) },
+            preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
             daemonDirCreator = { Err(MkdirFailed(okSetup.daemonDir)) },
             daemonBackendFactory = { _, _ -> error("must not construct daemon backend after mkdir failure") },
             warningSink = { warnings.add(it) },
@@ -155,7 +217,7 @@ class ResolveCompilerBackendTest {
             useDaemon = true,
             absProjectPath = absProject,
             pluginJars = pluginJars,
-            preconditionResolver = { _, _, _ -> Ok(okSetup) },
+            preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
             daemonDirCreator = { Ok(Unit) },
             daemonBackendFactory = { _, jars ->
                 capturedPluginJars = jars
@@ -179,7 +241,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, kotlincVersion, cwd ->
+            preconditionResolver = { _, kotlincVersion, cwd, _ ->
                 assertEquals("2.1.0", kotlincVersion)
                 assertEquals(absProject, cwd)
                 Ok(okSetup)

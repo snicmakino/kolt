@@ -490,16 +490,17 @@ internal fun resolveCompilerBackend(
     subprocessBackend: CompilerBackend,
     useDaemon: Boolean,
     absProjectPath: String,
+    bundledKotlinVersion: String = BUNDLED_DAEMON_KOTLIN_VERSION,
     pluginJars: Map<String, List<String>> = emptyMap(),
-    preconditionResolver: (KoltPaths, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
-        { p, kotlincVersion, cwd -> resolveDaemonPreconditions(p, kotlincVersion, cwd) },
+    preconditionResolver: (KoltPaths, String, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
+        { p, kotlincVersion, cwd, bundled -> resolveDaemonPreconditions(p, kotlincVersion, cwd, bundled) },
     daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
     daemonBackendFactory: (DaemonSetup, Map<String, List<String>>) -> CompilerBackend = ::createDaemonBackend,
     warningSink: (String) -> Unit = ::eprintln,
 ): CompilerBackend {
     if (!useDaemon) return subprocessBackend
 
-    val setup = preconditionResolver(paths, config.kotlin, absProjectPath).getOrElse { err ->
+    val setup = preconditionResolver(paths, config.kotlin, absProjectPath, bundledKotlinVersion).getOrElse { err ->
         warningSink(formatDaemonPreconditionWarning(err))
         return subprocessBackend
     }

@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DaemonPreconditionsTest {
 
@@ -28,6 +29,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = { Ok("/fake/home/.kolt/toolchains/jdk/21/bin/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { fakeJars },
@@ -45,6 +47,27 @@ class DaemonPreconditionsTest {
         assertEquals("/fake/home/.kolt/daemon/$expectedHash/daemon.log", setup.logPath)
     }
 
+    // Stop-gap for #136: until per-version daemon spawn lands (#138), a
+    // `kotlincVersion` that differs from the bundled daemon version must
+    // short-circuit before any on-disk probing.
+    @Test
+    fun kotlinVersionMismatchShortCircuitsBeforeAnyProbing() {
+        val result = resolveDaemonPreconditions(
+            paths = paths,
+            kotlincVersion = "2.1.0",
+            absProjectPath = absProject,
+            bundledKotlinVersion = "2.3.20",
+            ensureJavaBin = { error("must not probe JDK on version mismatch") },
+            resolveDaemonJar = { error("must not probe daemon jar on version mismatch") },
+            listCompilerJars = { error("must not list compiler jars on version mismatch") },
+            resolveBtaImplJars = { error("must not probe BTA-impl jars on version mismatch") },
+        )
+
+        val err = assertIs<DaemonPreconditionError.KotlinVersionMismatch>(result.getError())
+        assertEquals("2.1.0", err.requested)
+        assertEquals("2.3.20", err.bundled)
+    }
+
     @Test
     fun bootstrapJdkInstallFailedShortCircuits() {
         val installDir = "/fake/home/.kolt/toolchains/jdk/$BOOTSTRAP_JDK_VERSION"
@@ -52,6 +75,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = {
                 Err(BootstrapJdkError(installDir, ToolchainError("network error downloading jdk 21: connection refused")))
             },
@@ -72,6 +96,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { DaemonJarResolution.NotFound },
             listCompilerJars = { error("must not run after DaemonJarMissing") },
@@ -87,6 +112,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { null },
@@ -103,6 +129,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { emptyList() },
@@ -118,6 +145,7 @@ class DaemonPreconditionsTest {
             paths = paths,
             kotlincVersion = kotlincVersion,
             absProjectPath = absProject,
+            bundledKotlinVersion = kotlincVersion,
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { fakeJars },
@@ -149,6 +177,17 @@ class DaemonPreconditionsTest {
             formatDaemonPreconditionWarning(
                 DaemonPreconditionError.BtaImplJarsMissing("/x/libexec/kolt-bta-impl"),
             ),
+        )
+        val mismatchWarning = formatDaemonPreconditionWarning(
+            DaemonPreconditionError.KotlinVersionMismatch(requested = "2.1.0", bundled = "2.3.20"),
+        )
+        assertTrue(
+            mismatchWarning.contains("2.1.0") &&
+                mismatchWarning.contains("2.3.20") &&
+                mismatchWarning.contains("falling back to subprocess compile") &&
+                mismatchWarning.contains("temporary") &&
+                mismatchWarning.contains("#138"),
+            "unexpected mismatch warning: $mismatchWarning",
         )
     }
 }
