@@ -5,6 +5,12 @@
 Implemented (2026-04-16). All follow-up items are resolved or explicitly
 deferred to their respective scopes — see §Follow-ups below.
 
+§1's single-version pin on `kotlin-build-tools-api` 2.3.20 is superseded
+by ADR 0022 (2026-04-18), which generalises the pin to a per-Kotlin-version
+scheme with a soft floor at 2.3.0. Every other section of this ADR
+(adapter layer, wire protocol, IC state layout, failure classification,
+BuildCache interaction, plugin plumbing, rollout) stands unchanged.
+
 Previously Accepted (2026-04-15). Depends on #103 (Phase B-1a
 bench-scaling ceiling, merged as c722dcc) and #104 (Phase B-1b
 `kotlin-build-tools-api` spike, merged as f652eb1). This ADR is the
@@ -55,6 +61,12 @@ load-bearing choices and their reasons.
 ## Decision
 
 ### 1. Adopt `kotlin-build-tools-api` 2.3.20 (approach B)
+
+> **Superseded by ADR 0022 §7.** The 2.3.20 pin below is now the baseline
+> for a per-Kotlin-version scheme; kolt routes every supported Kotlin
+> version (floor 2.3.0) through its own BTA-API/impl pair. The
+> lockstep-with-kotlinc principle stated in this section is preserved;
+> only its single-version framing changes.
 
 Phase B-2 drives incremental JVM compilation through
 `org.jetbrains.kotlin:kotlin-build-tools-api:2.3.20` with
