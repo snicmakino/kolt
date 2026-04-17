@@ -10,6 +10,7 @@ internal data class KoltPaths(val home: String) {
     val toolsDir: String = "$home/.kolt/tools"
     val toolchainsDir: String = "$home/.kolt/toolchains"
     val daemonBaseDir: String = "$home/.kolt/daemon"
+    val daemonIcDir: String = "$daemonBaseDir/ic"
 
     fun daemonDir(projectHash: String): String = "$daemonBaseDir/$projectHash"
     fun daemonSocketPath(projectHash: String): String = "${daemonDir(projectHash)}/daemon.sock"

@@ -10,6 +10,7 @@ import kolt.build.*
 import kolt.build.daemon.DaemonCompilerBackend
 import kolt.build.daemon.DaemonPreconditionError
 import kolt.build.daemon.DaemonSetup
+import kolt.build.daemon.cleanDaemonIcStateForProject
 import kolt.build.daemon.formatDaemonPreconditionWarning
 import kolt.build.daemon.resolveDaemonPreconditions
 import kolt.config.*
@@ -68,15 +69,28 @@ internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
 }
 
 internal fun doClean(): Result<Unit, Int> {
-    if (!fileExists(BUILD_DIR)) {
-        println("nothing to clean")
-        return Ok(Unit)
+    val buildDirRemoved = if (fileExists(BUILD_DIR)) {
+        removeDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+            eprintln("error: could not remove ${error.path}")
+            return Err(EXIT_BUILD_ERROR)
+        }
+        println("removed $BUILD_DIR/")
+        true
+    } else false
+
+    // Daemon-owned IC state at `~/.kolt/daemon/ic/<version>/<projectId>/`
+    // (ADR 0019 §5) survives `build/` removal; without this the next
+    // daemon-backed build emits an empty `build/classes/` (#135).
+    // Best-effort: paths/cwd lookup failure must not block clean.
+    val paths = resolveKoltPaths().getOrElse { null }
+    val cwd = currentWorkingDirectory()
+    if (paths != null && cwd != null) {
+        cleanDaemonIcStateForProject(paths, cwd).getOrElse { error ->
+            eprintln("warning: could not remove daemon IC state at ${error.path}")
+        }
     }
-    removeDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-        eprintln("error: could not remove ${error.path}")
-        return Err(EXIT_BUILD_ERROR)
-    }
-    println("removed $BUILD_DIR/")
+
+    if (!buildDirRemoved) println("nothing to clean")
     return Ok(Unit)
 }
 

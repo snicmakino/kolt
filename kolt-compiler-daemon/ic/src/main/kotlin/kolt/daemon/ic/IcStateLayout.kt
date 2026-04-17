@@ -39,6 +39,9 @@ object IcStateLayout {
     const val BTA_SUBDIR: String = "bta"
     const val CLASSPATH_SNAPSHOTS_SUBDIR: String = "classpath-snapshots"
 
+    // The native client mirrors this in
+    // `src/nativeMain/kotlin/kolt/build/daemon/IcStateCleanup.kt`
+    // (`daemonIcProjectIdOf`). Update both when changing the algorithm.
     fun projectIdFor(projectRoot: Path): String {
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(projectRoot.toString().toByteArray(Charsets.UTF_8))
