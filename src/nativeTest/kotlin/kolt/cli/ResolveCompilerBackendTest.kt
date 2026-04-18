@@ -10,6 +10,7 @@ import kolt.build.CompilerBackend
 import kolt.build.FallbackCompilerBackend
 import kolt.build.daemon.DaemonPreconditionError
 import kolt.build.daemon.DaemonSetup
+import kolt.build.daemon.KOTLIN_VERSION_FLOOR
 import kolt.config.KoltConfig
 import kolt.config.KoltPaths
 import kolt.infra.MkdirFailed
@@ -47,7 +48,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = false,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _, _ -> error("must not resolve preconditions when useDaemon=false") },
+            preconditionResolver = { _, _, _, _, _ -> error("must not resolve preconditions when useDaemon=false") },
             daemonDirCreator = { error("must not create daemon dir when useDaemon=false") },
             daemonBackendFactory = { _, _ -> error("must not construct daemon backend when useDaemon=false") },
             warningSink = { warnings.add(it) },
@@ -57,13 +58,13 @@ class ResolveCompilerBackendTest {
         assertEquals(emptyList(), warnings)
     }
 
-    // #136 stop-gap: bundled-vs-requested Kotlin version mismatch enters the
-    // same "precondition error" warning rail as every other daemon-probe
+    // ADR 0022 floor (#138): a Kotlin version below 2.3.0 enters the same
+    // "precondition error" warning rail as every other daemon-probe
     // failure (ADR 0016 §5). DaemonPreconditionsTest covers that the real
-    // resolver surfaces this error without any probing; this test pins that
-    // resolveCompilerBackend routes the variant into the warning sink.
+    // resolver surfaces this error without any probing; this test pins
+    // that resolveCompilerBackend routes the variant into the warning sink.
     @Test
-    fun kotlinVersionMismatchFromResolverFallsBackWithVersionsAndFollowUpInWarning() {
+    fun kotlinVersionBelowFloorFallsBackWithVersionsInWarning() {
         val warnings = mutableListOf<String>()
         val backend = resolveCompilerBackend(
             config = minimalConfig(kotlincVersion = "2.1.0"),
@@ -72,11 +73,11 @@ class ResolveCompilerBackendTest {
             useDaemon = true,
             absProjectPath = absProject,
             bundledKotlinVersion = "2.3.20",
-            preconditionResolver = { _, requested, _, bundled ->
+            preconditionResolver = { _, requested, _, _, _ ->
                 Err(
-                    DaemonPreconditionError.KotlinVersionMismatch(
+                    DaemonPreconditionError.KotlinVersionBelowFloor(
                         requested = requested,
-                        bundled = bundled,
+                        floor = KOTLIN_VERSION_FLOOR,
                     ),
                 )
             },
@@ -88,12 +89,12 @@ class ResolveCompilerBackendTest {
         assertSame(subprocess, backend)
         val warning = warnings.single()
         assertTrue(warning.contains("2.1.0"), "warning should cite the requested version: $warning")
-        assertTrue(warning.contains("2.3.20"), "warning should cite the bundled daemon version: $warning")
+        assertTrue(warning.contains(KOTLIN_VERSION_FLOOR), "warning should cite the floor: $warning")
         assertTrue(
             warning.contains("falling back to subprocess compile"),
             "warning should say the build is falling back: $warning",
         )
-        assertTrue(warning.contains("temporary"), "warning should flag the restriction as temporary: $warning")
+        assertTrue(warning.contains("--no-daemon"), "warning should point at --no-daemon: $warning")
     }
 
     @Test
@@ -106,7 +107,7 @@ class ResolveCompilerBackendTest {
             useDaemon = true,
             absProjectPath = absProject,
             bundledKotlinVersion = "2.3.20",
-            preconditionResolver = { _, _, _, bundled ->
+            preconditionResolver = { _, _, _, bundled, _ ->
                 seenBundled = bundled
                 Ok(okSetup)
             },
@@ -128,7 +129,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _, _ ->
+            preconditionResolver = { _, _, _, _, _ ->
                 Err(DaemonPreconditionError.DaemonJarMissing)
             },
             daemonDirCreator = { error("must not create daemon dir after precondition failure") },
@@ -154,7 +155,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _, _ ->
+            preconditionResolver = { _, _, _, _, _ ->
                 Err(
                     DaemonPreconditionError.BootstrapJdkInstallFailed(
                         jdkInstallDir = "/fake/home/.kolt/toolchains/jdk/21",
@@ -193,7 +194,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
+            preconditionResolver = { _, _, _, _, _ -> Ok(okSetup) },
             daemonDirCreator = { Err(MkdirFailed(okSetup.daemonDir)) },
             daemonBackendFactory = { _, _ -> error("must not construct daemon backend after mkdir failure") },
             warningSink = { warnings.add(it) },
@@ -217,7 +218,7 @@ class ResolveCompilerBackendTest {
             useDaemon = true,
             absProjectPath = absProject,
             pluginJars = pluginJars,
-            preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
+            preconditionResolver = { _, _, _, _, _ -> Ok(okSetup) },
             daemonDirCreator = { Ok(Unit) },
             daemonBackendFactory = { _, jars ->
                 capturedPluginJars = jars
@@ -241,7 +242,7 @@ class ResolveCompilerBackendTest {
             subprocessBackend = subprocess,
             useDaemon = true,
             absProjectPath = absProject,
-            preconditionResolver = { _, kotlincVersion, cwd, _ ->
+            preconditionResolver = { _, kotlincVersion, cwd, _, _ ->
                 assertEquals("2.1.0", kotlincVersion)
                 assertEquals(absProject, cwd)
                 Ok(okSetup)

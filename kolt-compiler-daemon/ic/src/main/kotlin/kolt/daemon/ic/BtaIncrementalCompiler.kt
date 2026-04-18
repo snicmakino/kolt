@@ -148,11 +148,17 @@ class BtaIncrementalCompiler private constructor(
         builder.compilerArguments[JvmCompilerArguments.MODULE_NAME] = moduleNameFor(request)
 
         // ADR 0019 §9: kolt.toml [plugins] → List<CompilerPlugin> translation
-        // happens inside the adapter, not in daemon core. An empty list here is
-        // a "no plugins requested" signal and is the common case; emitting it
-        // unconditionally keeps the wiring obvious to a reader.
+        // happens inside the adapter, not in daemon core. The COMPILER_PLUGINS
+        // structured argument key was introduced in BTA 2.3.20; setting it
+        // against a 2.3.0–2.3.10 impl raises "available only since 2.3.20"
+        // even with an empty list (#138 follow-up audit). Skip the assignment
+        // when there are no plugins so plugin-free projects build on the full
+        // 2.3.x family. Plugin-using projects still need 2.3.20+ daemon, or
+        // --no-daemon, until a freeArgs-based pre-2.3.20 path lands.
         val translatedPlugins = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
-        builder.compilerArguments[CommonCompilerArguments.COMPILER_PLUGINS] = translatedPlugins
+        if (translatedPlugins.isNotEmpty()) {
+            builder.compilerArguments[CommonCompilerArguments.COMPILER_PLUGINS] = translatedPlugins
+        }
 
         // #127: cached by ClasspathSnapshotCache; see class doc for key/error policy.
         val dependenciesSnapshotFiles = classpathSnapshotCache.getOrComputeSnapshots(request.classpath)

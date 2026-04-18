@@ -133,16 +133,7 @@ threads the needle.
 
 ### 2. Warning frequency and lifecycle: daemon-probe path, cache-miss only
 
-This section describes the **steady-state** behaviour after §7's
-per-version daemon spawn ships. During the #136 stop-gap interim
-(now through the #138 implementation merge), the fallback predicate
-is broader — `config.kotlin != BUNDLED_DAEMON_KOTLIN_VERSION`, which
-covers every non-bundled version including supported 2.3.x patches —
-and the warning text describes a "temporary restriction" rather than
-the policy below. The frequency cap in this section applies unchanged
-in both phases.
-
-In steady state, the `< 2.3.0` warning is emitted exactly when:
+The `< 2.3.0` warning is emitted exactly when:
 
 - the native client would otherwise have dispatched to the daemon
   (i.e., not `--no-daemon`, not already subprocess), **and**
@@ -321,8 +312,7 @@ condition itself: from `!= BUNDLED_DAEMON_KOTLIN_VERSION` (a single
 equality check) to "is this daemon-capable?" — answered positively
 for all 2.3.x under §7's per-version scheme, negatively for `< 2.3`.
 
-The warning text and its two-phase lifecycle (interim → steady state)
-are covered in §2.
+The warning text on the subprocess fallback rail is specified in §2.
 
 No ADR 0019 §5 / §7 behaviour changes for the supported range.
 Incremental compile, self-heal, classpath snapshot caching all work

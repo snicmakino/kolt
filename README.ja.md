@@ -92,7 +92,7 @@ kolt --version         バージョンを表示
 | フラグ | 説明 |
 |--------|------|
 | `--watch` | ソースファイルを監視し、変更時にコマンドを再実行（build/check/test/run） |
-| `--no-daemon` | この実行でウォームコンパイラデーモンをスキップ |
+| `--no-daemon` | この実行でウォームコンパイラデーモンをスキップ。daemon サポート対象外の Kotlin バージョン (ADR 0022) でも常に利用可能。 |
 
 ## 設定
 
@@ -101,7 +101,7 @@ kolt --version         バージョンを表示
 ```toml
 name = "my-app"
 version = "0.1.0"
-kotlin = "2.1.0"
+kotlin = "2.3.20"
 target = "jvm"
 jvm_target = "17"
 main = "main"

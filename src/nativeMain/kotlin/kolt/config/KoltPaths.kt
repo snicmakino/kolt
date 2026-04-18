@@ -12,9 +12,12 @@ internal data class KoltPaths(val home: String) {
     val daemonBaseDir: String = "$home/.kolt/daemon"
     val daemonIcDir: String = "$daemonBaseDir/ic"
 
-    fun daemonDir(projectHash: String): String = "$daemonBaseDir/$projectHash"
-    fun daemonSocketPath(projectHash: String): String = "${daemonDir(projectHash)}/daemon.sock"
-    fun daemonLogPath(projectHash: String): String = "${daemonDir(projectHash)}/daemon.log"
+    fun daemonDir(projectHash: String, kotlinVersion: String): String =
+        "$daemonBaseDir/$projectHash/$kotlinVersion"
+    fun daemonSocketPath(projectHash: String, kotlinVersion: String): String =
+        "${daemonDir(projectHash, kotlinVersion)}/daemon.sock"
+    fun daemonLogPath(projectHash: String, kotlinVersion: String): String =
+        "${daemonDir(projectHash, kotlinVersion)}/daemon.log"
 
     fun kotlincPath(version: String): String = "$toolchainsDir/kotlinc/$version"
     fun kotlincBin(version: String): String = "${kotlincPath(version)}/bin/kotlinc"

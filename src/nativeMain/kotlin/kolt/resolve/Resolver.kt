@@ -61,6 +61,17 @@ interface ResolverDeps {
     fun readFileContent(path: String): Result<String, OpenFailed>
 }
 
+// Real-IO ResolverDeps wired to kolt.infra. Lives here (rather than in
+// kolt.cli) so non-CLI callers — currently kolt.build.daemon.BtaImplFetcher
+// — can use it without an upward import.
+internal fun defaultResolverDeps(): ResolverDeps = object : ResolverDeps {
+    override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)
+    override fun ensureDirectoryRecursive(path: String) = kolt.infra.ensureDirectoryRecursive(path)
+    override fun downloadFile(url: String, destPath: String) = kolt.infra.downloadFile(url, destPath)
+    override fun computeSha256(filePath: String) = kolt.infra.computeSha256(filePath)
+    override fun readFileContent(path: String) = kolt.infra.readFileAsString(path)
+}
+
 fun resolve(
     config: KoltConfig,
     existingLock: Lockfile?,

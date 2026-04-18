@@ -155,4 +155,39 @@ class KoltPathsTest {
         val konancDir = paths.konancPath(version)
         assertEquals("$konancDir/bin/cinterop", paths.cinteropBin(version))
     }
+
+    @Test
+    fun daemonDirSegmentedByProjectHashAndKotlinVersion() {
+        val paths = KoltPaths("/home/user")
+        assertEquals(
+            "/home/user/.kolt/daemon/abc123/2.3.20",
+            paths.daemonDir("abc123", "2.3.20"),
+        )
+    }
+
+    @Test
+    fun daemonSocketPathSegmentedByKotlinVersion() {
+        val paths = KoltPaths("/home/user")
+        assertEquals(
+            "/home/user/.kolt/daemon/abc123/2.3.10/daemon.sock",
+            paths.daemonSocketPath("abc123", "2.3.10"),
+        )
+    }
+
+    @Test
+    fun daemonLogPathSegmentedByKotlinVersion() {
+        val paths = KoltPaths("/home/user")
+        assertEquals(
+            "/home/user/.kolt/daemon/abc123/2.3.0/daemon.log",
+            paths.daemonLogPath("abc123", "2.3.0"),
+        )
+    }
+
+    @Test
+    fun differentKotlinVersionsProduceDifferentSocketPaths() {
+        val paths = KoltPaths("/home/user")
+        val a = paths.daemonSocketPath("hash", "2.3.0")
+        val b = paths.daemonSocketPath("hash", "2.3.20")
+        kotlin.test.assertNotEquals(a, b)
+    }
 }

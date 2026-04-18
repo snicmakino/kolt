@@ -92,7 +92,7 @@ kolt --version         Show version
 | Flag | Description |
 |------|-------------|
 | `--watch` | Watch source files and re-run the command on change (build/check/test/run) |
-| `--no-daemon` | Skip the warm compiler daemon for this invocation |
+| `--no-daemon` | Skip the warm compiler daemon for this invocation. Always available, including on Kotlin versions outside the daemon's supported range (ADR 0022). |
 
 ## Configuration
 
@@ -101,7 +101,7 @@ kolt --version         Show version
 ```toml
 name = "my-app"
 version = "0.1.0"
-kotlin = "2.1.0"
+kotlin = "2.3.20"
 target = "jvm"
 jvm_target = "17"
 main = "main"
