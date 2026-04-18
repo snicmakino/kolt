@@ -2,7 +2,12 @@
 // `KOLT_DAEMON_KOTLIN_VERSION` (kolt-compiler-daemon Main.kt). All three,
 // plus the four kotlinc/BTA artifact pins in kolt-compiler-daemon's build
 // scripts, must move together per ADR 0019 §1. `verifyDaemonKotlinVersion`
-// asserts all seven at build time. #138 will collapse the manual sync.
+// asserts all seven at build time.
+//
+// Per ADR 0022 §8 this constant is the *tested default baseline*, not
+// the only daemon-supported version: other 2.3.x patches resolve via
+// `BtaImplFetcher`. The libexec bundle exists so a fresh kolt install
+// pays no Maven Central round trip on the baseline version's first build.
 //
 // Committed as source (rather than generated) so the self-host path
 // (`kolt.kexe build` driven by `kolt.toml`) compiles without depending on a

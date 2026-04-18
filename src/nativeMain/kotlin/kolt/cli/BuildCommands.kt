@@ -492,15 +492,19 @@ internal fun resolveCompilerBackend(
     absProjectPath: String,
     bundledKotlinVersion: String = BUNDLED_DAEMON_KOTLIN_VERSION,
     pluginJars: Map<String, List<String>> = emptyMap(),
-    preconditionResolver: (KoltPaths, String, String, String) -> Result<DaemonSetup, DaemonPreconditionError> =
-        { p, kotlincVersion, cwd, bundled -> resolveDaemonPreconditions(p, kotlincVersion, cwd, bundled) },
+    preconditionResolver: (KoltPaths, String, String, String, Boolean) -> Result<DaemonSetup, DaemonPreconditionError> =
+        { p, kotlincVersion, cwd, bundled, plugins ->
+            resolveDaemonPreconditions(p, kotlincVersion, cwd, bundled, plugins)
+        },
     daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
     daemonBackendFactory: (DaemonSetup, Map<String, List<String>>) -> CompilerBackend = ::createDaemonBackend,
     warningSink: (String) -> Unit = ::eprintln,
 ): CompilerBackend {
     if (!useDaemon) return subprocessBackend
 
-    val setup = preconditionResolver(paths, config.kotlin, absProjectPath, bundledKotlinVersion).getOrElse { err ->
+    val setup = preconditionResolver(
+        paths, config.kotlin, absProjectPath, bundledKotlinVersion, pluginJars.isNotEmpty(),
+    ).getOrElse { err ->
         warningSink(formatDaemonPreconditionWarning(err))
         return subprocessBackend
     }
@@ -561,13 +565,7 @@ internal fun applyPluginsFingerprintToFile(path: String, fingerprint: String): S
     }
 }
 
-internal fun createResolverDeps() = object : ResolverDeps {
-    override fun fileExists(path: String): Boolean = kolt.infra.fileExists(path)
-    override fun ensureDirectoryRecursive(path: String) = kolt.infra.ensureDirectoryRecursive(path)
-    override fun downloadFile(url: String, destPath: String) = kolt.infra.downloadFile(url, destPath)
-    override fun computeSha256(filePath: String) = kolt.infra.computeSha256(filePath)
-    override fun readFileContent(path: String) = readFileAsString(path)
-}
+internal fun createResolverDeps(): ResolverDeps = defaultResolverDeps()
 
 internal data class OverlappingDep(
     val groupArtifact: String,

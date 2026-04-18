@@ -47,15 +47,34 @@ private fun doDaemonStop(args: List<String>): Result<Unit, Int> {
             return Err(EXIT_CONFIG_ERROR)
         }
         val hash = projectHashOf(cwd)
-        val socketPath = paths.daemonSocketPath(hash)
-        if (!fileExists(socketPath)) {
-            println("no daemon running for this project")
-            return Ok(Unit)
+        val projectDir = "${paths.daemonBaseDir}/$hash"
+        val stopped = stopProjectDaemons(projectDir)
+        when (stopped) {
+            0 -> println("no daemon running for this project")
+            1 -> println("daemon stopped")
+            else -> println("stopped $stopped daemons")
         }
-        val stopped = sendShutdown(socketPath)
-        if (stopped) println("daemon stopped") else println("no daemon running for this project")
     }
     return Ok(Unit)
+}
+
+private fun stopProjectDaemons(projectDir: String): Int {
+    if (!fileExists(projectDir)) return 0
+    var stopped = 0
+    // Pre-#138 layout: socket sat directly under <projectHash>/. Probe first
+    // so a still-running pre-upgrade daemon can be shut down cleanly.
+    val legacySocket = "$projectDir/daemon.sock"
+    if (fileExists(legacySocket) && sendShutdown(legacySocket)) {
+        stopped++
+    }
+    val versionDirs = listSubdirectories(projectDir).getOrElse { return stopped }
+    for (versionDir in versionDirs) {
+        val socketPath = "$projectDir/$versionDir/daemon.sock"
+        if (fileExists(socketPath) && sendShutdown(socketPath)) {
+            stopped++
+        }
+    }
+    return stopped
 }
 
 private fun stopAllDaemons(daemonBaseDir: String) {
@@ -68,11 +87,8 @@ private fun stopAllDaemons(daemonBaseDir: String) {
         return
     }
     var stopped = 0
-    for (dir in projectDirs) {
-        val socketPath = "$daemonBaseDir/$dir/daemon.sock"
-        if (fileExists(socketPath) && sendShutdown(socketPath)) {
-            stopped++
-        }
+    for (projectDir in projectDirs) {
+        stopped += stopProjectDaemons("$daemonBaseDir/$projectDir")
     }
     if (stopped == 0) println("no daemons running")
     else println("stopped $stopped daemon${if (stopped > 1) "s" else ""}")
