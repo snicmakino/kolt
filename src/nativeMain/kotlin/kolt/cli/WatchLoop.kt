@@ -17,10 +17,10 @@ internal fun collectWatchPaths(config: KoltConfig, command: String): List<String
     val paths = mutableListOf<String>()
     fun add(p: String) { if (seen.add(p)) paths.add(p) }
     add(".")
-    config.sources.forEach(::add)
-    if (command == "test") config.testSources.forEach(::add)
-    config.resources.forEach(::add)
-    if (command == "test") config.testResources.forEach(::add)
+    config.build.sources.forEach(::add)
+    if (command == "test") config.build.testSources.forEach(::add)
+    config.build.resources.forEach(::add)
+    if (command == "test") config.build.testResources.forEach(::add)
     return paths
 }
 
@@ -60,7 +60,7 @@ private fun setupWatches(watchDirs: List<String>, config: KoltConfig): WatchSetu
         return null
     }
     val wdKinds = mutableMapOf<Int, WatchKind>()
-    val resourceDirs = config.resources.toSet() + config.testResources.toSet()
+    val resourceDirs = config.build.resources.toSet() + config.build.testResources.toSet()
 
     for (dir in watchDirs) {
         if (!fileExists(dir)) continue
@@ -280,7 +280,7 @@ internal fun watchRunLoop(
             continue
         }
 
-        val runCmd = if (buildResult.config.target == "native") {
+        val runCmd = if (buildResult.config.build.target == "native") {
             nativeRunCommand(buildResult.config, appArgs)
         } else {
             runCommand(buildResult.config, buildResult.classpath, appArgs, javaPath = buildResult.javaPath)

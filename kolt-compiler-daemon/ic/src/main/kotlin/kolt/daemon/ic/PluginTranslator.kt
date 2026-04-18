@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.Path
 
-// Translates a project's `kolt.toml` [plugins] section into the `-Xplugin=<path>`
+// Translates a project's `kolt.toml` [kotlin.plugins] section into the `-Xplugin=<path>`
 // freeArgs list that `BtaIncrementalCompiler` pushes through
 // `CommonToolArguments.applyArgumentStrings`. Lives inside the adapter per
 // ADR 0019 §9 so daemon core never carries a BTA-shaped `pluginClasspaths`
@@ -34,14 +34,15 @@ import java.nio.file.Path
 object PluginTranslator {
 
     /**
-     * Parse `projectRoot/kolt.toml`, pick the enabled `[plugins]` entries, ask
-     * [jarResolver] for the classpath of each, and emit one `-Xplugin=<path>`
-     * argument per resolved jar. Resolver order is preserved.
+     * Parse `projectRoot/kolt.toml`, pick the enabled `[kotlin.plugins]`
+     * entries, ask [jarResolver] for the classpath of each, and emit one
+     * `-Xplugin=<path>` argument per resolved jar. Resolver order is
+     * preserved.
      *
-     * Non-existent `kolt.toml`, absent `[plugins]` section, entries set to
-     * `false`, and resolver returns that are empty for an enabled alias all
-     * collapse to an empty output. The resolver is not called when the
-     * parsed map is empty.
+     * Non-existent `kolt.toml`, absent `[kotlin.plugins]` section, entries
+     * set to `false`, and resolver returns that are empty for an enabled
+     * alias all collapse to an empty output. The resolver is not called
+     * when the parsed map is empty.
      */
     fun translate(
         projectRoot: Path,
@@ -59,7 +60,7 @@ object PluginTranslator {
         val raw = Files.readString(tomlFile)
         val decoded = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = true))
             .decodeFromString(KoltConfigPluginsView.serializer(), raw)
-        return decoded.plugins
+        return decoded.kotlin.plugins
             .filterValues { it }
             .keys
             .toList()
@@ -67,8 +68,14 @@ object PluginTranslator {
 
     @Serializable
     private data class KoltConfigPluginsView(
-        // Only the [plugins] section matters to this translator; `ignoreUnknownNames`
-        // lets every other kolt.toml field pass through without a schema definition.
-        @SerialName("plugins") val plugins: Map<String, Boolean> = emptyMap(),
-    )
+        // Only the [kotlin.plugins] section matters to this translator;
+        // `ignoreUnknownNames` lets every other kolt.toml field pass through
+        // without a schema definition.
+        @SerialName("kotlin") val kotlin: KotlinView = KotlinView(),
+    ) {
+        @Serializable
+        data class KotlinView(
+            @SerialName("plugins") val plugins: Map<String, Boolean> = emptyMap(),
+        )
+    }
 }

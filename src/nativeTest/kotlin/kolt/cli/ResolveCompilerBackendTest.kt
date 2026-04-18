@@ -11,8 +11,10 @@ import kolt.build.FallbackCompilerBackend
 import kolt.build.daemon.DaemonPreconditionError
 import kolt.build.daemon.DaemonSetup
 import kolt.build.daemon.KOTLIN_VERSION_FLOOR
+import kolt.config.BuildSection
 import kolt.config.KoltConfig
 import kolt.config.KoltPaths
+import kolt.config.KotlinSection
 import kolt.infra.MkdirFailed
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -311,9 +313,11 @@ class ResolveCompilerBackendTest {
     private fun minimalConfig(kotlincVersion: String) = KoltConfig(
         name = "it",
         version = "0.0.0",
-        kotlin = kotlincVersion,
-        target = "jvm",
-        main = "itMainKt",
-        sources = emptyList(),
+        kotlin = KotlinSection(version = kotlincVersion),
+        build = BuildSection(
+            target = "jvm",
+            main = "itMainKt",
+            sources = emptyList(),
+        ),
     )
 }

@@ -78,14 +78,14 @@ fun resolve(
     cacheBase: String,
     deps: ResolverDeps
 ): Result<ResolveResult, ResolveError> =
-    if (config.target == "native") resolveNative(config, cacheBase, deps)
+    if (config.build.target == "native") resolveNative(config, cacheBase, deps)
     else resolveTransitive(config, existingLock, cacheBase, deps)
 
 fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lockfile {
     return Lockfile(
         version = 2,
-        kotlin = config.kotlin,
-        jvmTarget = config.jvmTarget,
+        kotlin = config.kotlin.version,
+        jvmTarget = config.build.jvmTarget,
         dependencies = deps.associate {
             it.groupArtifact to LockEntry(it.version, it.sha256, it.transitive)
         }

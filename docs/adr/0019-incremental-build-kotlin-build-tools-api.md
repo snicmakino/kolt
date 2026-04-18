@@ -317,7 +317,7 @@ Plugin resolution and `JvmCompilerArguments` construction live
 
 Concretely: `IcRequest` in §3 intentionally omits a `compilerArguments`
 / `pluginClasspaths` / `pluginOptions` field. The adapter reads
-`kolt.toml` `[plugins]` (and other compile-relevant sections) from
+`kolt.toml` `[kotlin.plugins]` (and other compile-relevant sections) from
 `projectRoot` directly, translates them to BTA's
 `JvmCompilerArguments`, and loads plugin jars into the same classloader
 hierarchy that holds `kotlin-build-tools-impl`. The

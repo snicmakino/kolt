@@ -4,7 +4,9 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
+import kolt.config.BuildSection
 import kolt.config.KoltConfig
+import kolt.config.KotlinSection
 import kolt.config.MAVEN_CENTRAL_BASE
 import kolt.resolve.Lockfile
 import kolt.resolve.ResolveError
@@ -43,10 +45,12 @@ internal fun ensureBtaImplJars(
     val syntheticConfig = KoltConfig(
         name = "kolt-bta-impl-fetch",
         version = version,
-        kotlin = version,
-        target = "jvm",
-        main = "unused.Main",
-        sources = emptyList(),
+        kotlin = KotlinSection(version = version),
+        build = BuildSection(
+            target = "jvm",
+            main = "unused.Main",
+            sources = emptyList(),
+        ),
         dependencies = mapOf(BTA_IMPL_GROUP_ARTIFACT to version),
         repositories = mapOf("central" to MAVEN_CENTRAL_BASE),
     )

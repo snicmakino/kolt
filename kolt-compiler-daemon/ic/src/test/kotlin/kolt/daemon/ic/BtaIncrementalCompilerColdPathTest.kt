@@ -151,19 +151,23 @@ class BtaIncrementalCompilerColdPathTest {
     // test task's environment. Real plugin validation (actually compiling a
     // @Serializable class) is B-2c's scope.
     @Test
-    fun `plugins section in kolt_toml reaches the compile path via the resolver`() {
+    fun `kotlin_plugins section in kolt_toml reaches the compile path via the resolver`() {
         val workRoot = Files.createTempDirectory("bta-plugins-")
         workRoot.resolve("kolt.toml").writeText(
             """
             name = "demo"
             version = "0.1.0"
-            kotlin = "2.3.20"
+
+            [kotlin]
+            version = "2.3.20"
+
+            [kotlin.plugins]
+            serialization = true
+
+            [build]
             target = "jvm"
             main = "fixture.Main"
             sources = ["."]
-
-            [plugins]
-            serialization = true
             """.trimIndent(),
         )
         workRoot.resolve("Main.kt").writeText(

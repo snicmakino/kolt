@@ -26,23 +26,38 @@ data class CinteropConfig(
 )
 
 @Serializable
-data class KoltConfig(
-    val name: String,
+data class KotlinSection(
     val version: String,
-    val kotlin: String,
+    val plugins: Map<String, Boolean> = emptyMap()
+)
+
+@Serializable
+data class BuildSection(
     val target: String,
     @SerialName("jvm_target") val jvmTarget: String = "17",
+    val jdk: String? = null,
     val main: String,
     val sources: List<String>,
     @SerialName("test_sources") val testSources: List<String> = listOf("test"),
     val resources: List<String> = emptyList(),
-    @SerialName("test_resources") val testResources: List<String> = emptyList(),
+    @SerialName("test_resources") val testResources: List<String> = emptyList()
+)
+
+@Serializable
+data class FmtSection(
+    val style: String = "google"
+)
+
+@Serializable
+data class KoltConfig(
+    val name: String,
+    val version: String,
+    val kotlin: KotlinSection,
+    val build: BuildSection,
+    val fmt: FmtSection = FmtSection(),
     val dependencies: Map<String, String> = emptyMap(),
     @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-    @SerialName("fmt_style") val fmtStyle: String = "google",
-    val plugins: Map<String, Boolean> = emptyMap(),
     val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
-    val jdk: String? = null,
     val cinterop: List<CinteropConfig> = emptyList()
 )
 
@@ -53,12 +68,12 @@ private val toml = Toml(
 fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
     return try {
         val config = toml.decodeFromString(KoltConfig.serializer(), tomlString)
-        if (config.target !in VALID_TARGETS) {
+        if (config.build.target !in VALID_TARGETS) {
             return Err(ConfigError.ParseFailed(
-                "invalid target '${config.target}' (valid targets: ${VALID_TARGETS.joinToString(", ")})"
+                "invalid target '${config.build.target}' (valid targets: ${VALID_TARGETS.joinToString(", ")})"
             ))
         }
-        validateMainFqn(config.main).getError()?.let { return Err(it) }
+        validateMainFqn(config.build.main).getError()?.let { return Err(it) }
         // ktoml preserves quotes in map keys; strip them.
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }

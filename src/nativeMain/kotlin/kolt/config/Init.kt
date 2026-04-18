@@ -9,7 +9,11 @@ private const val INIT_TEMPLATE_KOTLIN_VERSION = "2.3.20"
 fun generateKoltToml(projectName: String): String = buildString {
     appendLine("""name = "$projectName"""")
     appendLine("""version = "0.1.0"""")
-    appendLine("""kotlin = "$INIT_TEMPLATE_KOTLIN_VERSION"""")
+    appendLine()
+    appendLine("[kotlin]")
+    appendLine("""version = "$INIT_TEMPLATE_KOTLIN_VERSION"""")
+    appendLine()
+    appendLine("[build]")
     appendLine("""target = "jvm"""")
     appendLine("""jvm_target = "17"""")
     appendLine("""main = "main"""")

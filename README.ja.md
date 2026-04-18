@@ -5,7 +5,7 @@
 
 [English](README.md) | 日本語
 
-> v0.10.1 — 初期段階のプロジェクトです。破壊的変更の可能性があります。
+> v0.11.0 — 初期段階のプロジェクトです。破壊的変更の可能性があります。
 
 Kotlin 向けの軽量ビルドツールです。TOML 設定ファイルのみで動作し、Kotlin DSL のビルドスクリプト評価は不要です。単一の Kotlin/Native バイナリとして配布されるため、利用に Java のインストールは必要ありません。
 
@@ -101,16 +101,20 @@ kolt --version         バージョンを表示
 ```toml
 name = "my-app"
 version = "0.1.0"
-kotlin = "2.3.20"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
 target = "jvm"
 jvm_target = "17"
 main = "main"
 sources = ["src"]
 resources = ["resources"]
 test_resources = ["test-resources"]
-
-[plugins]
-serialization = true
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
@@ -122,20 +126,21 @@ jitpack = "https://jitpack.io"
 
 ### フィールド
 
-| フィールド | 説明 | デフォルト |
-|-----------|------|-----------|
+| キー | 説明 | デフォルト |
+|------|------|-----------|
 | `name` | プロジェクト名 | （必須） |
 | `version` | プロジェクトバージョン | （必須） |
-| `kotlin` | Kotlin コンパイラバージョン | （必須） |
-| `target` | `"jvm"` | （必須） |
-| `jvm_target` | JVM バイトコードターゲット | `"17"` |
-| `main` | エントリポイント関数の FQN（例：`"main"` または `"com.example.main"`） | （必須） |
-| `sources` | ソースディレクトリ | （必須） |
-| `test_sources` | テストソースディレクトリ | `["test"]` |
-| `resources` | ビルド出力に含めるリソースディレクトリ | `[]` |
-| `test_resources` | テスト時のクラスパスに追加するリソースディレクトリ | `[]` |
-| `fmt_style` | ktfmt スタイル：`"google"`、`"kotlinlang"`、`"meta"` | `"google"` |
-| `[plugins]` | コンパイラプラグイン（`serialization`、`allopen`、`noarg`） | `{}` |
+| `[kotlin] version` | Kotlin コンパイラバージョン | （必須） |
+| `[kotlin.plugins]` | コンパイラプラグイン（`serialization`、`allopen`、`noarg`） | `{}` |
+| `[build] target` | `"jvm"` または `"native"` | （必須） |
+| `[build] jvm_target` | JVM バイトコードターゲット | `"17"` |
+| `[build] jdk` | daemon/runtime 用の JDK バージョン | （ホスト JDK） |
+| `[build] main` | エントリポイント関数の FQN（例：`"main"` または `"com.example.main"`） | （必須） |
+| `[build] sources` | ソースディレクトリ | （必須） |
+| `[build] test_sources` | テストソースディレクトリ | `["test"]` |
+| `[build] resources` | ビルド出力に含めるリソースディレクトリ | `[]` |
+| `[build] test_resources` | テスト時のクラスパスに追加するリソースディレクトリ | `[]` |
+| `[fmt] style` | ktfmt スタイル：`"google"`、`"kotlinlang"`、`"meta"` | `"google"` |
 | `[[cinterop]]` | `target = "native"` 用の C interop バインディング（`.def` ごとに 1 エントリ） | `[]` |
 | `[repositories]` | Maven リポジトリ（名前 = URL） | Maven Central のみ |
 
@@ -175,10 +180,10 @@ jitpack = "https://jitpack.io"
 
 ### コンパイラプラグイン
 
-`[plugins]` で Kotlin コンパイラプラグインを有効化：
+`[kotlin.plugins]` で Kotlin コンパイラプラグインを有効化：
 
 ```toml
-[plugins]
+[kotlin.plugins]
 serialization = true
 ```
 
@@ -218,6 +223,7 @@ linkerOpts.linux = -L/usr/lib/x86_64-linux-gnu -lcurl
 リソースファイル（設定ファイル、テンプレート、静的アセット）をビルド出力に含める：
 
 ```toml
+[build]
 resources = ["resources"]
 test_resources = ["test-resources"]
 ```
@@ -293,7 +299,7 @@ v1.0 以降で対応予定：
 
 ## Kotlin バージョンサポート
 
-kolt は **Kotlin 2.3.0 以上** を daemon のファーストクラス対象としてサポートします。`kolt.toml` の `kotlin = "2.3.x"` は `[plugins]` を使うプロジェクトも含め常に warm compiler daemon を通ります。Kotlin 2.3.20 はバンドル済みなので初回ビルドでダウンロードは発生しません。他の 2.3.x パッチは初回使用時に Maven Central から取得され `~/.kolt/cache/` にキャッシュされます。
+kolt は **Kotlin 2.3.0 以上** を daemon のファーストクラス対象としてサポートします。`kolt.toml` の `[kotlin] version = "2.3.x"` は `[kotlin.plugins]` を使うプロジェクトも含め常に warm compiler daemon を通ります。Kotlin 2.3.20 はバンドル済みなので初回ビルドでダウンロードは発生しません。他の 2.3.x パッチは初回使用時に Maven Central から取得され `~/.kolt/cache/` にキャッシュされます。
 
 2.3.0 未満は soft floor です：`kolt build` は subprocess で動作し、該当ビルドごとに 1 行の警告が出ます。`--no-daemon` を渡すと警告は消え、Kotlin バージョンによらず常に利用できます。
 

@@ -112,10 +112,10 @@ question open. This ADR closes it.
 
 kolt officially supports Kotlin 2.3.0 and above as a first-class
 target. The daemon path — warm JVM plus incremental compile — is
-available to every `kolt.toml` whose `kotlin = "2.3.x"` resolves
+available to every `kolt.toml` whose `[kotlin] version = "2.3.x"` resolves
 within this range.
 
-Below 2.3.0, kolt does not refuse to run. `config.kotlin < 2.3.0`
+Below 2.3.0, kolt does not refuse to run. `config.kotlin.version < 2.3.0`
 routes through the subprocess fallback with a single stderr warning
 per affected build (see §2). This is a best-effort path: kolt's CI
 does not exercise it, and compile-time or runtime failures on that
@@ -141,7 +141,7 @@ The `< 2.3.0` warning is emitted exactly when:
 
 Concretely: `BuildCache` hits (the "nothing changed" path, ADR 0019
 §8) produce no output regardless of Kotlin version. A user on
-`config.kotlin = "2.2.20"` who runs `kolt build` twice in a row sees
+`config.kotlin.version = "2.2.20"` who runs `kolt build` twice in a row sees
 the warning once, not twice; the second build is a 0.00–0.01 s cache
 hit with silent exit.
 
@@ -332,7 +332,7 @@ compile-pipeline rewrite.
   spike harness as the empirical input, both name a concrete next
   trigger rather than an open-ended deferral.
 - **Silent wrong output from Bug 1 cannot recur.** Per-version daemon
-  spawn (§7) means `config.kotlin = "2.3.10"` cannot transparently
+  spawn (§7) means `config.kotlin.version = "2.3.10"` cannot transparently
   use a 2.3.20 compiler. The IC state path is already version-stamped
   (ADR 0019 §5), so the existing design extends cleanly.
 - **Warning is informative, not punitive.** The cache-miss frequency
@@ -351,7 +351,7 @@ compile-pipeline rewrite.
 - **First-build cost per new Kotlin version.** The BTA-impl JAR
   fetch on the first build of a new version adds seconds to that
   build. Subsequent builds are cached. Documented, but a user
-  changing `kolt.toml` `kotlin` and immediately running `kolt build`
+  changing `kolt.toml` `[kotlin] version` and immediately running `kolt build`
   sees it.
 - **Test matrix grows with the supported range.** Each additional
   GREEN Kotlin version is another CI configuration to keep passing.
@@ -365,7 +365,7 @@ compile-pipeline rewrite.
   This is accepted: it is strictly better than shipping a hard floor
   with no forward expansion, which would strand kolt on a single
   minor line.
-- **`kolt.toml` `kotlin = "<old>"` users get weaker guarantees.**
+- **`kolt.toml` `[kotlin] version = "<old>"` users get weaker guarantees.**
   This is the point of the policy, not an accident. Users on those
   versions can read the warning and decide; kolt does not block
   them.

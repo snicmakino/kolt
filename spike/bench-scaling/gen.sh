@@ -20,7 +20,11 @@ write_kolt_toml() {
   cat >"kolt.toml" <<EOF
 name = "$name"
 version = "0.1.0"
-kotlin = "$KOTLIN_VERSION"
+
+[kotlin]
+version = "$KOTLIN_VERSION"
+
+[build]
 target = "jvm"
 jvm_target = "$JVM_TARGET"
 main = "bench.main"

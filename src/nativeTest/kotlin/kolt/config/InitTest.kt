@@ -16,7 +16,8 @@ class InitTest {
     fun generateTomlContainsRequiredFields() {
         val toml = generateKoltToml("hello")
         assertTrue(toml.contains("version = "))
-        assertTrue(toml.contains("kotlin = "))
+        assertTrue(toml.contains("[kotlin]"))
+        assertTrue(toml.contains("[build]"))
         assertTrue(toml.contains("target = \"jvm\""))
         assertTrue(toml.contains("main = "))
         assertTrue(toml.contains("sources = "))

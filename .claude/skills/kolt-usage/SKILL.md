@@ -73,7 +73,14 @@ For `run --watch`, the running application is killed and restarted on each sourc
 ```toml
 name = "my-app"
 version = "0.1.0"
-kotlin = "2.3.20"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
 target = "jvm"
 jvm_target = "17"
 main = "main"
@@ -81,15 +88,9 @@ sources = ["src"]
 test_sources = ["test"]
 resources = ["resources"]
 test_resources = ["test-resources"]
-fmt_style = "google"
 
-[plugins]
-serialization = true
-
-[[cinterop]]
-name = "libcurl"
-def = "src/nativeInterop/cinterop/libcurl.def"
-package = "libcurl"
+[fmt]
+style = "google"
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
@@ -100,24 +101,30 @@ package = "libcurl"
 [repositories]
 central = "https://repo1.maven.org/maven2"
 jitpack = "https://jitpack.io"
+
+[[cinterop]]
+name = "libcurl"
+def = "src/nativeInterop/cinterop/libcurl.def"
+package = "libcurl"
 ```
 
 ### Fields
 
-| Field | Description | Default |
-|-------|-------------|---------|
+| Key | Description | Default |
+|-----|-------------|---------|
 | `name` | Project name | (required) |
 | `version` | Project version | (required) |
-| `kotlin` | Kotlin compiler version | (required) |
-| `target` | `"jvm"` | (required) |
-| `jvm_target` | JVM bytecode target | `"17"` |
-| `main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
-| `sources` | Source directories | (required) |
-| `test_sources` | Test source directories | `["test"]` |
-| `resources` | Resource directories included in JAR | `[]` |
-| `test_resources` | Test resource directories added to test classpath | `[]` |
-| `fmt_style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
-| `[plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
+| `[kotlin] version` | Kotlin compiler version | (required) |
+| `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
+| `[build] target` | `"jvm"` or `"native"` | (required) |
+| `[build] jvm_target` | JVM bytecode target | `"17"` |
+| `[build] jdk` | JDK version pin for daemon/runtime | (host JDK) |
+| `[build] main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
+| `[build] sources` | Source directories | (required) |
+| `[build] test_sources` | Test source directories | `["test"]` |
+| `[build] resources` | Resource directories included in JAR | `[]` |
+| `[build] test_resources` | Test resource directories added to test classpath | `[]` |
+| `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
 | `[[cinterop]]` | C interop bindings for `target = "native"` (array of `.def` entries) | `[]` |
 | `[repositories]` | Maven repositories (name = URL, tried in order) | Maven Central only |
 
@@ -173,7 +180,7 @@ Stored at `~/.kolt/toolchains/kotlinc/{version}/`. Used automatically when avail
 
 ## Kotlin Version Support
 
-kolt supports **Kotlin 2.3.0 and above** on the daemon path, including `[plugins]` projects. Kotlin 2.3.20 is the bundled default (no fetch on first build); other 2.3.x patches get `kotlin-build-tools-impl` fetched from Maven Central on first use. Below 2.3.0 is a soft floor — `kolt build` falls back to subprocess with a one-line warning, or silence it with `--no-daemon`. Forward support (2.4.x+) is re-evaluated at each Kotlin language release. Policy: ADR 0022.
+kolt supports **Kotlin 2.3.0 and above** on the daemon path, including `[kotlin.plugins]` projects. Kotlin 2.3.20 is the bundled default (no fetch on first build); other 2.3.x patches get `kotlin-build-tools-impl` fetched from Maven Central on first use. Below 2.3.0 is a soft floor — `kolt build` falls back to subprocess with a one-line warning, or silence it with `--no-daemon`. Forward support (2.4.x+) is re-evaluated at each Kotlin language release. Policy: ADR 0022.
 
 ## Exit Codes
 

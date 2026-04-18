@@ -75,13 +75,17 @@ class BtaSerializationPluginTest {
             """
             name = "demo"
             version = "0.1.0"
-            kotlin = "2.3.20"
+
+            [kotlin]
+            version = "2.3.20"
+
+            [kotlin.plugins]
+            serialization = true
+
+            [build]
             target = "jvm"
             main = "fixture.Payload"
             sources = ["."]
-
-            [plugins]
-            serialization = true
             """.trimIndent(),
         )
 

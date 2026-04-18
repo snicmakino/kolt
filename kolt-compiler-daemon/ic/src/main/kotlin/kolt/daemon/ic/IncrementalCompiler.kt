@@ -11,7 +11,7 @@ import java.nio.file.Path
 // and is enforced by human review per issue #112 acceptance criterion 2.
 //
 // IcRequest deliberately does not carry compilerArguments / pluginClasspaths /
-// pluginOptions — those are translated inside the adapter from kolt.toml [plugins]
+// pluginOptions — those are translated inside the adapter from kolt.toml [kotlin.plugins]
 // (ADR 0019 §9). Keeping the translation inside the adapter preserves the
 // "daemon core carries no BTA-shaped fields" invariant.
 interface IncrementalCompiler {

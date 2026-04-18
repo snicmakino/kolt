@@ -204,11 +204,11 @@ class CinteropNativeBuildIntegrationTest {
 
         val cinteropCmd = cinteropCommand(
             entry = libcurlEntry,
-            cinteropPath = paths.cinteropBin(config.kotlin)
+            cinteropPath = paths.cinteropBin(config.kotlin.version)
         )
         val klibPath = cinteropOutputKlibPath(libcurlEntry)
 
-        assertEquals(paths.cinteropBin(config.kotlin), cinteropCmd.args.first())
+        assertEquals(paths.cinteropBin(config.kotlin.version), cinteropCmd.args.first())
         assertEquals("build/libcurl.klib", klibPath)
 
         val libraryCmd = nativeLibraryCommand(config, klibs = listOf(klibPath))

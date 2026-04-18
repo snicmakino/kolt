@@ -15,7 +15,7 @@ fun runCommand(
 ): RunCommand {
     val cp = if (!classpath.isNullOrEmpty()) "$CLASSES_DIR:$classpath" else CLASSES_DIR
     return RunCommand(
-        args = listOf(javaPath ?: "java", "-cp", cp, jvmMainClass(config.main)) + appArgs
+        args = listOf(javaPath ?: "java", "-cp", cp, jvmMainClass(config.build.main)) + appArgs
     )
 }
 

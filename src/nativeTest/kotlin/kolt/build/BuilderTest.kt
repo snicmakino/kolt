@@ -312,7 +312,8 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandEmitsRootPackageEntryPoint() {
-        val cmd = nativeLinkCommand(testConfig(target = "native").copy(main = "main"))
+        val base = testConfig(target = "native")
+        val cmd = nativeLinkCommand(base.copy(build = base.build.copy(main = "main")))
 
         val eIndex = cmd.args.indexOf("-e")
         assertTrue(eIndex >= 0)

@@ -17,7 +17,7 @@ fun generateWorkspaceJson(
     val json = buildJsonObject {
         putJsonArray("modules") {
             add(buildMainModule(config, resolvedDeps))
-            if (config.testSources.isNotEmpty()) {
+            if (config.build.testSources.isNotEmpty()) {
                 add(buildTestModule(config, resolvedDeps))
             }
         }
@@ -27,7 +27,7 @@ fun generateWorkspaceJson(
             }
         }
         putJsonArray("sdks") {
-            add(buildSdkEntry(config.jvmTarget))
+            add(buildSdkEntry(config.build.jvmTarget))
         }
         putJsonArray("kotlinSettings") {
             add(buildKotlinSettings(config))
@@ -59,7 +59,7 @@ private fun buildMainModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
             add(buildJsonObject {
                 put("path", "<WORKSPACE>/")
                 putJsonArray("sourceRoots") {
-                    config.sources.forEach { src ->
+                    config.build.sources.forEach { src ->
                         add(buildJsonObject {
                             put("path", "<WORKSPACE>/$src")
                             put("type", "java-source")
@@ -94,7 +94,7 @@ private fun buildTestModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
             add(buildJsonObject {
                 put("path", "<WORKSPACE>/")
                 putJsonArray("sourceRoots") {
-                    config.testSources.forEach { src ->
+                    config.build.testSources.forEach { src ->
                         add(buildJsonObject {
                             put("path", "<WORKSPACE>/$src")
                             put("type", "java-test")
@@ -140,7 +140,7 @@ private fun buildKotlinSettings(config: KoltConfig): JsonObject =
     buildJsonObject {
         put("name", "Kotlin")
         putJsonArray("sourceRoots") {
-            config.sources.forEach { add(JsonPrimitive("<WORKSPACE>/$it")) }
+            config.build.sources.forEach { add(JsonPrimitive("<WORKSPACE>/$it")) }
         }
         putJsonArray("configFileItems") {}
         put("module", "${config.name}.main")
@@ -157,7 +157,7 @@ private fun buildKotlinSettings(config: KoltConfig): JsonObject =
         putJsonArray("pureKotlinSourceFolders") {}
         put("kind", "default")
         // kotlin-lsp requires "J" prefix for JSON-encoded compiler arguments.
-        put("compilerArguments", "J{\"jvmTarget\":\"${config.jvmTarget}\",\"pluginOptions\":[],\"pluginClasspaths\":[]}")
+        put("compilerArguments", "J{\"jvmTarget\":\"${config.build.jvmTarget}\",\"pluginOptions\":[],\"pluginClasspaths\":[]}")
         put("additionalArguments", JsonNull)
         put("scriptTemplates", JsonNull)
         put("scriptTemplatesClasspath", JsonNull)
