@@ -222,7 +222,7 @@ resources = ["resources"]
 test_resources = ["test-resources"]
 ```
 
-Files in `resources` directories are copied into the build output and included in the JAR. Files in `test_resources` directories are added to the classpath during test execution. Non-existent directories are silently skipped.
+Files in `resources` directories are copied into the build output and included in the JAR. Files in `test_resources` directories are added to the classpath during test execution. Non-existent directories are skipped with a warning.
 
 ### Test Dependencies
 
