@@ -50,6 +50,78 @@ class EnsureJdkBinsFromConfigTest {
     }
 }
 
+class FilterExistingDirsTest {
+
+    @Test
+    fun returnsAllPathsWhenAllExist() {
+        val warnings = mutableListOf<String>()
+        val result = filterExistingDirs(
+            paths = listOf("a", "b"),
+            kind = "test source",
+            exists = { true },
+            warn = { warnings.add(it) }
+        )
+
+        assertEquals(listOf("a", "b"), result)
+        assertTrue(warnings.isEmpty())
+    }
+
+    @Test
+    fun dropsMissingPathsAndWarnsForEach() {
+        val warnings = mutableListOf<String>()
+        val existing = setOf("a", "c")
+        val result = filterExistingDirs(
+            paths = listOf("a", "b", "c", "d"),
+            kind = "test source",
+            exists = { it in existing },
+            warn = { warnings.add(it) }
+        )
+
+        assertEquals(listOf("a", "c"), result)
+        assertEquals(
+            listOf(
+                "warning: test source directory \"b\" does not exist, skipping",
+                "warning: test source directory \"d\" does not exist, skipping"
+            ),
+            warnings
+        )
+    }
+
+    @Test
+    fun returnsEmptyAndWarnsForEachWhenAllMissing() {
+        val warnings = mutableListOf<String>()
+        val result = filterExistingDirs(
+            paths = listOf("a", "b"),
+            kind = "resource",
+            exists = { false },
+            warn = { warnings.add(it) }
+        )
+
+        assertTrue(result.isEmpty())
+        assertEquals(
+            listOf(
+                "warning: resource directory \"a\" does not exist, skipping",
+                "warning: resource directory \"b\" does not exist, skipping"
+            ),
+            warnings
+        )
+    }
+
+    @Test
+    fun preservesOriginalOrder() {
+        val warnings = mutableListOf<String>()
+        val existing = setOf("b", "d")
+        val result = filterExistingDirs(
+            paths = listOf("a", "b", "c", "d"),
+            kind = "test resource",
+            exists = { it in existing },
+            warn = { warnings.add(it) }
+        )
+
+        assertEquals(listOf("b", "d"), result)
+    }
+}
+
 class FindOverlappingDependenciesTest {
 
     @Test

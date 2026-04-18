@@ -30,6 +30,19 @@ internal data class BuildResult(
     val javaPath: String? = null,
 )
 
+internal fun filterExistingDirs(
+    paths: List<String>,
+    kind: String,
+    exists: (String) -> Boolean = ::fileExists,
+    warn: (String) -> Unit = ::eprintln
+): List<String> {
+    val (existing, missing) = paths.partition { exists(it) }
+    for (path in missing) {
+        warn("warning: $kind directory \"$path\" does not exist, skipping")
+    }
+    return existing
+}
+
 internal fun loadProjectConfig(): Result<KoltConfig, Int> {
     val tomlString = readFileAsString(KOLT_TOML).getOrElse { error ->
         eprintln("error: could not read ${error.path}")
@@ -180,8 +193,8 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
         return Err(EXIT_BUILD_ERROR)
     }
 
-    for (resourceDir in config.resources) {
-        if (!fileExists(resourceDir)) continue
+    val existingResourceDirs = filterExistingDirs(config.resources, "resource")
+    for (resourceDir in existingResourceDirs) {
         copyDirectoryContents(resourceDir, CLASSES_DIR).getOrElse { error ->
             eprintln("error: could not copy resources from ${error.path}")
             return Err(EXIT_BUILD_ERROR)
@@ -363,7 +376,7 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
     }
     val (_, classpath, javaPath) = doBuild(useDaemon = useDaemon).getOrElse { return Err(it) }
 
-    val existingTestSources = config.testSources.filter { fileExists(it) }
+    val existingTestSources = filterExistingDirs(config.testSources, "test source")
     if (existingTestSources.isEmpty()) {
         eprintln("error: no test sources found in ${config.testSources}")
         return Err(EXIT_TEST_ERROR)
@@ -385,7 +398,7 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
         return Err(EXIT_BUILD_ERROR)
     }
 
-    val existingTestResourceDirs = config.testResources.filter { fileExists(it) }
+    val existingTestResourceDirs = filterExistingDirs(config.testResources, "test resource")
     val runCmd = testRunCommand(
         classesDir = CLASSES_DIR,
         testClassesDir = testCmd.outputPath,
@@ -412,7 +425,7 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
 }
 
 private fun doNativeTest(config: KoltConfig, testArgs: List<String>): Result<Unit, Int> {
-    val existingTestSources = config.testSources.filter { fileExists(it) }
+    val existingTestSources = filterExistingDirs(config.testSources, "test source")
     if (existingTestSources.isEmpty()) {
         eprintln("error: no test sources found in ${config.testSources}")
         return Err(EXIT_TEST_ERROR)
