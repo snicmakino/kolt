@@ -1,0 +1,10 @@
+name = "native-25"
+version = "0.1.0"
+
+[kotlin]
+version = "2.3.20"
+
+[build]
+target = "native"
+main = "bench.main"
+sources = ["src"]
