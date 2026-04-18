@@ -1,5 +1,5 @@
 name = "kolt"
-version = "0.10.0"
+version = "0.10.1"
 kotlin = "2.3.20"
 target = "native"
 main = "kolt.cli.main"
