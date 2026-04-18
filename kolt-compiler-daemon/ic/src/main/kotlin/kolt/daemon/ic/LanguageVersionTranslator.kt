@@ -29,7 +29,11 @@ object LanguageVersionTranslator {
         val version = view.kotlin.version ?: return emptyList()
         val compiler = view.kotlin.compiler ?: return emptyList()
         if (compiler == version) return emptyList()
-        return listOf("-language-version", version, "-api-version", version)
+        // kotlinc rejects patch-level values: `-api-version 2.1.0` →
+        // `Unknown -api-version value: 2.1.0`. Language/API surface is
+        // addressed by `major.minor` only.
+        val surface = version.split('.').take(2).joinToString(".")
+        return listOf("-language-version", surface, "-api-version", surface)
     }
 
     @Serializable

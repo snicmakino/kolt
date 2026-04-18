@@ -318,7 +318,8 @@ compiler = "2.3.20"    # kotlinc + daemon バージョン（未指定時は vers
 ```
 
 `compiler > version` の場合、kolt は 2.3.20 の daemon / kotlinc を使いつつ
-コンパイル時に `-language-version 2.1.0` / `-api-version 2.1.0` を渡します。
+コンパイル時に `-language-version 2.1` / `-api-version 2.1` を渡します
+（`major.minor` のみ — kotlinc は patch 付きの値を拒否します）。
 `compiler < version` はパース時にエラーとなります。`version` のみを指定した
 場合は従来どおりの挙動です。
 

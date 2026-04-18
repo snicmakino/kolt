@@ -225,7 +225,7 @@ class TestBuilderTest {
         val langIdx = cmd.args.indexOf("-language-version")
         val apiIdx = cmd.args.indexOf("-api-version")
         kotlin.test.assertTrue(langIdx >= 0)
-        assertEquals("2.1.0", cmd.args[langIdx + 1])
-        assertEquals("2.1.0", cmd.args[apiIdx + 1])
+        assertEquals("2.1", cmd.args[langIdx + 1])
+        assertEquals("2.1", cmd.args[apiIdx + 1])
     }
 }

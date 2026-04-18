@@ -197,8 +197,9 @@ compiler = "2.3.20"
 ```
 
 When the two differ, kolt drives the `compiler` kotlinc and passes
-`-language-version <version>` / `-api-version <version>` to every compile so
-the language surface stays pinned. Equal (or unset) `compiler` keeps the
+`-language-version <major.minor>` / `-api-version <major.minor>` (derived
+from `version` — kotlinc only accepts `major.minor`) to every compile so the
+language surface stays pinned. Equal (or unset) `compiler` keeps the
 flag-free original behavior.
 
 ## Exit Codes

@@ -318,9 +318,10 @@ compiler = "2.3.20"    # kotlinc + daemon version; defaults to `version`
 ```
 
 With both set and `compiler > version`, kolt drives the 2.3.20 daemon/kotlinc
-and passes `-language-version 2.1.0` / `-api-version 2.1.0` to the compile.
-Setting `compiler < version` is rejected at parse time. Set only `version` to
-get the original single-pin behavior.
+and passes `-language-version 2.1` / `-api-version 2.1` to the compile
+(`major.minor` only — kotlinc rejects the patch form). Setting `compiler <
+version` is rejected at parse time. Set only `version` to get the original
+single-pin behavior.
 
 ## Why kolt?
 

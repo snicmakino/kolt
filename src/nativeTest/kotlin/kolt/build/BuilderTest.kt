@@ -510,8 +510,8 @@ class BuilderTest {
         val apiIdx = cmd.indexOf("-api-version")
         assertTrue(langIdx >= 0, "missing -language-version in $cmd")
         assertTrue(apiIdx >= 0, "missing -api-version in $cmd")
-        assertEquals("2.1.0", cmd[langIdx + 1])
-        assertEquals("2.1.0", cmd[apiIdx + 1])
+        assertEquals("2.1", cmd[langIdx + 1])
+        assertEquals("2.1", cmd[apiIdx + 1])
     }
 
     @Test
@@ -521,7 +521,34 @@ class BuilderTest {
         val langIdx = cmd.args.indexOf("-language-version")
         val apiIdx = cmd.args.indexOf("-api-version")
         assertTrue(langIdx >= 0)
-        assertEquals("2.1.0", cmd.args[langIdx + 1])
-        assertEquals("2.1.0", cmd.args[apiIdx + 1])
+        assertEquals("2.1", cmd.args[langIdx + 1])
+        assertEquals("2.1", cmd.args[apiIdx + 1])
+    }
+
+    @Test
+    fun nativeLibraryCommandOmitsLanguageVersionWhenCompilerUnset() {
+        val cmd = nativeLibraryCommand(testConfig(target = "native"))
+
+        assertFalse(cmd.args.contains("-language-version"))
+        assertFalse(cmd.args.contains("-api-version"))
+    }
+
+    @Test
+    fun nativeTestLibraryCommandInjectsLanguageVersionWhenCompilerHigherThanVersion() {
+        val cmd = nativeTestLibraryCommand(testConfig(target = "native", kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"))
+
+        val langIdx = cmd.args.indexOf("-language-version")
+        val apiIdx = cmd.args.indexOf("-api-version")
+        assertTrue(langIdx >= 0)
+        assertEquals("2.1", cmd.args[langIdx + 1])
+        assertEquals("2.1", cmd.args[apiIdx + 1])
+    }
+
+    @Test
+    fun nativeTestLibraryCommandOmitsLanguageVersionWhenCompilerUnset() {
+        val cmd = nativeTestLibraryCommand(testConfig(target = "native"))
+
+        assertFalse(cmd.args.contains("-language-version"))
+        assertFalse(cmd.args.contains("-api-version"))
     }
 }

@@ -66,7 +66,7 @@ class LanguageVersionTranslatorTest {
             """.trimIndent(),
         )
         assertEquals(
-            listOf("-language-version", "2.1.0", "-api-version", "2.1.0"),
+            listOf("-language-version", "2.1", "-api-version", "2.1"),
             LanguageVersionTranslator.translate(projectRoot),
         )
     }
