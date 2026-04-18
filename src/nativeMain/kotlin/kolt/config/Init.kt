@@ -1,9 +1,15 @@
 package kolt.config
 
+// Pinned to match `BUNDLED_DAEMON_KOTLIN_VERSION` in `kolt.cli` so a fresh
+// `kolt init` project hits the libexec BTA-impl bundle on first build (no
+// Maven Central round trip). Drift from the bundled version only costs
+// new users a one-time download; it does not break the daemon path.
+private const val INIT_TEMPLATE_KOTLIN_VERSION = "2.3.20"
+
 fun generateKoltToml(projectName: String): String = buildString {
     appendLine("""name = "$projectName"""")
     appendLine("""version = "0.1.0"""")
-    appendLine("""kotlin = "2.1.0"""")
+    appendLine("""kotlin = "$INIT_TEMPLATE_KOTLIN_VERSION"""")
     appendLine("""target = "jvm"""")
     appendLine("""jvm_target = "17"""")
     appendLine("""main = "main"""")
