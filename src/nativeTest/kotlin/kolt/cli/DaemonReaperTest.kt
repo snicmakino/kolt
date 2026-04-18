@@ -165,6 +165,40 @@ class DaemonReaperTest {
         }
     }
 
+    // #145: first build after an upgrade from a pre-#142 kolt leaves a stale
+    // legacy `<projectHash>/daemon.sock` next to a freshly-spawned new-layout
+    // `<projectHash>/<kotlinVersion>/daemon.sock`. The reaper used to see the
+    // stale legacy socket and `removeDirectoryRecursive` the whole project
+    // tree, unlinking the live new-layout socket alongside it. Post-fix the
+    // legacy file pair is swept but the version subdir with the live socket
+    // is preserved.
+    @OptIn(ExperimentalForeignApi::class)
+    @Test
+    fun postUpgradeLegacyStalePlusNewLayoutLivePreservesVersionDir() {
+        val base = createTempDir("reaper-post-upgrade-")
+        val projectDir = "$base/mix333"
+        val versionDir = "$projectDir/2.3.20"
+        ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
+        // Stale legacy files at project root (not bound — connect will fail).
+        writeFileAsString("$projectDir/daemon.sock", "").getOrElse { error("write failed") }
+        writeFileAsString("$projectDir/daemon.log", "old log").getOrElse { error("write failed") }
+        // Live new-layout socket under the version subdir.
+        val liveSocket = "$versionDir/daemon.sock"
+        val listenFd = bindAndListen(liveSocket)
+        try {
+            val result = reapStaleDaemons(base)
+            assertTrue(result.reaped >= 1, "stale legacy socket should be reaped, got: $result")
+            assertEquals(1, result.alive, "live new-layout daemon must be counted, got: $result")
+            assertTrue(fileExists(liveSocket), "live new-layout socket must not be unlinked")
+            assertTrue(fileExists(versionDir), "live version dir must not be wiped")
+            assertTrue(fileExists(projectDir), "project dir must survive while a version is alive")
+            assertFalse(fileExists("$projectDir/daemon.sock"), "stale legacy socket should be gone")
+        } finally {
+            close(listenFd)
+            unlink(liveSocket)
+        }
+    }
+
     @Test
     fun icSiblingIsNotReaped() {
         val base = createTempDir("reaper-ic-")

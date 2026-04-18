@@ -1,6 +1,7 @@
 package kolt.cli
 
 import com.github.michaelbull.result.getOrElse
+import kolt.infra.deleteFile
 import kolt.infra.fileExists
 import kolt.infra.listSubdirectories
 import kolt.infra.net.UnixSocket
@@ -28,10 +29,11 @@ internal fun reapStaleDaemons(daemonBaseDir: String): ReapResult {
         if (projectDir == IC_STATE_DIR_NAME) continue
         val projectFullDir = "$daemonBaseDir/$projectDir"
 
-        // Pre-#138 layout: socket lived directly at <projectHash>/daemon.sock.
+        // Pre-#142 layout: socket lived directly at <projectHash>/daemon.sock.
         // Probe before removing — a daemon spawned by an older kolt build may
         // still be alive and serving requests.
         val legacySocket = "$projectFullDir/daemon.sock"
+        val legacyLog = "$projectFullDir/daemon.log"
         if (fileExists(legacySocket)) {
             val socket = UnixSocket.connect(legacySocket)
             if (socket.isOk) {
@@ -39,8 +41,16 @@ internal fun reapStaleDaemons(daemonBaseDir: String): ReapResult {
                 alive++
                 continue
             }
-            if (removeDirectoryRecursive(projectFullDir).isOk) reaped++ else failed++
-            continue
+            // #145: stale legacy socket. Do not `removeDirectoryRecursive`
+            // the project dir — a freshly-spawned new-layout daemon may be
+            // living under `<projectHash>/<kotlinVersion>/` after an
+            // upgrade, and wiping the parent unlinks its live socket.
+            // Unlink only the legacy file pair and fall through to the
+            // version-dirs loop, which handles both the post-upgrade mix
+            // and the pre-#142 "no version subdirs exist at all" case.
+            deleteFile(legacySocket)
+            if (fileExists(legacySocket)) failed++ else reaped++
+            if (fileExists(legacyLog)) deleteFile(legacyLog)
         }
 
         val versionDirs = listSubdirectories(projectFullDir).getOrElse { continue }
