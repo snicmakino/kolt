@@ -203,4 +203,29 @@ class TestBuilderTest {
             cmd.args
         )
     }
+
+    @Test
+    fun testBuildCommandOmitsLanguageVersionWhenCompilerUnset() {
+        val cmd = testBuildCommand(
+            config = testConfig(),
+            classesDir = "build/classes",
+        )
+
+        kotlin.test.assertFalse(cmd.args.contains("-language-version"))
+        kotlin.test.assertFalse(cmd.args.contains("-api-version"))
+    }
+
+    @Test
+    fun testBuildCommandInjectsLanguageVersionWhenCompilerHigherThanVersion() {
+        val cmd = testBuildCommand(
+            config = testConfig(kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"),
+            classesDir = "build/classes",
+        )
+
+        val langIdx = cmd.args.indexOf("-language-version")
+        val apiIdx = cmd.args.indexOf("-api-version")
+        kotlin.test.assertTrue(langIdx >= 0)
+        assertEquals("2.1", cmd.args[langIdx + 1])
+        assertEquals("2.1", cmd.args[apiIdx + 1])
+    }
 }

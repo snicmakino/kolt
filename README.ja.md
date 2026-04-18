@@ -5,7 +5,7 @@
 
 [English](README.md) | 日本語
 
-> v0.11.0 — 初期段階のプロジェクトです。破壊的変更の可能性があります。
+> v0.11.1 — 初期段階のプロジェクトです。破壊的変更の可能性があります。
 
 Kotlin 向けの軽量ビルドツールです。TOML 設定ファイルのみで動作し、Kotlin DSL のビルドスクリプト評価は不要です。単一の Kotlin/Native バイナリとして配布されるため、利用に Java のインストールは必要ありません。
 
@@ -130,7 +130,8 @@ jitpack = "https://jitpack.io"
 |------|------|-----------|
 | `name` | プロジェクト名 | （必須） |
 | `version` | プロジェクトバージョン | （必須） |
-| `[kotlin] version` | Kotlin コンパイラバージョン | （必須） |
+| `[kotlin] version` | Kotlin 言語／API バージョン（`compiler` 未指定時はコンパイラバージョンも兼ねる） | （必須） |
+| `[kotlin] compiler` | `version` と独立して kotlinc / daemon のバージョンを固定（`>= version` 必須） | `version` |
 | `[kotlin.plugins]` | コンパイラプラグイン（`serialization`、`allopen`、`noarg`） | `{}` |
 | `[build] target` | `"jvm"` または `"native"` | （必須） |
 | `[build] jvm_target` | JVM バイトコードターゲット | `"17"` |
@@ -304,6 +305,23 @@ kolt は **Kotlin 2.3.0 以上** を daemon のファーストクラス対象と
 2.3.0 未満は soft floor です：`kolt build` は subprocess で動作し、該当ビルドごとに 1 行の警告が出ます。`--no-daemon` を渡すと警告は消え、Kotlin バージョンによらず常に利用できます。
 
 将来の Kotlin 言語リリース（2.4.0、2.5.0 …）のサポート範囲は事前に約束せず、各リリース時点で再評価します。ポリシーの詳細は [ADR 0022](docs/adr/0022-supported-kotlin-version-policy.md) を参照してください。
+
+### language バージョンと切り離して compiler を固定する
+
+古い言語バージョン（例：Kotlin 2.1）のままで daemon の恩恵を受けたい場合、
+`compiler` を daemon サポート対象のバージョンに固定します：
+
+```toml
+[kotlin]
+version = "2.1.0"      # 言語 / API バージョン
+compiler = "2.3.20"    # kotlinc + daemon バージョン（未指定時は version と同じ）
+```
+
+`compiler > version` の場合、kolt は 2.3.20 の daemon / kotlinc を使いつつ
+コンパイル時に `-language-version 2.1` / `-api-version 2.1` を渡します
+（`major.minor` のみ — kotlinc は patch 付きの値を拒否します）。
+`compiler < version` はパース時にエラーとなります。`version` のみを指定した
+場合は従来どおりの挙動です。
 
 ## なぜ kolt？
 

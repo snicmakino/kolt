@@ -27,6 +27,7 @@ fun testBuildCommand(
         addAll(config.build.testSources)
         add("-jvm-target")
         add(config.build.jvmTarget)
+        addAll(languageVersionArgs(config))
         addAll(pluginArgs)
         add("-d")
         add(TEST_CLASSES_DIR)

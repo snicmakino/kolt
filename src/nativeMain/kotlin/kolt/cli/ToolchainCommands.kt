@@ -40,12 +40,12 @@ private fun printToolchainUsage() {
 private fun doToolchainInstall(): Result<Unit, Int> {
     val config = loadProjectConfig().getOrElse { return Err(it) }
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_CONFIG_ERROR) }
-    installKotlincToolchain(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+    installKotlincToolchain(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     if (config.build.jdk != null) {
         installJdkToolchain(config.build.jdk, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     }
     if (config.build.target == "native") {
-        installKonancToolchain(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+        installKonancToolchain(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     }
     return Ok(Unit)
 }

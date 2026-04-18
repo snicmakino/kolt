@@ -156,9 +156,14 @@ class BtaIncrementalCompiler private constructor(
         // with `'moduleName' is null!` at `IncrementalJvmCompilerRunnerBase.makeServices`.
         // The structured `set(...)` calls therefore come AFTER the
         // passthrough so their values survive into the final compile.
+        // #162: language/api-version args must ride the same applyArgumentStrings
+        // batch as plugin args — the reset-to-default behavior documented above
+        // would wipe whichever translator fed an earlier call.
         val translatedPluginArgs = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
-        if (translatedPluginArgs.isNotEmpty()) {
-            builder.compilerArguments.applyArgumentStrings(translatedPluginArgs)
+        val translatedLanguageArgs = LanguageVersionTranslator.translate(request.projectRoot)
+        val freeArgs = translatedPluginArgs + translatedLanguageArgs
+        if (freeArgs.isNotEmpty()) {
+            builder.compilerArguments.applyArgumentStrings(freeArgs)
         }
 
         if (request.classpath.isNotEmpty()) {

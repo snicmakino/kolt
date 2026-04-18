@@ -114,7 +114,8 @@ package = "libcurl"
 |-----|-------------|---------|
 | `name` | Project name | (required) |
 | `version` | Project version | (required) |
-| `[kotlin] version` | Kotlin compiler version | (required) |
+| `[kotlin] version` | Kotlin language/API version (and the default compiler version) | (required) |
+| `[kotlin] compiler` | Override kotlinc/daemon version independently of `version`. Must be `>= version`. | `version` |
 | `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
 | `[build] target` | `"jvm"` or `"native"` | (required) |
 | `[build] jvm_target` | JVM bytecode target | `"17"` |
@@ -181,6 +182,25 @@ Stored at `~/.kolt/toolchains/kotlinc/{version}/`. Used automatically when avail
 ## Kotlin Version Support
 
 kolt supports **Kotlin 2.3.0 and above** on the daemon path, including `[kotlin.plugins]` projects. Kotlin 2.3.20 is the bundled default (no fetch on first build); other 2.3.x patches get `kotlin-build-tools-impl` fetched from Maven Central on first use. Below 2.3.0 is a soft floor — `kolt build` falls back to subprocess with a one-line warning, or silence it with `--no-daemon`. Forward support (2.4.x+) is re-evaluated at each Kotlin language release. Policy: ADR 0022.
+
+### Pinning `[kotlin] compiler` independently of `version`
+
+To target an older language surface (e.g. 2.1) while still running on the
+daemon, split compiler and language: `version` stays the language/API version
+(also what the lockfile records), and `compiler` pins the kotlinc/daemon
+version — `compiler` defaults to `version` and must be `>= version`.
+
+```toml
+[kotlin]
+version = "2.1.0"
+compiler = "2.3.20"
+```
+
+When the two differ, kolt drives the `compiler` kotlinc and passes
+`-language-version <major.minor>` / `-api-version <major.minor>` (derived
+from `version` — kotlinc only accepts `major.minor`) to every compile so the
+language surface stays pinned. Equal (or unset) `compiler` keeps the
+flag-free original behavior.
 
 ## Exit Codes
 

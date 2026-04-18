@@ -17,11 +17,13 @@ fun testConfig(
     repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
     jdk: String? = null,
     target: String = "jvm",
-    cinterop: List<CinteropConfig> = emptyList()
+    cinterop: List<CinteropConfig> = emptyList(),
+    kotlinVersion: String = "2.1.0",
+    kotlinCompiler: String? = null,
 ) = KoltConfig(
     name = name,
     version = "0.1.0",
-    kotlin = KotlinSection(version = "2.1.0", plugins = plugins),
+    kotlin = KotlinSection(version = kotlinVersion, compiler = kotlinCompiler, plugins = plugins),
     build = BuildSection(
         target = target,
         jvmTarget = jvmTarget,

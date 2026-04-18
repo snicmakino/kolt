@@ -46,7 +46,7 @@ private fun resolveEnabledPluginJarsResult(
 ): Result<Map<String, String>, PluginFetchExit> {
     return fetchEnabledPluginJars(
         plugins = config.kotlin.plugins,
-        kotlinVersion = config.kotlin.version,
+        kotlinVersion = config.kotlin.effectiveCompiler,
         cacheBase = paths.cacheBase,
         deps = defaultPluginFetcherDeps(),
     ).getOrElse { err ->

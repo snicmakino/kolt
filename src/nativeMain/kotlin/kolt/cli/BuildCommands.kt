@@ -65,7 +65,7 @@ internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
         return Ok(Unit)
     }
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
-    val managedKotlincBin = ensureKotlincBin(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+    val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
     val classpath = resolveDependencies(config).getOrElse { return Err(it) }
     val pArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
@@ -137,7 +137,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
         // cached builds don't hard-exit on a failed fetch.
         return Ok(BuildResult(config, cachedState!!.classpath, managedJavaBin))
     }
-    val managedKotlincBin = ensureKotlincBin(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+    val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     val classpath = resolveDependencies(config).getOrElse { return Err(it) }
     val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
@@ -225,7 +225,7 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
     val startMark = TimeSource.Monotonic.markNow()
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
-    val managedKonancBin = ensureKonancBin(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
+    val managedKonancBin = ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
     val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
 
@@ -295,13 +295,13 @@ private fun newestDefMtime(config: KoltConfig): Long? {
 
 private fun runCinterop(config: KoltConfig, paths: KoltPaths): Result<List<String>, Int> {
     if (config.cinterop.isEmpty()) return Ok(emptyList())
-    val managedCinteropBin = paths.cinteropBin(config.kotlin.version)
+    val managedCinteropBin = paths.cinteropBin(config.kotlin.effectiveCompiler)
     val klibs = mutableListOf<String>()
     for (entry in config.cinterop) {
         val klibPath = cinteropOutputKlibPath(entry)
         val stampPath = cinteropStampPath(entry)
         val defMtime = fileMtime(entry.def)
-        val currentStamp = defMtime?.let { cinteropStamp(entry, it, config.kotlin.version) }
+        val currentStamp = defMtime?.let { cinteropStamp(entry, it, config.kotlin.effectiveCompiler) }
 
         if (currentStamp != null && fileExists(klibPath) && fileExists(stampPath)) {
             val previousStamp = readFileAsString(stampPath).get()
@@ -386,7 +386,7 @@ internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = t
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
     val consoleLauncherPath = ensureTool(paths, CONSOLE_LAUNCHER_SPEC).getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
-    val managedKotlincBin = ensureKotlincBin(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
+    val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
 
     val pArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
 
@@ -434,7 +434,7 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>): Result<Uni
     val testStartMark = TimeSource.Monotonic.markNow()
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
-    val managedKonancBin = ensureKonancBin(config.kotlin.version, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
+    val managedKonancBin = ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
     val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
 
     val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
@@ -516,7 +516,7 @@ internal fun resolveCompilerBackend(
     if (!useDaemon) return subprocessBackend
 
     val setup = preconditionResolver(
-        paths, config.kotlin.version, absProjectPath, bundledKotlinVersion,
+        paths, config.kotlin.effectiveCompiler, absProjectPath, bundledKotlinVersion,
     ).getOrElse { err ->
         warningSink(formatDaemonPreconditionWarning(err))
         return subprocessBackend

@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ConfigTest {
 
@@ -862,5 +863,82 @@ class ConfigTest {
 
         assertEquals(1, config.dependencies.size)
         assertEquals(1, config.cinterop.size)
+    }
+
+    @Test
+    fun parseConfigCompilerUnsetDefaultsToVersion() {
+        val config = assertNotNull(parseConfig(minimalToml).get())
+
+        assertNull(config.kotlin.compiler)
+        assertEquals("2.1.0", config.kotlin.effectiveCompiler)
+    }
+
+    @Test
+    fun parseConfigCompilerEqualToVersion() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.3.20"
+            compiler = "2.3.20"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+
+        assertEquals("2.3.20", config.kotlin.compiler)
+        assertEquals("2.3.20", config.kotlin.effectiveCompiler)
+    }
+
+    @Test
+    fun parseConfigCompilerHigherThanVersion() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+            compiler = "2.3.20"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+
+        assertEquals("2.1.0", config.kotlin.version)
+        assertEquals("2.3.20", config.kotlin.compiler)
+        assertEquals("2.3.20", config.kotlin.effectiveCompiler)
+    }
+
+    @Test
+    fun parseConfigCompilerLowerThanVersionRejected() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.3.20"
+            compiler = "2.1.0"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val err = assertNotNull(parseConfig(toml).getError())
+        val parseFailed = assertIs<ConfigError.ParseFailed>(err)
+        assertTrue(
+            parseFailed.message.contains("compiler") && parseFailed.message.contains("2.1.0") && parseFailed.message.contains("2.3.20"),
+            "expected message to name both versions, got: ${parseFailed.message}",
+        )
     }
 }

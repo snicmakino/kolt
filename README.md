@@ -5,7 +5,7 @@
 
 English | [日本語](README.ja.md)
 
-> v0.11.0 — Early-stage project. Expect breaking changes.
+> v0.11.1 — Early-stage project. Expect breaking changes.
 
 A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
 
@@ -130,7 +130,8 @@ jitpack = "https://jitpack.io"
 |-------|-------------|---------|
 | `name` | Project name | (required) |
 | `version` | Project version | (required) |
-| `[kotlin] version` | Kotlin compiler version | (required) |
+| `[kotlin] version` | Kotlin language/API version (also the default compiler version) | (required) |
+| `[kotlin] compiler` | Override kotlinc/daemon version independently of `version`. Must be `>= version`. | `version` |
 | `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
 | `[build] target` | `"jvm"` or `"native"` | (required) |
 | `[build] jvm_target` | JVM bytecode target | `"17"` |
@@ -304,6 +305,23 @@ kolt supports Kotlin **2.3.0 and above** as a first-class daemon target. Any `ko
 Below 2.3.0 is a soft floor: `kolt build` still works via subprocess compile and prints a one-line warning per affected build. Pass `--no-daemon` to silence the warning — it bypasses the daemon entirely and is always available regardless of Kotlin version.
 
 Support for future Kotlin language releases (2.4.0, 2.5.0, …) is re-evaluated at each release rather than promised ahead of time. See [ADR 0022](docs/adr/0022-supported-kotlin-version-policy.md) for the policy.
+
+### Pinning the compiler independently of the language version
+
+To keep a project on an older language surface (e.g. Kotlin 2.1) while still
+benefitting from the daemon, pin `compiler` to a daemon-supported version:
+
+```toml
+[kotlin]
+version = "2.1.0"      # language / API version
+compiler = "2.3.20"    # kotlinc + daemon version; defaults to `version`
+```
+
+With both set and `compiler > version`, kolt drives the 2.3.20 daemon/kotlinc
+and passes `-language-version 2.1` / `-api-version 2.1` to the compile
+(`major.minor` only — kotlinc rejects the patch form). Setting `compiler <
+version` is rejected at parse time. Set only `version` to get the original
+single-pin behavior.
 
 ## Why kolt?
 

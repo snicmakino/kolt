@@ -6,6 +6,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
+import kolt.resolve.compareVersions
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -28,8 +29,14 @@ data class CinteropConfig(
 @Serializable
 data class KotlinSection(
     val version: String,
+    val compiler: String? = null,
     val plugins: Map<String, Boolean> = emptyMap()
-)
+) {
+    // Compiler/daemon/toolchain selection uses this. `version` alone stays the
+    // language/API version (lockfile key, -language-version flag). When
+    // `compiler` is unset, the two collapse — identical to pre-#162 behavior.
+    val effectiveCompiler: String get() = compiler ?: version
+}
 
 @Serializable
 data class BuildSection(
@@ -74,6 +81,14 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
             ))
         }
         validateMainFqn(config.build.main).getError()?.let { return Err(it) }
+        config.kotlin.compiler?.let { compiler ->
+            if (compareVersions(compiler, config.kotlin.version) < 0) {
+                return Err(ConfigError.ParseFailed(
+                    "[kotlin] compiler '$compiler' is lower than version '${config.kotlin.version}' " +
+                        "(a compiler cannot target a newer language than itself)"
+                ))
+            }
+        }
         // ktoml preserves quotes in map keys; strip them.
         val cleanedDeps = config.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
         val cleanedTestDeps = config.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
