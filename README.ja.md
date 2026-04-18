@@ -291,6 +291,14 @@ v1.0 以降で対応予定：
 - マルチモジュールプロジェクト
 - Kotlin/Java 混合ソースのコンパイル
 
+## Kotlin バージョンサポート
+
+kolt は **Kotlin 2.3.0 以上** を daemon のファーストクラス対象としてサポートします。`kolt.toml` の `kotlin = "2.3.x"` は `[plugins]` を使うプロジェクトも含め常に warm compiler daemon を通ります。Kotlin 2.3.20 はバンドル済みなので初回ビルドでダウンロードは発生しません。他の 2.3.x パッチは初回使用時に Maven Central から取得され `~/.kolt/cache/` にキャッシュされます。
+
+2.3.0 未満は soft floor です：`kolt build` は subprocess で動作し、該当ビルドごとに 1 行の警告が出ます。`--no-daemon` を渡すと警告は消え、Kotlin バージョンによらず常に利用できます。
+
+将来の Kotlin 言語リリース（2.4.0、2.5.0 …）のサポート範囲は事前に約束せず、各リリース時点で再評価します。ポリシーの詳細は [ADR 0022](docs/adr/0022-supported-kotlin-version-policy.md) を参照してください。
+
 ## なぜ kolt？
 
 Gradle は強力ですが、シンプルな Kotlin プロジェクトには重すぎます：
