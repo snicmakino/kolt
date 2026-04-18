@@ -72,52 +72,18 @@ class DaemonPreconditionsTest {
         assertEquals(KOTLIN_VERSION_FLOOR, err.floor)
     }
 
+    // Post-#148: `[plugins]` on the floor (2.3.0) is accepted through the
+    // fetcher — the daemon routes plugins via `-Xplugin=` passthrough which
+    // works across the full 2.3.x family, so there is no version carve-out
+    // for plugin-using projects inside the family.
     @Test
-    fun pluginsRequestedBelow2_3_20ShortCircuitsBeforeAnyProbing() {
-        val result = resolveDaemonPreconditions(
-            paths = paths,
-            kotlincVersion = "2.3.10",
-            absProjectPath = absProject,
-            bundledKotlinVersion = bundledVersion,
-            pluginsRequested = true,
-            ensureJavaBin = { error("must not probe JDK when plugins gate fails") },
-            resolveDaemonJar = { error("must not probe daemon jar when plugins gate fails") },
-            listCompilerJars = { error("must not list compiler jars when plugins gate fails") },
-            resolveBundledBtaImplJars = { error("must not probe BTA-impl jars when plugins gate fails") },
-            fetchBtaImplJars = mustNotFetch,
-        )
-
-        val err = assertIs<DaemonPreconditionError.PluginsRequireMinKotlinVersion>(result.getError())
-        assertEquals("2.3.10", err.requested)
-        assertEquals(KOTLIN_VERSION_FOR_PLUGINS, err.minVersion)
-    }
-
-    @Test
-    fun pluginsRequestedAtMinVersionIsAccepted() {
-        val result = resolveDaemonPreconditions(
-            paths = paths,
-            kotlincVersion = KOTLIN_VERSION_FOR_PLUGINS,
-            absProjectPath = absProject,
-            bundledKotlinVersion = KOTLIN_VERSION_FOR_PLUGINS,
-            pluginsRequested = true,
-            ensureJavaBin = { Ok("/fake/java") },
-            resolveDaemonJar = { okJar },
-            listCompilerJars = { fakeJars },
-            resolveBundledBtaImplJars = { okBtaImpl },
-            fetchBtaImplJars = mustNotFetch,
-        )
-        assertNotNull(result.get())
-    }
-
-    @Test
-    fun pluginsNotRequestedBelow2_3_20IsAcceptedThroughFetcher() {
+    fun pluginsAtFloorIsAcceptedThroughFetcher() {
         var fetchedVersion: String? = null
         val result = resolveDaemonPreconditions(
             paths = paths,
-            kotlincVersion = "2.3.10",
+            kotlincVersion = KOTLIN_VERSION_FLOOR,
             absProjectPath = absProject,
             bundledKotlinVersion = bundledVersion,
-            pluginsRequested = false,
             ensureJavaBin = { Ok("/fake/java") },
             resolveDaemonJar = { okJar },
             listCompilerJars = { fakeJars },
@@ -128,7 +94,7 @@ class DaemonPreconditionsTest {
             },
         )
         assertNotNull(result.get())
-        assertEquals("2.3.10", fetchedVersion)
+        assertEquals(KOTLIN_VERSION_FLOOR, fetchedVersion)
     }
 
     @Test
@@ -355,20 +321,6 @@ class DaemonPreconditionsTest {
                 resolvedEmpty.contains("resolver returned no jars") &&
                 resolvedEmpty.contains("falling back to subprocess compile"),
             "unexpected resolved-empty warning: $resolvedEmpty",
-        )
-        val pluginsGate = formatDaemonPreconditionWarning(
-            DaemonPreconditionError.PluginsRequireMinKotlinVersion(
-                requested = "2.3.10",
-                minVersion = "2.3.20",
-            ),
-        )
-        assertTrue(
-            pluginsGate.contains("2.3.10") &&
-                pluginsGate.contains("2.3.20") &&
-                pluginsGate.contains("compiler plugins") &&
-                pluginsGate.contains("falling back to subprocess compile") &&
-                pluginsGate.contains("--no-daemon"),
-            "unexpected plugins-gate warning: $pluginsGate",
         )
     }
 }

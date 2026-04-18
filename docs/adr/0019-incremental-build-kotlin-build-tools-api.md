@@ -324,6 +324,19 @@ hierarchy that holds `kotlin-build-tools-impl`. The
 `SharedLoaderCompileDriver` pattern from compile-bench spike #86 is the
 working template for the classloader topology.
 
+**Post-#148 mechanism note.** The translator emits `-Xplugin=<jar>`
+tokens and the adapter pushes them through
+`CommonToolArguments.applyArgumentStrings`, not the structured
+`CommonCompilerArguments.COMPILER_PLUGINS` key. The structured key was
+only added in BTA 2.3.20 and rejects assignment on 2.3.0 / 2.3.10
+impls even with an empty list; `applyArgumentStrings` is the one
+passthrough surface present across the full 2.3.x family the daemon
+supports (ADR 0022 §3). Ordering is load-bearing: the passthrough
+call must precede any structured `set(...)` on the builder, because
+`applyArgumentStrings` resets every non-mentioned argument to the
+parser default. See `spike/bta-compat-138/REPORT.md` for the empirical
+verdict.
+
 Rationale: the alternative (option (b), passing plugin settings from
 daemon core via an `IcRequest` field) would force daemon core to carry
 a `pluginClasspaths: List<Path>` and a `compilerOptions: Map<String, String>`
