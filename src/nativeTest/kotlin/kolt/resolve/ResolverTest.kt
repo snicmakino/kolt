@@ -186,7 +186,8 @@ class ResolverTest {
 
     @Test
     fun resolveDetectsKotlinVersionChange() {
-        val config = configWithDeps(mapOf("com.example:lib" to "1.0.0")).copy(kotlin = "2.2.0")
+        val base = configWithDeps(mapOf("com.example:lib" to "1.0.0"))
+        val config = base.copy(kotlin = base.kotlin.copy(version = "2.2.0"))
         val lock = Lockfile(
             version = 1,
             kotlin = "2.1.0",
@@ -215,7 +216,8 @@ class ResolverTest {
 
     @Test
     fun resolveDetectsJvmTargetChange() {
-        val config = configWithDeps(mapOf("com.example:lib" to "1.0.0")).copy(jvmTarget = "21")
+        val base = configWithDeps(mapOf("com.example:lib" to "1.0.0"))
+        val config = base.copy(build = base.build.copy(jvmTarget = "21"))
         val lock = Lockfile(
             version = 1,
             kotlin = "2.1.0",
@@ -262,7 +264,11 @@ class ResolverTest {
 
     @Test
     fun buildLockfileFromResolvedDeps() {
-        val config = testConfig().copy(kotlin = "2.1.0", jvmTarget = "17")
+        val base = testConfig()
+        val config = base.copy(
+            kotlin = base.kotlin.copy(version = "2.1.0"),
+            build = base.build.copy(jvmTarget = "17"),
+        )
         val deps = listOf(
             ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar", transitive = false),
             ResolvedDep("org.example:other", "2.0.0", "def456", "/cache/other.jar", transitive = true)

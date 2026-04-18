@@ -18,7 +18,7 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
     val ktfmtPath = ensureTool(paths, KTFMT_SPEC).getOrElse { eprintln("error: $it"); return Err(EXIT_FORMAT_ERROR) }
 
     val files = mutableListOf<String>()
-    for (dir in config.sources) {
+    for (dir in config.build.sources) {
         if (isDirectory(dir)) {
             files.addAll(listKotlinFiles(dir).getOrElse { error ->
                 eprintln("error: could not read directory ${error.path}")
@@ -26,7 +26,7 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
             })
         }
     }
-    for (dir in config.testSources) {
+    for (dir in config.build.testSources) {
         if (isDirectory(dir)) {
             files.addAll(listKotlinFiles(dir).getOrElse { error ->
                 eprintln("error: could not read directory ${error.path}")
@@ -40,7 +40,7 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
         return Ok(Unit)
     }
 
-    val cmd = formatCommand(ktfmtPath, files, checkOnly, style = config.fmtStyle)
+    val cmd = formatCommand(ktfmtPath, files, checkOnly, style = config.fmt.style)
 
     if (checkOnly) {
         println("checking format...")

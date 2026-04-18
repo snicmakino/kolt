@@ -52,7 +52,7 @@ import kotlin.time.TimeSource
 // `CompilationFailed`.
 class BtaIncrementalCompiler private constructor(
     private val toolchain: KotlinToolchains,
-    // Maps a kolt.toml plugin alias (e.g. "serialization") to the plugin jar
+    // Maps a kolt.toml [kotlin.plugins] alias (e.g. "serialization") to the plugin jar
     // classpath on disk. Injected at construction time so daemon startup owns
     // the policy (walk a plugin-jars directory, read from --plugin-jars CLI,
     // etc.) and :ic stays a pure translator. B-2a defaults this to an empty-
@@ -141,7 +141,7 @@ class BtaIncrementalCompiler private constructor(
 
         val builder = toolchain.jvm.jvmCompilationOperationBuilder(request.sources, request.outputDir)
 
-        // ADR 0019 §9 + #148: kolt.toml [plugins] → `-Xplugin=<jar>` freeArgs
+        // ADR 0019 §9 + #148: kolt.toml [kotlin.plugins] → `-Xplugin=<jar>` freeArgs
         // translation happens inside the adapter, not in daemon core. The
         // translated list is pushed through `applyArgumentStrings` rather
         // than the structured `COMPILER_PLUGINS` key: the structured key is

@@ -1,6 +1,8 @@
 package kolt.build
 
+import kolt.config.BuildSection
 import kolt.config.KoltConfig
+import kolt.config.KotlinSection
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,8 +23,9 @@ class TestDepsTest {
     @Test
     fun nativeTargetInjectsNothing() {
         val config = KoltConfig(
-            name = "my-app", version = "0.1.0", kotlin = "2.1.0",
-            target = "native", main = "main", sources = listOf("src")
+            name = "my-app", version = "0.1.0",
+            kotlin = KotlinSection(version = "2.1.0"),
+            build = BuildSection(target = "native", main = "main", sources = listOf("src")),
         )
         val injected = autoInjectedTestDeps(config)
 
@@ -32,8 +35,9 @@ class TestDepsTest {
     @Test
     fun kotlinVersionMatchesConfig() {
         val config = KoltConfig(
-            name = "my-app", version = "0.1.0", kotlin = "2.2.0",
-            target = "jvm", main = "main", sources = listOf("src")
+            name = "my-app", version = "0.1.0",
+            kotlin = KotlinSection(version = "2.2.0"),
+            build = BuildSection(target = "jvm", main = "main", sources = listOf("src")),
         )
         val injected = autoInjectedTestDeps(config)
 
@@ -92,9 +96,10 @@ class TestDepsTest {
     @Test
     fun mergeAllDepsNativeTargetHasNoAutoInjected() {
         val config = KoltConfig(
-            name = "my-app", version = "0.1.0", kotlin = "2.1.0",
-            target = "native", main = "main", sources = listOf("src"),
-            dependencies = mapOf("com.example:lib" to "1.0.0")
+            name = "my-app", version = "0.1.0",
+            kotlin = KotlinSection(version = "2.1.0"),
+            build = BuildSection(target = "native", main = "main", sources = listOf("src")),
+            dependencies = mapOf("com.example:lib" to "1.0.0"),
         )
         val allDeps = mergeAllDeps(config)
 

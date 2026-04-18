@@ -49,7 +49,7 @@ internal data class CliArgs(
     // integration tests can point at a per-run temp dir without touching
     // the developer's real cache.
     val icRoot: Path,
-    // ADR 0019 §9 + B-2c: `kolt.toml [plugins]` alias → compiler plugin
+    // ADR 0019 §9 + B-2c: `kolt.toml [kotlin.plugins]` alias → compiler plugin
     // classpath mapping. Parsed from `--plugin-jars alias=cp[;alias=cp]`
     // where each `cp` is a File.pathSeparator-joined list. Empty map =
     // no plugins requested; the adapter's PluginTranslator still drives

@@ -35,9 +35,9 @@ fun checkCommand(
         add("-cp")
         add(classpath)
     }
-    addAll(config.sources)
+    addAll(config.build.sources)
     add("-jvm-target")
-    add(config.jvmTarget)
+    add(config.build.jvmTarget)
     addAll(pluginArgs)
 }
 
@@ -54,7 +54,7 @@ fun nativeLibraryCommand(
         add(konancPath ?: "konanc")
         add("-target")
         add(NATIVE_TARGET)
-        addAll(config.sources)
+        addAll(config.build.sources)
         add("-p")
         add("library")
         add("-nopack")
@@ -84,7 +84,7 @@ fun nativeLinkCommand(
         add("-p")
         add("program")
         add("-e")
-        add(config.main)
+        add(config.build.main)
         for (klib in klibs) {
             add("-l")
             add(klib)
@@ -107,8 +107,8 @@ fun nativeTestLibraryCommand(
         add(konancPath ?: "konanc")
         add("-target")
         add(NATIVE_TARGET)
-        addAll(config.sources)
-        addAll(config.testSources)
+        addAll(config.build.sources)
+        addAll(config.build.testSources)
         add("-p")
         add("library")
         add("-nopack")

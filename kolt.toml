@@ -1,20 +1,24 @@
 name = "kolt"
-version = "0.10.1"
-kotlin = "2.3.20"
+version = "0.11.0"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
 target = "native"
 main = "kolt.cli.main"
 sources = ["src/nativeMain/kotlin"]
 test_sources = ["src/nativeTest/kotlin"]
-
-[[cinterop]]
-name = "libcurl"
-def = "src/nativeInterop/cinterop/libcurl.def"
-
-[plugins]
-serialization = true
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
 "com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
 "org.kotlincrypto.hash:sha2-256" = "0.2.7"
 "com.akuleshov7:ktoml-core" = "0.7.1"
+
+[[cinterop]]
+name = "libcurl"
+def = "src/nativeInterop/cinterop/libcurl.def"

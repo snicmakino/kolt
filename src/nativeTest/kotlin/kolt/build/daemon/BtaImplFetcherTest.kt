@@ -62,7 +62,7 @@ class BtaImplFetcherTest {
             mapOf("org.jetbrains.kotlin:kotlin-build-tools-impl" to "2.3.10"),
             config.dependencies,
         )
-        assertEquals("jvm", config.target)
+        assertEquals("jvm", config.build.target)
         assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
     }
 
@@ -78,7 +78,7 @@ class BtaImplFetcherTest {
                 Ok(ResolveResult(emptyList(), lockChanged = false))
             },
         )
-        assertEquals("2.3.0", assertNotNull(captured).kotlin)
+        assertEquals("2.3.0", assertNotNull(captured).kotlin.version)
     }
 
     @Test

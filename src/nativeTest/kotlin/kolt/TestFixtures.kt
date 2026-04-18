@@ -1,7 +1,9 @@
 package kolt
 
+import kolt.config.BuildSection
 import kolt.config.CinteropConfig
 import kolt.config.KoltConfig
+import kolt.config.KotlinSection
 import kolt.config.MAVEN_CENTRAL_BASE
 
 fun testConfig(
@@ -19,16 +21,17 @@ fun testConfig(
 ) = KoltConfig(
     name = name,
     version = "0.1.0",
-    kotlin = "2.1.0",
-    target = target,
-    jvmTarget = jvmTarget,
-    main = "com.example.main",
-    sources = sources,
+    kotlin = KotlinSection(version = "2.1.0", plugins = plugins),
+    build = BuildSection(
+        target = target,
+        jvmTarget = jvmTarget,
+        jdk = jdk,
+        main = "com.example.main",
+        sources = sources,
+        testSources = testSources,
+    ),
     dependencies = dependencies,
-    testSources = testSources,
     testDependencies = testDependencies,
-    plugins = plugins,
     repositories = repositories,
-    jdk = jdk,
-    cinterop = cinterop
+    cinterop = cinterop,
 )

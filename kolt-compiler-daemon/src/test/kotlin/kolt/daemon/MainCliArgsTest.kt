@@ -121,7 +121,7 @@ class MainCliArgsTest {
     @Test
     fun pluginJarsOptionalDefaultsToEmptyMap() {
         // ADR 0019 §9 + B-2c: `--plugin-jars` is optional. A project that uses
-        // no compiler plugins (kolt.toml has no `[plugins]` section or all
+        // no compiler plugins (kolt.toml has no `[kotlin.plugins]` section or all
         // entries are `false`) must not be forced to pass the flag.
         val result = parseArgs(
             arrayOf(

@@ -5,7 +5,7 @@
 
 English | [日本語](README.ja.md)
 
-> v0.10.1 — Early-stage project. Expect breaking changes.
+> v0.11.0 — Early-stage project. Expect breaking changes.
 
 A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
 
@@ -101,16 +101,20 @@ kolt --version         Show version
 ```toml
 name = "my-app"
 version = "0.1.0"
-kotlin = "2.3.20"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
 target = "jvm"
 jvm_target = "17"
 main = "main"
 sources = ["src"]
 resources = ["resources"]
 test_resources = ["test-resources"]
-
-[plugins]
-serialization = true
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
@@ -122,20 +126,21 @@ jitpack = "https://jitpack.io"
 
 ### Fields
 
-| Field | Description | Default |
+| Key | Description | Default |
 |-------|-------------|---------|
 | `name` | Project name | (required) |
 | `version` | Project version | (required) |
-| `kotlin` | Kotlin compiler version | (required) |
-| `target` | `"jvm"` | (required) |
-| `jvm_target` | JVM bytecode target | `"17"` |
-| `main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
-| `sources` | Source directories | (required) |
-| `test_sources` | Test source directories | `["test"]` |
-| `resources` | Resource directories to include in build output | `[]` |
-| `test_resources` | Test resource directories added to test classpath | `[]` |
-| `fmt_style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
-| `[plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
+| `[kotlin] version` | Kotlin compiler version | (required) |
+| `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
+| `[build] target` | `"jvm"` or `"native"` | (required) |
+| `[build] jvm_target` | JVM bytecode target | `"17"` |
+| `[build] jdk` | JDK version pin for daemon/runtime | (host JDK) |
+| `[build] main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
+| `[build] sources` | Source directories | (required) |
+| `[build] test_sources` | Test source directories | `["test"]` |
+| `[build] resources` | Resource directories to include in build output | `[]` |
+| `[build] test_resources` | Test resource directories added to test classpath | `[]` |
+| `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
 | `[[cinterop]]` | C interop bindings for `target = "native"` (one array entry per `.def`) | `[]` |
 | `[repositories]` | Maven repositories (name = URL) | Maven Central only |
 
@@ -175,10 +180,10 @@ Repositories are tried in declaration order. When omitted, Maven Central is used
 
 ### Compiler Plugins
 
-Enable Kotlin compiler plugins in `[plugins]`:
+Enable Kotlin compiler plugins in `[kotlin.plugins]`:
 
 ```toml
-[plugins]
+[kotlin.plugins]
 serialization = true
 ```
 
@@ -218,6 +223,7 @@ The `cinterop` klib is regenerated when the `.def` file's mtime changes; source-
 Include resource files (config files, templates, static assets) in the build output:
 
 ```toml
+[build]
 resources = ["resources"]
 test_resources = ["test-resources"]
 ```
@@ -293,7 +299,7 @@ Planned post-1.0:
 
 ## Kotlin version support
 
-kolt supports Kotlin **2.3.0 and above** as a first-class daemon target. Any `kolt.toml` `kotlin = "2.3.x"` uses the warm compiler daemon, including `[plugins]` projects. Kotlin 2.3.20 ships bundled so the first build pays no download; other 2.3.x patches are fetched from Maven Central on first use and cached under `~/.kolt/cache/`.
+kolt supports Kotlin **2.3.0 and above** as a first-class daemon target. Any `kolt.toml` with `[kotlin] version = "2.3.x"` uses the warm compiler daemon, including `[kotlin.plugins]` projects. Kotlin 2.3.20 ships bundled so the first build pays no download; other 2.3.x patches are fetched from Maven Central on first use and cached under `~/.kolt/cache/`.
 
 Below 2.3.0 is a soft floor: `kolt build` still works via subprocess compile and prints a one-line warning per affected build. Pass `--no-daemon` to silence the warning — it bypasses the daemon entirely and is always available regardless of Kotlin version.
 

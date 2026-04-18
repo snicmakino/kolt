@@ -188,7 +188,7 @@ private fun materialize(
     }
 
     if (existingLock != null) {
-        if (existingLock.kotlin != config.kotlin || existingLock.jvmTarget != config.jvmTarget) {
+        if (existingLock.kotlin != config.kotlin.version || existingLock.jvmTarget != config.build.jvmTarget) {
             lockChanged = true
         }
         val resolvedKeys = nodes.map { it.groupArtifact }.toSet()

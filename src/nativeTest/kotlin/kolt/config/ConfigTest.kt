@@ -13,7 +13,11 @@ class ConfigTest {
     private val minimalToml = """
         name = "my-app"
         version = "0.1.0"
-        kotlin = "2.1.0"
+
+        [kotlin]
+        version = "2.1.0"
+
+        [build]
         target = "jvm"
         main = "com.example.main"
         sources = ["src"]
@@ -26,11 +30,11 @@ class ConfigTest {
         val config = assertNotNull(result.get())
         assertEquals("my-app", config.name)
         assertEquals("0.1.0", config.version)
-        assertEquals("2.1.0", config.kotlin)
-        assertEquals("jvm", config.target)
-        assertEquals("com.example.main", config.main)
-        assertEquals(listOf("src"), config.sources)
-        assertEquals("17", config.jvmTarget)
+        assertEquals("2.1.0", config.kotlin.version)
+        assertEquals("jvm", config.build.target)
+        assertEquals("com.example.main", config.build.main)
+        assertEquals(listOf("src"), config.build.sources)
+        assertEquals("17", config.build.jvmTarget)
         assertEquals(emptyMap(), config.dependencies)
     }
 
@@ -39,7 +43,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             jvm_target = "21"
             main = "com.example.main"
@@ -47,7 +55,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("21", config.jvmTarget)
+        assertEquals("21", config.build.jvmTarget)
     }
 
     @Test
@@ -55,7 +63,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -76,21 +88,29 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src", "generated"]
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("src", "generated"), config.sources)
+        assertEquals(listOf("src", "generated"), config.build.sources)
     }
 
     @Test
     fun missingRequiredFieldReturnsErr() {
         val toml = """
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -115,14 +135,18 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = []
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(emptyList(), config.sources)
+        assertEquals(emptyList(), config.build.sources)
     }
 
     @Test
@@ -130,7 +154,11 @@ class ConfigTest {
         val toml = """
             name = 123
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -147,7 +175,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -167,14 +199,18 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "native"
             main = "com.example.main"
             sources = ["src"]
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("native", config.target)
+        assertEquals("native", config.build.target)
     }
 
     @Test
@@ -182,7 +218,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "wasm"
             main = "com.example.main"
             sources = ["src"]
@@ -202,11 +242,15 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+            unknown_field = "value"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
-            unknown_field = "value"
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
@@ -216,7 +260,7 @@ class ConfigTest {
     @Test
     fun parseMinimalConfigHasDefaultTestSources() {
         val config = assertNotNull(parseConfig(minimalToml).get())
-        assertEquals(listOf("test"), config.testSources)
+        assertEquals(listOf("test"), config.build.testSources)
         assertEquals(emptyMap(), config.testDependencies)
     }
 
@@ -225,7 +269,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -233,7 +281,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("test", "integration-test"), config.testSources)
+        assertEquals(listOf("test", "integration-test"), config.build.testSources)
     }
 
     @Test
@@ -241,7 +289,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -260,7 +312,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -280,7 +336,7 @@ class ConfigTest {
     @Test
     fun parseMinimalConfigHasDefaultFmtStyle() {
         val config = assertNotNull(parseConfig(minimalToml).get())
-        assertEquals("google", config.fmtStyle)
+        assertEquals("google", config.fmt.style)
     }
 
     @Test
@@ -288,21 +344,27 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
-            fmt_style = "kotlinlang"
+
+            [fmt]
+            style = "kotlinlang"
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("kotlinlang", config.fmtStyle)
+        assertEquals("kotlinlang", config.fmt.style)
     }
 
     @Test
     fun parseMinimalConfigHasNoPlugins() {
         val config = assertNotNull(parseConfig(minimalToml).get())
-        assertEquals(emptyMap(), config.plugins)
+        assertEquals(emptyMap(), config.kotlin.plugins)
     }
 
     @Test
@@ -310,18 +372,22 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [kotlin.plugins]
+            serialization = true
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
-
-            [plugins]
-            serialization = true
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(1, config.plugins.size)
-        assertEquals(true, config.plugins["serialization"])
+        assertEquals(1, config.kotlin.plugins.size)
+        assertEquals(true, config.kotlin.plugins["serialization"])
     }
 
     @Test
@@ -329,22 +395,26 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
-            target = "jvm"
-            main = "com.example.main"
-            sources = ["src"]
 
-            [plugins]
+            [kotlin]
+            version = "2.1.0"
+
+            [kotlin.plugins]
             serialization = true
             allopen = true
             noarg = false
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(3, config.plugins.size)
-        assertEquals(true, config.plugins["serialization"])
-        assertEquals(true, config.plugins["allopen"])
-        assertEquals(false, config.plugins["noarg"])
+        assertEquals(3, config.kotlin.plugins.size)
+        assertEquals(true, config.kotlin.plugins["serialization"])
+        assertEquals(true, config.kotlin.plugins["allopen"])
+        assertEquals(false, config.kotlin.plugins["noarg"])
     }
 
     @Test
@@ -352,20 +422,24 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [kotlin.plugins]
+            serialization = true
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
 
             [dependencies]
             "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.0"
-
-            [plugins]
-            serialization = true
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(1, config.plugins.size)
+        assertEquals(1, config.kotlin.plugins.size)
         assertEquals(1, config.dependencies.size)
     }
 
@@ -382,7 +456,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -401,7 +479,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -425,7 +507,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -448,7 +534,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -467,8 +557,8 @@ class ConfigTest {
     fun parseMinimalConfigHasDefaultResources() {
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        assertEquals(emptyList(), config.resources)
-        assertEquals(emptyList(), config.testResources)
+        assertEquals(emptyList(), config.build.resources)
+        assertEquals(emptyList(), config.build.testResources)
     }
 
     @Test
@@ -476,7 +566,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -484,7 +578,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("resources"), config.resources)
+        assertEquals(listOf("resources"), config.build.resources)
     }
 
     @Test
@@ -492,7 +586,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -500,7 +598,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("resources", "assets"), config.resources)
+        assertEquals(listOf("resources", "assets"), config.build.resources)
     }
 
     @Test
@@ -508,7 +606,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -516,7 +618,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("test-resources"), config.testResources)
+        assertEquals(listOf("test-resources"), config.build.testResources)
     }
 
     @Test
@@ -524,7 +626,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -533,8 +639,8 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(listOf("resources"), config.resources)
-        assertEquals(listOf("test-resources"), config.testResources)
+        assertEquals(listOf("resources"), config.build.resources)
+        assertEquals(listOf("test-resources"), config.build.testResources)
     }
 
     @Test
@@ -542,7 +648,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"]
@@ -550,7 +660,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals(emptyList(), config.resources)
+        assertEquals(emptyList(), config.build.resources)
     }
 
     @Test
@@ -559,7 +669,11 @@ class ConfigTest {
             # Project configuration
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             main = "com.example.main"
             sources = ["src"] # main source directory
@@ -580,7 +694,7 @@ class ConfigTest {
     fun parseMinimalConfigHasNullJdk() {
         val config = assertNotNull(parseConfig(minimalToml).get())
 
-        assertNull(config.jdk)
+        assertNull(config.build.jdk)
     }
 
     @Test
@@ -588,7 +702,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             jdk = "21"
             main = "com.example.main"
@@ -596,7 +714,7 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("21", config.jdk)
+        assertEquals("21", config.build.jdk)
     }
 
     @Test
@@ -604,7 +722,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "jvm"
             jdk = "21"
             jvm_target = "17"
@@ -613,8 +735,8 @@ class ConfigTest {
         """.trimIndent()
 
         val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("21", config.jdk)
-        assertEquals("17", config.jvmTarget)
+        assertEquals("21", config.build.jdk)
+        assertEquals("17", config.build.jvmTarget)
     }
 
     @Test
@@ -629,7 +751,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "native"
             main = "com.example.main"
             sources = ["src"]
@@ -653,7 +779,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "native"
             main = "com.example.main"
             sources = ["src"]
@@ -678,7 +808,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "native"
             main = "com.example.main"
             sources = ["src"]
@@ -707,7 +841,11 @@ class ConfigTest {
         val toml = """
             name = "my-app"
             version = "0.1.0"
-            kotlin = "2.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
             target = "native"
             main = "com.example.main"
             sources = ["src"]

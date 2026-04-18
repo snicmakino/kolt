@@ -228,7 +228,7 @@ internal fun doTree(): Result<Unit, Int> {
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_DEPENDENCY_ERROR) }
 
-    if (config.target == "native") {
+    if (config.build.target == "native") {
         val nativeLookup = createNativeLookup(
             config.repositories.values.toList(),
             paths.cacheBase,

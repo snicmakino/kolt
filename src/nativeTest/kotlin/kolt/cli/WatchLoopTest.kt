@@ -17,7 +17,8 @@ class CollectWatchPathsTest {
 
     @Test
     fun buildIncludesResources() {
-        val config = testConfig(sources = listOf("src")).copy(resources = listOf("res"))
+        val base = testConfig(sources = listOf("src"))
+        val config = base.copy(build = base.build.copy(resources = listOf("res")))
         val paths = collectWatchPaths(config, "build")
         assertEquals(listOf(".", "src", "res"), paths)
     }
@@ -42,10 +43,11 @@ class CollectWatchPathsTest {
 
     @Test
     fun testIncludesTestSourcesAndResources() {
-        val config = testConfig(
+        val base = testConfig(
             sources = listOf("src"),
             testSources = listOf("test"),
-        ).copy(testResources = listOf("test-res"))
+        )
+        val config = base.copy(build = base.build.copy(testResources = listOf("test-res")))
         val paths = collectWatchPaths(config, "test")
         assertEquals(listOf(".", "src", "test", "test-res"), paths)
     }
