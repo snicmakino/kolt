@@ -1,85 +1,57 @@
-@file:OptIn(ExperimentalBuildToolsApi::class)
-
 package kolt.daemon.ic
 
 import com.akuleshov7.ktoml.Toml
 import com.akuleshov7.ktoml.TomlInputConfig
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi
-import org.jetbrains.kotlin.buildtools.api.arguments.CompilerPlugin
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Collections
 
-// Translates a project's `kolt.toml` [plugins] section into the BTA-shaped
-// `List<CompilerPlugin>` that BtaIncrementalCompiler attaches to
-// `COMPILER_PLUGINS` on the JvmCompilerArguments builder. Lives inside the
-// adapter per ADR 0019 §9 so daemon core never has to carry a `pluginClasspaths:
-// List<Path>` field whose shape is dictated by BTA.
+// Translates a project's `kolt.toml` [plugins] section into the `-Xplugin=<path>`
+// freeArgs list that `BtaIncrementalCompiler` pushes through
+// `CommonToolArguments.applyArgumentStrings`. Lives inside the adapter per
+// ADR 0019 §9 so daemon core never carries a BTA-shaped `pluginClasspaths`
+// field.
 //
-// The translator is a pure function over (projectRoot, jarResolver). Making the
-// jar resolver injectable keeps the unit tests independent of any real plugin
-// jars on disk, and lets daemon startup wire in a real resolver (e.g. one that
-// walks a plugin-jars directory delivered alongside --compiler-jars). B-2a
-// ships with a trivial `NoopJarResolver` that returns empty classpaths so the
-// BtaIncrementalCompiler call site can still exercise the translation path; a
-// real resolver is a B-2c / daemon-core concern.
+// Why freeArgs and not the structured `COMPILER_PLUGINS` key: the structured
+// key was introduced in BTA 2.3.20. The daemon supports the full 2.3.x line
+// per ADR 0022 §3; `-Xplugin=` + `applyArgumentStrings` is the one passthrough
+// mechanism present across the family (the same mechanism 2.3.20's own
+// `Kotlin230AndBelowWrapper` uses internally to shuttle arguments into a
+// pre-2.3.20 impl). Verdict source: `spike/bta-compat-138/REPORT.md` §"Plugin-passthrough spike: GREEN".
+//
+// Plugin-id aliasing dropped: with `-Xplugin=`, kotlinc reads the plugin
+// identity from the jar's `META-INF/services/org.jetbrains.kotlin.compiler.
+// plugin.CompilerPluginRegistrar` descriptor. The translator only needs to
+// forward resolved jar paths; the alias→id map the 2.3.20 adapter needed is
+// no longer load-bearing.
+//
+// The translator is a pure function over (projectRoot, jarResolver). Making
+// the jar resolver injectable keeps the unit tests independent of any real
+// plugin jars on disk, and lets daemon startup wire in a real resolver that
+// reads from `pluginJars: Map<alias, List<path>>` delivered alongside
+// `--compiler-jars`.
 object PluginTranslator {
 
-    // Kotlin compiler plugin IDs are stable strings the compiler itself uses to
-    // route -P options. `kotlinx-serialization` is the canonical ID for the
-    // serialization plugin across Kotlin 1.x/2.x; the `allopen` / `noarg` IDs
-    // are read from `AllOpenPluginNames.PLUGIN_ID` / `NoArgPluginNames.PLUGIN_ID`
-    // in the Kotlin source tree (verified against v2.3.20). Changing any of
-    // these would break every build that depends on the plugin, so they are
-    // safe to hard-code.
-    const val SERIALIZATION_PLUGIN_ID = "org.jetbrains.kotlinx.serialization"
-    const val ALLOPEN_PLUGIN_ID = "org.jetbrains.kotlin.allopen"
-    const val NOARG_PLUGIN_ID = "org.jetbrains.kotlin.noarg"
-
-    // Alias that kolt.toml users type. The set of accepted aliases is
-    // kept in lock-step with the native client's plugin jar fetcher
-    // (`kolt.resolve.PluginJarFetcher`, the `serialization` / `allopen`
-    // / `noarg` alias map) so a project's `[plugins]` section means the
-    // same thing on the daemon, the subprocess fallback, and the native
-    // konanc path. There is no cross-module test pinning the two sides
-    // together today; adding one is filed as a #65 follow-up nit.
-    private val aliasToPluginId: Map<String, String> = mapOf(
-        "serialization" to SERIALIZATION_PLUGIN_ID,
-        "allopen" to ALLOPEN_PLUGIN_ID,
-        "noarg" to NOARG_PLUGIN_ID,
-    )
-
     /**
-     * Parse `projectRoot/kolt.toml`, project its [plugins] map to the enabled
-     * entries, and ask [jarResolver] for the classpath of each. Returns the
-     * list of `CompilerPlugin` instances to attach to the compile operation.
+     * Parse `projectRoot/kolt.toml`, pick the enabled `[plugins]` entries, ask
+     * [jarResolver] for the classpath of each, and emit one `-Xplugin=<path>`
+     * argument per resolved jar. Resolver order is preserved.
      *
-     * Non-existent `kolt.toml`, absent `[plugins]` section, and plugin entries
-     * set to `false` all collapse to an empty output — the resolver is never
-     * called in those cases, which makes the common "no plugins" path free.
+     * Non-existent `kolt.toml`, absent `[plugins]` section, entries set to
+     * `false`, and resolver returns that are empty for an enabled alias all
+     * collapse to an empty output. The resolver is not called when the
+     * parsed map is empty.
      */
     fun translate(
         projectRoot: Path,
         jarResolver: (alias: String) -> List<Path>,
-    ): List<CompilerPlugin> {
+    ): List<String> {
         val tomlFile = projectRoot.resolve("kolt.toml")
         if (!Files.isRegularFile(tomlFile)) return emptyList()
         val enabledAliases = parseEnabledPluginAliases(tomlFile)
-        if (enabledAliases.isEmpty()) return emptyList()
-        return enabledAliases.map { alias ->
-            val pluginId = aliasToPluginId[alias]
-                // Unknown alias: still emit a CompilerPlugin keyed by the raw
-                // alias string so the BTA layer surfaces a plugin-not-found
-                // error rather than silently dropping the user's request.
-                ?: alias
-            CompilerPlugin(
-                pluginId,
-                jarResolver(alias),
-                /* rawArguments = */ emptyList(),
-                /* orderingRequirements = */ Collections.emptySet(),
-            )
+        return enabledAliases.flatMap { alias ->
+            jarResolver(alias).map { jar -> "-Xplugin=$jar" }
         }
     }
 

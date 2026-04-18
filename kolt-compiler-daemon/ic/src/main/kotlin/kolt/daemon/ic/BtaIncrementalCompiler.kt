@@ -11,7 +11,6 @@ import org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi
 import org.jetbrains.kotlin.buildtools.api.KotlinToolchains
 import org.jetbrains.kotlin.buildtools.api.SharedApiClassesClassLoader
 import org.jetbrains.kotlin.buildtools.api.SourcesChanges
-import org.jetbrains.kotlin.buildtools.api.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.buildtools.api.arguments.JvmCompilerArguments
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmPlatformToolchain.Companion.jvm
 import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperation
@@ -141,24 +140,32 @@ class BtaIncrementalCompiler private constructor(
             .onFailure { metrics.record(METRIC_REAPER_LOCK_FAILED) }
 
         val builder = toolchain.jvm.jvmCompilationOperationBuilder(request.sources, request.outputDir)
+
+        // ADR 0019 §9 + #148: kolt.toml [plugins] → `-Xplugin=<jar>` freeArgs
+        // translation happens inside the adapter, not in daemon core. The
+        // translated list is pushed through `applyArgumentStrings` rather
+        // than the structured `COMPILER_PLUGINS` key: the structured key is
+        // BTA 2.3.20 only and rejects even an empty list on 2.3.0 / 2.3.10
+        // impls, whereas `-Xplugin=` passthrough is accepted across the whole
+        // 2.3.x family (verified by spike/bta-compat-138/REPORT.md §"Plugin-passthrough spike: GREEN").
+        //
+        // **Ordering is load-bearing.** `applyArgumentStrings` resets every
+        // argument it does not mention back to the parser default — observed
+        // failure: running it after `MODULE_NAME` was assigned via the
+        // structured setter nulls out `moduleName` and BTA fails the compile
+        // with `'moduleName' is null!` at `IncrementalJvmCompilerRunnerBase.makeServices`.
+        // The structured `set(...)` calls therefore come AFTER the
+        // passthrough so their values survive into the final compile.
+        val translatedPluginArgs = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
+        if (translatedPluginArgs.isNotEmpty()) {
+            builder.compilerArguments.applyArgumentStrings(translatedPluginArgs)
+        }
+
         if (request.classpath.isNotEmpty()) {
             builder.compilerArguments[JvmCompilerArguments.CLASSPATH] =
                 request.classpath.joinToString(File.pathSeparator) { it.toString() }
         }
         builder.compilerArguments[JvmCompilerArguments.MODULE_NAME] = moduleNameFor(request)
-
-        // ADR 0019 §9: kolt.toml [plugins] → List<CompilerPlugin> translation
-        // happens inside the adapter, not in daemon core. The COMPILER_PLUGINS
-        // structured argument key was introduced in BTA 2.3.20; setting it
-        // against a 2.3.0–2.3.10 impl raises "available only since 2.3.20"
-        // even with an empty list (#138 follow-up audit). Skip the assignment
-        // when there are no plugins so plugin-free projects build on the full
-        // 2.3.x family. Plugin-using projects still need 2.3.20+ daemon, or
-        // --no-daemon, until a freeArgs-based pre-2.3.20 path lands.
-        val translatedPlugins = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
-        if (translatedPlugins.isNotEmpty()) {
-            builder.compilerArguments[CommonCompilerArguments.COMPILER_PLUGINS] = translatedPlugins
-        }
 
         // #127: cached by ClasspathSnapshotCache; see class doc for key/error policy.
         val dependenciesSnapshotFiles = classpathSnapshotCache.getOrComputeSnapshots(request.classpath)
@@ -372,12 +379,11 @@ class BtaIncrementalCompiler private constructor(
         fun create(
             btaImplJars: List<Path>,
             // Defaults to an empty-result resolver: every plugin alias maps to
-            // an empty classpath. Production daemon startup overrides this with
-            // a resolver that walks a known plugin-jars directory. B-2a's
-            // acceptance criterion 4 requires the translation path to be
-            // exercised, not for plugins to actually compile — so even this
-            // default still attaches `COMPILER_PLUGINS` when kolt.toml lists
-            // enabled entries.
+            // an empty classpath, which collapses to no `-Xplugin=` freeArg
+            // emitted. Production daemon startup overrides this with a
+            // resolver that looks up the `pluginJars` map passed through
+            // `--plugin-jars`; tests that do not exercise plugin delivery
+            // rely on this default.
             pluginJarResolver: (alias: String) -> List<Path> = { _ -> emptyList() },
             metrics: IcMetricsSink = NoopIcMetricsSink,
             // ADR 0019 §Negative follow-up (#127): shared directory for cached

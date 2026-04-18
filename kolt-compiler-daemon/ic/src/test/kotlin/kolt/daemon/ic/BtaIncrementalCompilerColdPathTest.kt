@@ -184,10 +184,10 @@ class BtaIncrementalCompilerColdPathTest {
                 resolverCalls += alias
                 // Return an empty classpath on purpose: the point of this test is
                 // to prove the translation path is reached, not to successfully
-                // load a real plugin. Empty classpath means BTA is asked to
-                // attach a plugin id without a jar, which may or may not produce
-                // a compile-time error depending on how eagerly BTA validates
-                // COMPILER_PLUGINS — either outcome is acceptable here.
+                // load a real plugin. Post-#148 the translator collapses an
+                // empty resolution to zero `-Xplugin=` freeArgs, so the compile
+                // simply proceeds without the plugin attached. The assertion
+                // that matters here is that the resolver was consulted at all.
                 emptyList()
             },
         ).getOrElse { fail("failed to load BTA toolchain: $it") }

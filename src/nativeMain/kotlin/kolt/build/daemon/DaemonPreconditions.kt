@@ -27,15 +27,6 @@ internal data class DaemonSetup(
 // SharedApiClassesClassLoader exposes.
 internal const val KOTLIN_VERSION_FLOOR = "2.3.0"
 
-// BTA's structured `COMPILER_PLUGINS` argument key was introduced in 2.3.20.
-// Before that, the impl rejects the key even with an empty list, so a
-// project that actually has plugins configured cannot run on the daemon
-// against a pre-2.3.20 BTA-impl. The gap is recoverable in principle via
-// `freeArgs` passthrough (`-Xplugin=...`) but that path is unimplemented;
-// for now, plugin-using projects on 2.3.0–2.3.10 take the subprocess
-// fallback rail with a dedicated warning. Tracked as a #138 follow-up.
-internal const val KOTLIN_VERSION_FOR_PLUGINS = "2.3.20"
-
 // None of these are build failures — ADR 0016 §5.
 internal sealed interface DaemonPreconditionError {
     data class BootstrapJdkInstallFailed(
@@ -62,14 +53,6 @@ internal sealed interface DaemonPreconditionError {
         val version: String,
         val cause: BtaImplFetchError,
     ) : DaemonPreconditionError
-
-    // Plugins requested but the requested Kotlin version pre-dates
-    // BTA's structured COMPILER_PLUGINS argument (2.3.20). See the
-    // KOTLIN_VERSION_FOR_PLUGINS const for context.
-    data class PluginsRequireMinKotlinVersion(
-        val requested: String,
-        val minVersion: String,
-    ) : DaemonPreconditionError
 }
 
 internal fun resolveDaemonPreconditions(
@@ -77,7 +60,6 @@ internal fun resolveDaemonPreconditions(
     kotlincVersion: String,
     absProjectPath: String,
     bundledKotlinVersion: String,
-    pluginsRequested: Boolean = false,
     ensureJavaBin: (KoltPaths) -> Result<String, BootstrapJdkError> = ::ensureBootstrapJavaBin,
     resolveDaemonJar: () -> DaemonJarResolution = ::resolveDaemonJar,
     listCompilerJars: (String) -> List<String>? = { dir -> listJarFiles(dir).getOrElse { null } },
@@ -93,15 +75,6 @@ internal fun resolveDaemonPreconditions(
             DaemonPreconditionError.KotlinVersionBelowFloor(
                 requested = kotlincVersion,
                 floor = KOTLIN_VERSION_FLOOR,
-            ),
-        )
-    }
-
-    if (pluginsRequested && compareVersions(kotlincVersion, KOTLIN_VERSION_FOR_PLUGINS) < 0) {
-        return Err(
-            DaemonPreconditionError.PluginsRequireMinKotlinVersion(
-                requested = kotlincVersion,
-                minVersion = KOTLIN_VERSION_FOR_PLUGINS,
             ),
         )
     }
@@ -171,10 +144,6 @@ internal fun formatDaemonPreconditionWarning(err: DaemonPreconditionError): Stri
     is DaemonPreconditionError.BtaImplFetchFailed ->
         "warning: could not fetch kotlin-build-tools-impl ${err.version} from Maven Central " +
             "(${formatBtaImplFetchError(err.cause)}) — falling back to subprocess compile"
-    is DaemonPreconditionError.PluginsRequireMinKotlinVersion ->
-        "warning: kolt.toml uses compiler plugins which require Kotlin >= ${err.minVersion} on the daemon path; " +
-            "your kolt.toml requests ${err.requested} — falling back to subprocess compile. " +
-            "Pass --no-daemon to silence this warning."
 }
 
 private fun formatBtaImplFetchError(err: BtaImplFetchError): String = when (err) {

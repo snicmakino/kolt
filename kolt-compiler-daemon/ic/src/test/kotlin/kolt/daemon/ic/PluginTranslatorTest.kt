@@ -1,5 +1,3 @@
-@file:OptIn(org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi::class)
-
 package kolt.daemon.ic
 
 import java.nio.file.Files
@@ -9,26 +7,25 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// Unit tests for the kolt.toml [plugins] → CompilerPlugin translation path
-// defined by ADR 0019 §9. PluginTranslator is a pure function: given a
-// projectRoot and a jar resolver, it parses kolt.toml and emits the list of
-// CompilerPlugin instances that BtaIncrementalCompiler will attach to the
-// `COMPILER_PLUGINS` compiler argument on the JvmCompilationOperation.
+// Unit tests for the kolt.toml [plugins] → freeArgs translation path. Issue
+// #148 flipped the translator output from the structured `COMPILER_PLUGINS`
+// shape (2.3.20-only) to CLI-style `-Xplugin=<jar>` strings fed through
+// `CommonToolArguments.applyArgumentStrings`. The latter works against every
+// 2.3.x BTA impl the daemon supports — see spike/bta-compat-138/REPORT.md.
 //
-// The resolver is injected so these tests can run without any real plugin
-// jars on disk — B-2a only needs to prove the translation path exists and is
-// exercised from the compile path. Actual plugin jar delivery (e.g. real
-// kotlinx-serialization-compiler-plugin.jar) is a B-2b / daemon-core concern.
+// Plugin-id aliasing is no longer needed: kotlinc discovers the plugin via
+// the jar's `META-INF/services/.../CompilerPluginRegistrar` service
+// descriptor, so the translator just passes through resolved jar paths.
 class PluginTranslatorTest {
 
     @Test
     fun `missing kolt_toml yields an empty plugin list`() {
         val projectRoot = Files.createTempDirectory("plugin-translator-empty-")
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { _ -> error("resolver must not be called when no plugins section") },
         )
-        assertTrue(plugins.isEmpty(), "no kolt.toml → no plugins, got $plugins")
+        assertTrue(args.isEmpty(), "no kolt.toml → no plugin args, got $args")
     }
 
     @Test
@@ -44,15 +41,15 @@ class PluginTranslatorTest {
             sources = ["src/main/kotlin"]
             """.trimIndent(),
         )
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { _ -> error("resolver must not be called when plugins map is empty") },
         )
-        assertTrue(plugins.isEmpty())
+        assertTrue(args.isEmpty())
     }
 
     @Test
-    fun `serialization plugin entry is translated to a CompilerPlugin`() {
+    fun `serialization plugin entry emits one -Xplugin= arg per resolved jar`() {
         val projectRoot = Files.createTempDirectory("plugin-translator-serialization-")
         projectRoot.resolve("kolt.toml").writeText(
             """
@@ -70,7 +67,7 @@ class PluginTranslatorTest {
         val fakeJar = Path.of("/fake/kotlinx-serialization-compiler-plugin.jar")
         val resolved = mutableListOf<String>()
 
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { name ->
                 resolved += name
@@ -79,10 +76,7 @@ class PluginTranslatorTest {
         )
 
         assertEquals(listOf("serialization"), resolved, "resolver should be asked once for the serialization plugin")
-        assertEquals(1, plugins.size, "expected exactly one translated plugin, got $plugins")
-        val plugin = plugins.single()
-        assertEquals(PluginTranslator.SERIALIZATION_PLUGIN_ID, plugin.pluginId)
-        assertEquals(listOf(fakeJar), plugin.classpath)
+        assertEquals(listOf("-Xplugin=$fakeJar"), args)
     }
 
     @Test
@@ -101,21 +95,19 @@ class PluginTranslatorTest {
             serialization = false
             """.trimIndent(),
         )
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { _ -> error("resolver must not be called for disabled plugin") },
         )
-        assertTrue(plugins.isEmpty())
+        assertTrue(args.isEmpty())
     }
 
-    // #65 native client wiring: allopen / noarg join serialization in the
-    // alias map so the JVM build path can enable them via kolt.toml. The
-    // plugin IDs are the stock Kotlin compiler ones (`org.jetbrains.kotlin.
-    // allopen`, `org.jetbrains.kotlin.noarg`) — not vendor-renamed — so a
-    // future bump of the kolt-compiler-daemon kotlin version does not need
-    // to revisit this map.
+    // #65 native client wiring: allopen / noarg must also translate through
+    // the same passthrough path. The translator is alias-agnostic now — it
+    // only trusts the resolver — so this test pins the "resolver gets asked"
+    // behaviour for all three known aliases.
     @Test
-    fun `allopen plugin entry is translated to the stock allopen CompilerPlugin id`() {
+    fun `allopen plugin entry emits -Xplugin= passthrough args`() {
         val projectRoot = Files.createTempDirectory("plugin-translator-allopen-")
         projectRoot.resolve("kolt.toml").writeText(
             """
@@ -131,17 +123,15 @@ class PluginTranslatorTest {
             """.trimIndent(),
         )
         val fakeJar = Path.of("/fake/allopen-compiler-plugin.jar")
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { name -> if (name == "allopen") listOf(fakeJar) else emptyList() },
         )
-        assertEquals(1, plugins.size)
-        assertEquals(PluginTranslator.ALLOPEN_PLUGIN_ID, plugins.single().pluginId)
-        assertEquals(listOf(fakeJar), plugins.single().classpath)
+        assertEquals(listOf("-Xplugin=$fakeJar"), args)
     }
 
     @Test
-    fun `noarg plugin entry is translated to the stock noarg CompilerPlugin id`() {
+    fun `noarg plugin entry emits -Xplugin= passthrough args`() {
         val projectRoot = Files.createTempDirectory("plugin-translator-noarg-")
         projectRoot.resolve("kolt.toml").writeText(
             """
@@ -157,24 +147,48 @@ class PluginTranslatorTest {
             """.trimIndent(),
         )
         val fakeJar = Path.of("/fake/noarg-compiler-plugin.jar")
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { name -> if (name == "noarg") listOf(fakeJar) else emptyList() },
         )
-        assertEquals(1, plugins.size)
-        assertEquals(PluginTranslator.NOARG_PLUGIN_ID, plugins.single().pluginId)
-        assertEquals(listOf(fakeJar), plugins.single().classpath)
+        assertEquals(listOf("-Xplugin=$fakeJar"), args)
     }
 
     @Test
-    fun `unresolved plugin jar produces an empty classpath but still emits a CompilerPlugin`() {
-        // An empty classpath from the resolver does not mean "skip this plugin":
-        // B-2a's plugin-jar delivery path is not wired yet, so the resolver
-        // legitimately returns emptyList() for every known id. The translator
-        // still emits a CompilerPlugin so the attached COMPILER_PLUGINS list is
-        // non-empty and the BTA layer sees the plugin request. This matches the
-        // #112 acceptance criterion 4 wording: "a compile failure that reaches
-        // the BTA layer with the plugin classpath attached is sufficient".
+    fun `multi-jar resolution emits one arg per jar preserving resolver order`() {
+        val projectRoot = Files.createTempDirectory("plugin-translator-multijar-")
+        projectRoot.resolve("kolt.toml").writeText(
+            """
+            name = "demo"
+            version = "0.1.0"
+            kotlin = "2.3.20"
+            target = "jvm"
+            main = "demo.Main"
+            sources = ["src/main/kotlin"]
+
+            [plugins]
+            serialization = true
+            """.trimIndent(),
+        )
+        val jars = listOf(
+            Path.of("/fake/kotlinx-serialization-compiler-plugin.jar"),
+            Path.of("/fake/kotlinx-serialization-compiler-plugin-embeddable.jar"),
+        )
+        val args = PluginTranslator.translate(
+            projectRoot = projectRoot,
+            jarResolver = { _ -> jars },
+        )
+        assertEquals(jars.map { "-Xplugin=$it" }, args)
+    }
+
+    @Test
+    fun `empty resolver result for an enabled plugin produces no args`() {
+        // Production upstream (`PluginJarFetcher` in the CLI) fails before the
+        // daemon request is built if a plugin jar cannot be fetched, so the
+        // resolver never returns an empty list for an enabled alias in
+        // practice. This test pins the boundary case: if it does happen
+        // (test mocks, future resolver rewiring) the translator emits no
+        // `-Xplugin=` entries rather than a malformed one.
         val projectRoot = Files.createTempDirectory("plugin-translator-unresolved-")
         projectRoot.resolve("kolt.toml").writeText(
             """
@@ -189,11 +203,10 @@ class PluginTranslatorTest {
             serialization = true
             """.trimIndent(),
         )
-        val plugins = PluginTranslator.translate(
+        val args = PluginTranslator.translate(
             projectRoot = projectRoot,
             jarResolver = { _ -> emptyList() },
         )
-        assertEquals(1, plugins.size)
-        assertTrue(plugins.single().classpath.isEmpty())
+        assertTrue(args.isEmpty())
     }
 }
