@@ -171,6 +171,10 @@ kolt toolchain install   # Download kotlinc version from kolt.toml
 
 Stored at `~/.kolt/toolchains/kotlinc/{version}/`. Used automatically when available, falls back to system `kotlinc`.
 
+## Kotlin Version Support
+
+kolt supports **Kotlin 2.3.0 and above** on the daemon path, including `[plugins]` projects. Kotlin 2.3.20 is the bundled default (no fetch on first build); other 2.3.x patches get `kotlin-build-tools-impl` fetched from Maven Central on first use. Below 2.3.0 is a soft floor — `kolt build` falls back to subprocess with a one-line warning, or silence it with `--no-daemon`. Forward support (2.4.x+) is re-evaluated at each Kotlin language release. Policy: ADR 0022.
+
 ## Exit Codes
 
 | Code | Meaning |

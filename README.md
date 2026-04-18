@@ -291,6 +291,14 @@ Planned post-1.0:
 - Multi-module projects
 - Mixed Kotlin/Java source compilation
 
+## Kotlin version support
+
+kolt supports Kotlin **2.3.0 and above** as a first-class daemon target. Any `kolt.toml` `kotlin = "2.3.x"` uses the warm compiler daemon, including `[plugins]` projects. Kotlin 2.3.20 ships bundled so the first build pays no download; other 2.3.x patches are fetched from Maven Central on first use and cached under `~/.kolt/cache/`.
+
+Below 2.3.0 is a soft floor: `kolt build` still works via subprocess compile and prints a one-line warning per affected build. Pass `--no-daemon` to silence the warning — it bypasses the daemon entirely and is always available regardless of Kotlin version.
+
+Support for future Kotlin language releases (2.4.0, 2.5.0, …) is re-evaluated at each release rather than promised ahead of time. See [ADR 0022](docs/adr/0022-supported-kotlin-version-policy.md) for the policy.
+
 ## Why kolt?
 
 Gradle is powerful but heavy for simple Kotlin projects. It imposes:
