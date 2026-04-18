@@ -68,7 +68,7 @@ However, touch and abi-neutral show no improvement over cold within this candida
 
 IC provides two benefits:
 
-1. **Cold builds are faster than baseline** (but not as fast as lib-cache-auto). The IC harness invokes konanc directly, bypassing kolt's overhead. This accounts for part of the difference.
+1. **Cold builds are faster than baseline.** Comparing lib-cache (effectively vanilla konanc) to ic shows that the `-Xenable-incremental-compilation` flag changes konanc's compilation strategy even on first build — native-1: 18.2s → 7.6s (58%), native-50: 27.6s → 15.8s (43%). kolt's overhead is negligible (~10ms config parsing + cache check), confirmed by lib-cache ≈ baseline across all sizes.
 2. **Touch/abi-neutral are significantly faster than cold**, especially at larger sizes:
    - native-50: cold 15.8s → touch 9.7s (39% reduction)
    - native-25: cold 11.6s → touch 8.1s (30% reduction)
@@ -83,7 +83,7 @@ Since lib-cache has no effect, combining it with ic produces the same results as
 ## Measurement caveats
 
 1. **Stage 1 included in all times.** IC affects stage 2 only, but measured times include stage 1 (full source recompilation). The true IC benefit on stage 2 is larger than the total-time reduction suggests.
-2. **konanc direct vs kolt.** Candidate measurements invoke konanc directly, while baseline uses kolt. kolt adds ~10ms overhead (config parsing, cache check), which is negligible. The bigger difference is that kolt's BuildCache skips both stages on noop (11ms), while konanc has no equivalent — but noop was excluded from candidate measurements for this reason.
+2. **konanc direct vs kolt.** Candidate measurements invoke konanc directly, while baseline uses kolt. Comparing lib-cache (vanilla konanc) to baseline confirms kolt's overhead is negligible. noop was excluded from candidate measurements because kolt's BuildCache (11ms) handles that layer.
 3. **WSL2.** File I/O variance is higher than bare metal. Medians are reliable but min/max spread is wide.
 
 ## Recommendation
