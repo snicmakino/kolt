@@ -1,6 +1,8 @@
 package bench
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.CountDownLatch
 import kotlin.system.measureTimeMillis
 
 fun main() {
@@ -133,6 +135,83 @@ fun main() {
     System.gc()
     Thread.sleep(200)
 
+    // Scenario F: concurrent compiles on a shared URLClassLoader (#91).
+    // Warm the loader first so t=2 isn't dominated by the ~2.5s cold JIT cost —
+    // scaling against rotatingWarm (D) is only meaningful from a hot state.
+    val concurrentPerThread = 20
+    // Include t=1 as an inline serial baseline. Taking it on the same driver right
+    // before the concurrent runs gives an apples-to-apples comparison; the external
+    // rotatingWarm baseline from D is too noisy (early warm ~4x late warm) to use
+    // as the denominator for small-thread-count scaling.
+    val concurrentThreadCounts = listOf(1, 2, 4, 8)
+    println()
+    println(
+        "=== Scenario F: shared loader concurrent compiles " +
+            "(per-thread=$concurrentPerThread, threads=$concurrentThreadCounts) ==="
+    )
+    val sharedF = SharedLoaderCompileDriver(jars, fixtureCp)
+    repeat(10) { sharedF.compile(sources, freshOutputDir()) }
+
+    val concurrentResults = mutableListOf<ConcurrentResult>()
+    for (t in concurrentThreadCounts) {
+        concurrentResults += runConcurrent(sharedF, rotatingSources, t, concurrentPerThread)
+        System.gc()
+        Thread.sleep(200)
+    }
+
+    concurrentResults.forEach { r ->
+        val avg = r.perCompileTimes.average().toLong()
+        val sorted = r.perCompileTimes.sorted()
+        val median = if (sorted.size % 2 == 1) sorted[sorted.size / 2]
+            else (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
+        val throughput = r.totalCompiles * 1000.0 / r.wallMs
+        println(
+            "  t=${r.threads}: wall=${r.wallMs} ms, compiles=${r.totalCompiles}, failures=${r.failures}, " +
+                "per-compile avg=$avg ms, median=$median ms, throughput=${"%.2f".format(throughput)} compiles/sec"
+        )
+        r.firstFailure?.let { e ->
+            println("  first failure: ${e::class.qualifiedName}: ${e.message}")
+            e.stackTrace.take(6).forEach { println("    at $it") }
+            var cause = e.cause
+            while (cause != null && cause !== e) {
+                println("  caused by: ${cause::class.qualifiedName}: ${cause.message}")
+                cause.stackTrace.take(3).forEach { println("    at $it") }
+                cause = cause.cause
+            }
+        }
+    }
+
+    val t1 = concurrentResults.first { it.threads == 1 }
+    val serialThroughputF = t1.totalCompiles * 1000.0 / t1.wallMs
+    val t2 = concurrentResults.first { it.threads == 2 }
+    val t2Throughput = t2.totalCompiles * 1000.0 / t2.wallMs
+    val t2Scaling = t2Throughput / serialThroughputF
+    val scalingGate = 1.5
+    val anyFailures = concurrentResults.any { it.failures > 0 }
+    val verdictF = if (!anyFailures && t2Scaling >= scalingGate) "PASS" else "FAIL"
+
+    println()
+    println("=== Scenario F Verdict ===")
+    println(
+        "Serial baseline (inline t=1, same driver): ${t1.wallMs * 1.0 / t1.totalCompiles} ms/compile, " +
+            "${"%.2f".format(serialThroughputF)} compiles/sec"
+    )
+    concurrentResults.forEach { r ->
+        val throughput = r.totalCompiles * 1000.0 / r.wallMs
+        val scaling = throughput / serialThroughputF
+        println(
+            "  t=${r.threads}: ${"%.2f".format(throughput)} compiles/sec, " +
+                "scaling=${"%.2f".format(scaling)}x, failures=${r.failures}"
+        )
+    }
+    println(
+        "Decision: failures=${concurrentResults.sumOf { it.failures }}, " +
+            "t=2 scaling=${"%.2f".format(t2Scaling)}x (gate >= ${scalingGate}x)  ->  $verdictF"
+    )
+
+    System.gc()
+    Thread.sleep(200)
+
     // Scenario E is gated behind an env flag because a 1000-iteration run takes several
     // minutes. Default off so the routine spike run stays fast; enable with
     //   BENCH_LONG_RUN=1 ./gradlew run
@@ -239,6 +318,66 @@ fun main() {
 }
 
 private data class HeapSample(val iter: Int, val heapMb: Long)
+
+private data class ConcurrentResult(
+    val threads: Int,
+    val wallMs: Long,
+    val totalCompiles: Int,
+    val failures: Int,
+    val firstFailure: Throwable?,
+    val perCompileTimes: List<Long>,
+)
+
+private fun runConcurrent(
+    driver: SharedLoaderCompileDriver,
+    rotatingSources: List<File>,
+    threads: Int,
+    perThread: Int,
+): ConcurrentResult {
+    val startLatch = CountDownLatch(1)
+    val allTimes = Array(threads) { LongArray(perThread) }
+    val failureCounts = IntArray(threads)
+    val firstErrors = arrayOfNulls<Throwable>(threads)
+    val workers = (0 until threads).map { idx ->
+        Thread({
+            startLatch.await()
+            for (i in 0 until perThread) {
+                val src = listOf(rotatingSources[(idx * perThread + i) % rotatingSources.size])
+                var result: CompileResult? = null
+                var error: Throwable? = null
+                val ms = measureTimeMillis {
+                    try {
+                        result = driver.compile(src, freshOutputDir())
+                    } catch (e: Throwable) {
+                        error = if (e is InvocationTargetException) (e.cause ?: e) else e
+                    }
+                }
+                allTimes[idx][i] = ms
+                if (error != null || result !is CompileResult.Ok) {
+                    failureCounts[idx] += 1
+                    if (firstErrors[idx] == null) {
+                        firstErrors[idx] = error
+                            ?: RuntimeException("compile failed: $result")
+                    }
+                }
+            }
+        }, "bench-f-t$threads-$idx").apply { isDaemon = true; start() }
+    }
+    val wallStart = System.currentTimeMillis()
+    startLatch.countDown()
+    workers.forEach { it.join() }
+    val wallMs = System.currentTimeMillis() - wallStart
+    val firstFailure = firstErrors.firstOrNull { it != null }
+    return ConcurrentResult(
+        threads = threads,
+        wallMs = wallMs,
+        totalCompiles = threads * perThread,
+        failures = failureCounts.sum(),
+        firstFailure = firstFailure,
+        perCompileTimes = allTimes.flatMap { it.toList() },
+    )
+}
+
 
 private fun usedHeapMb(): Long {
     val rt = Runtime.getRuntime()
