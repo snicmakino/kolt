@@ -27,6 +27,9 @@ kls-classpath
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Spike fixtures (regenerate via gen.sh)
+spike/**/fixtures/
+
 # Exclude zigpj directory
 zigpj/
 .takt/
