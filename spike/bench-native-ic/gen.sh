@@ -23,7 +23,7 @@ version = "0.1.0"
 version = "$KOTLIN_VERSION"
 
 [build]
-target = "native"
+target = "linuxX64"
 main = "bench.main"
 sources = ["src"]
 EOF

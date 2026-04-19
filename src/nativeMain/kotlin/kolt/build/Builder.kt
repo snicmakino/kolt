@@ -2,6 +2,7 @@ package kolt.build
 
 import kolt.config.CinteropConfig
 import kolt.config.KoltConfig
+import kolt.config.konanTargetGradleName
 
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
@@ -10,9 +11,6 @@ internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 // Spike #160: touch/abi-neutral wall-time -30–39% at 25–50 files; cold
 // builds also speed up from konanc's IC strategy. Issue #168.
 internal const val NATIVE_IC_CACHE_DIR = "$BUILD_DIR/.ic-cache"
-
-// Passed explicitly so a cross-build cannot silently fall back to host default.
-internal const val NATIVE_TARGET = "linux_x64"
 
 internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
 
@@ -74,10 +72,11 @@ fun nativeLibraryCommand(
     klibs: List<String> = emptyList()
 ): BuildCommand {
     val outputBase = outputNativeKlibPath(config)
+    val nativeTarget = konanTargetGradleName(config.build.target)
     val args = buildList {
         add(konancPath ?: "konanc")
         add("-target")
-        add(NATIVE_TARGET)
+        add(nativeTarget)
         addAll(config.build.sources)
         add("-p")
         add("library")
@@ -102,10 +101,11 @@ fun nativeLinkCommand(
     val outputPath = outputKexePath(config)
     val outputBase = "$BUILD_DIR/${config.name}"
     val klibPath = outputNativeKlibPath(config)
+    val nativeTarget = konanTargetGradleName(config.build.target)
     val args = buildList {
         add(konancPath ?: "konanc")
         add("-target")
-        add(NATIVE_TARGET)
+        add(nativeTarget)
         add("-p")
         add("program")
         add("-e")
@@ -130,10 +130,11 @@ fun nativeTestLibraryCommand(
     klibs: List<String> = emptyList()
 ): BuildCommand {
     val outputBase = outputNativeTestKlibPath(config)
+    val nativeTarget = konanTargetGradleName(config.build.target)
     val args = buildList {
         add(konancPath ?: "konanc")
         add("-target")
-        add(NATIVE_TARGET)
+        add(nativeTarget)
         addAll(config.build.sources)
         addAll(config.build.testSources)
         add("-p")
@@ -159,10 +160,11 @@ fun nativeTestLinkCommand(
     val outputPath = outputNativeTestKexePath(config)
     val outputBase = "$BUILD_DIR/${config.name}-test"
     val klibPath = outputNativeTestKlibPath(config)
+    val nativeTarget = konanTargetGradleName(config.build.target)
     val args = buildList {
         add(konancPath ?: "konanc")
         add("-target")
-        add(NATIVE_TARGET)
+        add(nativeTarget)
         add("-p")
         add("program")
         add("-generate-test-runner")
@@ -180,6 +182,7 @@ fun nativeTestLinkCommand(
 // cinterop appends .klib to the -o path, so outputPath omits the extension.
 fun cinteropCommand(
     entry: CinteropConfig,
+    target: String,
     cinteropPath: String? = null,
     outputDir: String = BUILD_DIR
 ): BuildCommand {
@@ -187,7 +190,7 @@ fun cinteropCommand(
     val args = buildList {
         add(cinteropPath ?: "cinterop")
         add("-target")
-        add(NATIVE_TARGET)
+        add(konanTargetGradleName(target))
         add("-def")
         add(entry.def)
         add("-o")

@@ -58,7 +58,7 @@ class PluginSupportTest {
 
     @Test
     fun resolvePluginArgsNativeTargetSharesTheSameShortCircuit() {
-        val config = testConfig(plugins = emptyMap(), target = "native")
+        val config = testConfig(plugins = emptyMap(), target = "linuxX64")
 
         val result = assertNotNull(resolvePluginArgs(config, bogusPaths, operationalExitCode = 999).get())
 

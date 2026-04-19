@@ -133,7 +133,7 @@ jitpack = "https://jitpack.io"
 | `[kotlin] version` | Kotlin 言語／API バージョン（`compiler` 未指定時はコンパイラバージョンも兼ねる） | （必須） |
 | `[kotlin] compiler` | `version` と独立して kotlinc / daemon のバージョンを固定（`>= version` 必須） | `version` |
 | `[kotlin.plugins]` | コンパイラプラグイン（`serialization`、`allopen`、`noarg`） | `{}` |
-| `[build] target` | `"jvm"` または `"native"` | （必須） |
+| `[build] target` | `"jvm"` または KonanTarget（`"linuxX64"`, `"linuxArm64"`, `"macosX64"`, `"macosArm64"`, `"mingwX64"`） | （必須） |
 | `[build] jvm_target` | JVM バイトコードターゲット | `"17"` |
 | `[build] jdk` | daemon/runtime 用の JDK バージョン | （ホスト JDK） |
 | `[build] main` | エントリポイント関数の FQN（例：`"main"` または `"com.example.main"`） | （必須） |
@@ -142,7 +142,7 @@ jitpack = "https://jitpack.io"
 | `[build] resources` | ビルド出力に含めるリソースディレクトリ | `[]` |
 | `[build] test_resources` | テスト時のクラスパスに追加するリソースディレクトリ | `[]` |
 | `[fmt] style` | ktfmt スタイル：`"google"`、`"kotlinlang"`、`"meta"` | `"google"` |
-| `[[cinterop]]` | `target = "native"` 用の C interop バインディング（`.def` ごとに 1 エントリ） | `[]` |
+| `[[cinterop]]` | native target 用の C interop バインディング（`.def` ごとに 1 エントリ） | `[]` |
 | `[repositories]` | Maven リポジトリ（名前 = URL） | Maven Central のみ |
 
 ### 依存関係
@@ -190,11 +190,11 @@ serialization = true
 
 対応プラグイン：`serialization`、`allopen`、`noarg`。プラグイン JAR は Kotlin コンパイラディストリビューションから解決されます。
 
-プラグインは `target = "jvm"` と `target = "native"` の両方で動作します。Native では、konanc の 2 段階コンパイル（`-p library` → `-p program -Xinclude=...`）でプラグインレジストラをライブラリ段階で実行します。これは、konanc の単一ステップ `-p program` がコンパイラプラグインを暗黙にスキップする問題への回避策です。詳細は ADR 0014 を参照してください。Native プロジェクトでプラグインを有効にすると、現在は `<kotlincHome>/lib/` からプラグイン JAR を借用するために kotlinc ディストリビューションをサイドカーとしてプロビジョニングします。将来的に Maven Central からの直接解決に切り替え予定です。
+プラグインは `target = "jvm"` と native target（`"linuxX64"` など）の両方で動作します。Native では、konanc の 2 段階コンパイル（`-p library` → `-p program -Xinclude=...`）でプラグインレジストラをライブラリ段階で実行します。これは、konanc の単一ステップ `-p program` がコンパイラプラグインを暗黙にスキップする問題への回避策です。詳細は ADR 0014 を参照してください。Native プロジェクトでプラグインを有効にすると、現在は `<kotlincHome>/lib/` からプラグイン JAR を借用するために kotlinc ディストリビューションをサイドカーとしてプロビジョニングします。将来的に Maven Central からの直接解決に切り替え予定です。
 
 ### C Interop（native ターゲット）
 
-C ライブラリを呼び出す `target = "native"` プロジェクトでは、`.def` ファイルごとに `[[cinterop]]` エントリを宣言します。kolt は各エントリに対して konan の `cinterop` ツールを呼び出し、生成された `.klib` を `build/` にキャッシュして、ライブラリおよびリンク段階で `-l` を通じて `konanc` に渡します。
+C ライブラリを呼び出す native target プロジェクトでは、`.def` ファイルごとに `[[cinterop]]` エントリを宣言します。kolt は各エントリに対して konan の `cinterop` ツールを呼び出し、生成された `.klib` を `build/` にキャッシュして、ライブラリおよびリンク段階で `-l` を通じて `konanc` に渡します。
 
 ```toml
 [[cinterop]]

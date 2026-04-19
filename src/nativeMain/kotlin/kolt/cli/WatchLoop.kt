@@ -5,6 +5,7 @@ import com.github.michaelbull.result.getOrElse
 import kolt.build.nativeRunCommand
 import kolt.build.runCommand
 import kolt.config.KoltConfig
+import kolt.config.NATIVE_TARGETS
 import kolt.infra.*
 import kotlinx.cinterop.*
 import platform.linux.IN_CREATE
@@ -280,7 +281,7 @@ internal fun watchRunLoop(
             continue
         }
 
-        val runCmd = if (buildResult.config.build.target == "native") {
+        val runCmd = if (buildResult.config.build.target in NATIVE_TARGETS) {
             nativeRunCommand(buildResult.config, appArgs)
         } else {
             runCommand(buildResult.config, buildResult.classpath, appArgs, javaPath = buildResult.javaPath)

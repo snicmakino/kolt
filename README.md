@@ -133,7 +133,7 @@ jitpack = "https://jitpack.io"
 | `[kotlin] version` | Kotlin language/API version (also the default compiler version) | (required) |
 | `[kotlin] compiler` | Override kotlinc/daemon version independently of `version`. Must be `>= version`. | `version` |
 | `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
-| `[build] target` | `"jvm"` or `"native"` | (required) |
+| `[build] target` | `"jvm"` or a KonanTarget (`"linuxX64"`, `"linuxArm64"`, `"macosX64"`, `"macosArm64"`, `"mingwX64"`) | (required) |
 | `[build] jvm_target` | JVM bytecode target | `"17"` |
 | `[build] jdk` | JDK version pin for daemon/runtime | (host JDK) |
 | `[build] main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
@@ -142,7 +142,7 @@ jitpack = "https://jitpack.io"
 | `[build] resources` | Resource directories to include in build output | `[]` |
 | `[build] test_resources` | Test resource directories added to test classpath | `[]` |
 | `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
-| `[[cinterop]]` | C interop bindings for `target = "native"` (one array entry per `.def`) | `[]` |
+| `[[cinterop]]` | C interop bindings for native targets (one array entry per `.def`) | `[]` |
 | `[repositories]` | Maven repositories (name = URL) | Maven Central only |
 
 ### Dependencies
@@ -190,11 +190,11 @@ serialization = true
 
 Supported plugins: `serialization`, `allopen`, `noarg`. Plugin JARs are resolved from the Kotlin compiler distribution.
 
-Plugins work for both `target = "jvm"` and `target = "native"`. On native, kolt compiles the project in two konanc stages (`-p library` then `-p program -Xinclude=...`) so the plugin registrars run on the library stage; this is a workaround for a konanc quirk where single-step `-p program` invocations silently skip compiler plugins. See ADR 0014 for details. Enabling a plugin on a native project currently provisions the kotlinc distribution as a sidecar purely to borrow plugin jars from `<kotlincHome>/lib/`; a follow-up will switch to resolving them from Maven Central directly.
+Plugins work for both `target = "jvm"` and native targets (`"linuxX64"`, etc.). On native, kolt compiles the project in two konanc stages (`-p library` then `-p program -Xinclude=...`) so the plugin registrars run on the library stage; this is a workaround for a konanc quirk where single-step `-p program` invocations silently skip compiler plugins. See ADR 0014 for details. Enabling a plugin on a native project currently provisions the kotlinc distribution as a sidecar purely to borrow plugin jars from `<kotlincHome>/lib/`; a follow-up will switch to resolving them from Maven Central directly.
 
 ### C Interop (native target)
 
-For `target = "native"` projects that need to call C libraries, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool for each entry, caches the generated `.klib` under `build/`, and passes it to `konanc` via `-l` on both the library and link stages.
+For native targets that need to call C libraries, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool for each entry, caches the generated `.klib` under `build/`, and passes it to `konanc` via `-l` on both the library and link stages.
 
 ```toml
 [[cinterop]]

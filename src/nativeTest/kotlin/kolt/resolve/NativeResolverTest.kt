@@ -21,7 +21,7 @@ class NativeResolverTest {
 
     @Test
     fun resolvesDirectDepWithNoTransitives() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 
@@ -62,7 +62,7 @@ class NativeResolverTest {
 
     @Test
     fun resolvesSingleTransitiveDep() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 
@@ -108,7 +108,7 @@ class NativeResolverTest {
 
     @Test
     fun skipsKotlinStdlibFromTransitives() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 
@@ -140,7 +140,7 @@ class NativeResolverTest {
     @Test
     fun skipsKotlinStdlibCommonFromTransitives() {
         // kotlin-stdlib-common has no Gradle module metadata (pre-GMM artifact).
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 
@@ -171,7 +171,7 @@ class NativeResolverTest {
 
     @Test
     fun skipsKotlinStdlibCommonAsDirectDependencyToo() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(
                 "com.example:lib" to "1.0.0",
                 "org.jetbrains.kotlin:kotlin-stdlib-common" to "1.8.21"
@@ -199,7 +199,7 @@ class NativeResolverTest {
 
     @Test
     fun skipsKotlinStdlibAsDirectDependencyToo() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(
                 "com.example:lib" to "1.0.0",
                 "org.jetbrains.kotlin:kotlin-stdlib" to "2.0.0"
@@ -227,7 +227,7 @@ class NativeResolverTest {
 
     @Test
     fun returnsEmptyWhenNoDependencies() {
-        val config = testConfig(target = "native").copy(dependencies = emptyMap())
+        val config = testConfig(target = "linuxX64").copy(dependencies = emptyMap())
         val deps = fakeDeps()
 
         val result = resolveNative(config, "/cache", deps)
@@ -238,7 +238,7 @@ class NativeResolverTest {
 
     @Test
     fun failsWhenNoNativeVariantAvailable() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:jvmonly" to "1.0.0")
         )
 
@@ -276,7 +276,7 @@ class NativeResolverTest {
 
     @Test
     fun failsOnSha256Mismatch() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 
@@ -302,7 +302,7 @@ class NativeResolverTest {
 
     @Test
     fun diamondDependencyHighestVersionWins() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
                 "com.example:b" to "1.0.0"
@@ -349,7 +349,7 @@ class NativeResolverTest {
 
     @Test
     fun directDepVersionWinsOverTransitive() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
                 "com.example:shared" to "1.0.0"
@@ -386,7 +386,7 @@ class NativeResolverTest {
 
     @Test
     fun failsOnInvalidCoordinate() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("invalid-no-colon" to "1.0.0")
         )
         val deps = fakeDeps()
@@ -398,7 +398,7 @@ class NativeResolverTest {
 
     @Test
     fun failsOnInvalidJsonWithMetadataParseFailed() {
-        val config = testConfig(target = "native").copy(
+        val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("com.example:lib" to "1.0.0")
         )
 

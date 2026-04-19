@@ -8,7 +8,7 @@ version = "2.3.20"
 serialization = true
 
 [build]
-target = "native"
+target = "linuxX64"
 main = "kolt.cli.main"
 sources = ["src/nativeMain/kotlin"]
 test_sources = ["src/nativeTest/kotlin"]

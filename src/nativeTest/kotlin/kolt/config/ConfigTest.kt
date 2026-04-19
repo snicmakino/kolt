@@ -196,7 +196,46 @@ class ConfigTest {
     }
 
     @Test
-    fun parseConfigWithNativeTarget() {
+    fun parseConfigWithLinuxX64Target() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            target = "linuxX64"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("linuxX64", config.build.target)
+    }
+
+    @Test
+    fun parseConfigAcceptsAllKonanTargets() {
+        for (target in listOf("linuxX64", "linuxArm64", "macosX64", "macosArm64", "mingwX64")) {
+            val toml = """
+                name = "my-app"
+                version = "0.1.0"
+
+                [kotlin]
+                version = "2.1.0"
+
+                [build]
+                target = "$target"
+                main = "com.example.main"
+                sources = ["src"]
+            """.trimIndent()
+            val config = assertNotNull(parseConfig(toml).get(), "expected $target to parse")
+            assertEquals(target, config.build.target)
+        }
+    }
+
+    @Test
+    fun nativeTargetIsRejectedWithMigrationHint() {
         val toml = """
             name = "my-app"
             version = "0.1.0"
@@ -210,8 +249,12 @@ class ConfigTest {
             sources = ["src"]
         """.trimIndent()
 
-        val config = assertNotNull(parseConfig(toml).get())
-        assertEquals("native", config.build.target)
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("native"), "missing 'native' in: ${error.message}")
+        assertTrue(error.message.contains("linuxX64"), "missing migration hint in: ${error.message}")
     }
 
     @Test
@@ -233,9 +276,86 @@ class ConfigTest {
 
         assertNull(result.get())
         val error = assertIs<ConfigError.ParseFailed>(result.getError())
-        kotlin.test.assertTrue(error.message.contains("target"))
-        kotlin.test.assertTrue(error.message.contains("jvm"))
-        kotlin.test.assertTrue(error.message.contains("native"))
+        assertTrue(error.message.contains("target"))
+        assertTrue(error.message.contains("jvm"))
+        assertTrue(error.message.contains("linuxX64"))
+    }
+
+    @Test
+    fun parseConfigDefaultsKindToApp() {
+        val config = assertNotNull(parseConfig(minimalToml).get())
+        assertEquals("app", config.kind)
+    }
+
+    @Test
+    fun parseConfigAcceptsExplicitKindApp() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kind = "app"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("app", config.kind)
+    }
+
+    @Test
+    fun kindLibIsRejectedAsNotYetImplemented() {
+        val toml = """
+            name = "my-lib"
+            version = "0.1.0"
+            kind = "lib"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("kind"), "missing 'kind' in: ${error.message}")
+        assertTrue(error.message.contains("lib"), "missing 'lib' in: ${error.message}")
+        assertTrue(
+            error.message.contains("not yet implemented"),
+            "missing 'not yet implemented' in: ${error.message}"
+        )
+    }
+
+    @Test
+    fun unknownKindReturnsErr() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+            kind = "service"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("kind"), "missing 'kind' in: ${error.message}")
     }
 
     @Test
@@ -757,7 +877,7 @@ class ConfigTest {
             version = "2.1.0"
 
             [build]
-            target = "native"
+            target = "linuxX64"
             main = "com.example.main"
             sources = ["src"]
 
@@ -785,7 +905,7 @@ class ConfigTest {
             version = "2.1.0"
 
             [build]
-            target = "native"
+            target = "linuxX64"
             main = "com.example.main"
             sources = ["src"]
 
@@ -814,7 +934,7 @@ class ConfigTest {
             version = "2.1.0"
 
             [build]
-            target = "native"
+            target = "linuxX64"
             main = "com.example.main"
             sources = ["src"]
 
@@ -847,7 +967,7 @@ class ConfigTest {
             version = "2.1.0"
 
             [build]
-            target = "native"
+            target = "linuxX64"
             main = "com.example.main"
             sources = ["src"]
 
@@ -940,5 +1060,14 @@ class ConfigTest {
             parseFailed.message.contains("compiler") && parseFailed.message.contains("2.1.0") && parseFailed.message.contains("2.3.20"),
             "expected message to name both versions, got: ${parseFailed.message}",
         )
+    }
+
+    @Test
+    fun konanTargetGradleNameMapsAllKonanTargets() {
+        assertEquals("linux_x64", konanTargetGradleName("linuxX64"))
+        assertEquals("linux_arm64", konanTargetGradleName("linuxArm64"))
+        assertEquals("macos_x64", konanTargetGradleName("macosX64"))
+        assertEquals("macos_arm64", konanTargetGradleName("macosArm64"))
+        assertEquals("mingw_x64", konanTargetGradleName("mingwX64"))
     }
 }

@@ -25,7 +25,7 @@ class TestDepsTest {
         val config = KoltConfig(
             name = "my-app", version = "0.1.0",
             kotlin = KotlinSection(version = "2.1.0"),
-            build = BuildSection(target = "native", main = "main", sources = listOf("src")),
+            build = BuildSection(target = "linuxX64", main = "main", sources = listOf("src")),
         )
         val injected = autoInjectedTestDeps(config)
 
@@ -98,7 +98,7 @@ class TestDepsTest {
         val config = KoltConfig(
             name = "my-app", version = "0.1.0",
             kotlin = KotlinSection(version = "2.1.0"),
-            build = BuildSection(target = "native", main = "main", sources = listOf("src")),
+            build = BuildSection(target = "linuxX64", main = "main", sources = listOf("src")),
             dependencies = mapOf("com.example:lib" to "1.0.0"),
         )
         val allDeps = mergeAllDeps(config)

@@ -5,9 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
-
-// Phase B is linuxX64-only. Cross-platform support lands in a later phase.
-internal const val NATIVE_TARGET_LINUX_X64 = "linux_x64"
+import kolt.config.konanTargetGradleName
 
 // Kotlin/Native bundles the stdlib in the konanc distribution — it must be
 // skipped during dependency resolution even though Gradle module metadata
@@ -49,7 +47,7 @@ fun resolveNative(
     cacheBase: String,
     deps: ResolverDeps
 ): Result<ResolveResult, ResolveError> {
-    val nativeTarget = NATIVE_TARGET_LINUX_X64
+    val nativeTarget = konanTargetGradleName(config.build.target)
     val repos = config.repositories.values.toList()
 
     // Validate direct coords up front (mirrors jvm resolver)
@@ -172,7 +170,7 @@ fun createNativeLookup(
     repos: List<String>,
     cacheBase: String,
     deps: ResolverDeps,
-    nativeTarget: String = NATIVE_TARGET_LINUX_X64
+    nativeTarget: String
 ): (String, String) -> NativeNodeInfo? {
     val cache = mutableMapOf<String, NativeNodeInfo?>()
 

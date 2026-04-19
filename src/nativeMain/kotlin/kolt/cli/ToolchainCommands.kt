@@ -44,7 +44,7 @@ private fun doToolchainInstall(): Result<Unit, Int> {
     if (config.build.jdk != null) {
         installJdkToolchain(config.build.jdk, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     }
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         installKonancToolchain(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
     }
     return Ok(Unit)

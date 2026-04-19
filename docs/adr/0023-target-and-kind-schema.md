@@ -53,10 +53,12 @@ by this ADR but rejected at build time with a "not yet implemented"
 error; the slot exists so library support is a localized follow-up,
 not a schema revision.
 
-The `[build] main` field becomes conditional: required for
-`kind = "app"`, rejected for `kind = "lib"` ("`main` has no meaning
-for a library; remove it"). `kolt run` against a library is a usage
-error.
+When `kind = "lib"` is eventually implemented, `[build] main` will
+be rejected for libraries ("`main` has no meaning for a library;
+remove it") and `kolt run` against a library will be a usage error.
+Until then, `kind = "lib"` itself is rejected at parse time, so the
+`main` rule is reserved schema semantics rather than active
+validation.
 
 ### 2. `target` uses `KonanTarget` identifiers
 

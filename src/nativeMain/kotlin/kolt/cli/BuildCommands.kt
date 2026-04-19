@@ -60,7 +60,7 @@ internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig().getOrElse { return Err(it) }
     // konanc has no syntax-only mode; a full build is the only option.
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         doBuild(useDaemon = useDaemon).getOrElse { return Err(it) }
         return Ok(Unit)
     }
@@ -111,7 +111,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     val startMark = TimeSource.Monotonic.markNow()
     val config = loadProjectConfig().getOrElse { return Err(it) }
 
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         return doNativeBuild(config)
     }
 
@@ -348,7 +348,7 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): Result<List<Strin
             }
         }
 
-        val cmd = cinteropCommand(entry, cinteropPath = managedCinteropBin)
+        val cmd = cinteropCommand(entry, target = config.build.target, cinteropPath = managedCinteropBin)
         println("generating cinterop klib for ${entry.name}...")
         executeCommand(cmd.args).getOrElse { error ->
             eprintln("error: " + formatProcessError(error, "cinterop (${entry.name})"))
@@ -376,7 +376,7 @@ private fun resolveNativeDependencies(config: KoltConfig, paths: KoltPaths): Res
 }
 
 internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String> = emptyList(), javaPath: String? = null): Result<Unit, Int> {
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         val kexePath = outputKexePath(config)
         if (!fileExists(kexePath)) {
             eprintln("error: $kexePath not found. Run 'kolt build' first.")
@@ -408,7 +408,7 @@ internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String>
 
 internal fun doTest(testArgs: List<String> = emptyList(), useDaemon: Boolean = true): Result<Unit, Int> {
     val config = loadProjectConfig().getOrElse { return Err(it) }
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         return doNativeTest(config, testArgs)
     }
     val (_, classpath, javaPath) = doBuild(useDaemon = useDaemon).getOrElse { return Err(it) }

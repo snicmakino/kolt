@@ -136,7 +136,7 @@ class BuilderTest {
 
     @Test
     fun nativeLibraryCommandProducesKlibDirectory() {
-        val cmd = nativeLibraryCommand(testConfig(target = "native"))
+        val cmd = nativeLibraryCommand(testConfig(target = "linuxX64"))
 
         assertEquals(
             listOf("konanc", "-target", "linux_x64", "src", "-p", "library", "-nopack", "-o", "build/my-app-klib"),
@@ -148,7 +148,7 @@ class BuilderTest {
     @Test
     fun nativeLibraryCommandMultipleSources() {
         val cmd = nativeLibraryCommand(
-            testConfig(sources = listOf("src", "generated"), target = "native")
+            testConfig(sources = listOf("src", "generated"), target = "linuxX64")
         )
 
         assertEquals(
@@ -159,7 +159,7 @@ class BuilderTest {
 
     @Test
     fun nativeLibraryCommandWithProjectName() {
-        val cmd = nativeLibraryCommand(testConfig(name = "hello", target = "native"))
+        val cmd = nativeLibraryCommand(testConfig(name = "hello", target = "linuxX64"))
 
         assertEquals("build/hello-klib", cmd.outputPath)
         assertEquals(
@@ -171,7 +171,7 @@ class BuilderTest {
     @Test
     fun nativeLibraryCommandWithManagedKonancPath() {
         val managedKonanc = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/konanc"
-        val cmd = nativeLibraryCommand(testConfig(target = "native"), konancPath = managedKonanc)
+        val cmd = nativeLibraryCommand(testConfig(target = "linuxX64"), konancPath = managedKonanc)
 
         assertEquals(managedKonanc, cmd.args.first())
     }
@@ -179,7 +179,7 @@ class BuilderTest {
     @Test
     fun nativeLibraryCommandWithPluginArgs() {
         val cmd = nativeLibraryCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             pluginArgs = listOf("-Xplugin=foo.jar")
         )
 
@@ -197,7 +197,7 @@ class BuilderTest {
     @Test
     fun nativeLibraryCommandWithMultipleKlibsRepeatsLFlag() {
         val cmd = nativeLibraryCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             klibs = listOf("/cache/a.klib", "/cache/b.klib", "/cache/c.klib")
         )
 
@@ -216,14 +216,14 @@ class BuilderTest {
 
     @Test
     fun nativeLibraryCommandEmptyKlibsOmitsLibraryFlag() {
-        val cmd = nativeLibraryCommand(testConfig(target = "native"), klibs = emptyList())
+        val cmd = nativeLibraryCommand(testConfig(target = "linuxX64"), klibs = emptyList())
 
         assertFalse(cmd.args.contains("-l"))
     }
 
     @Test
     fun nativeLinkCommandLinksKlibToProgramKexe() {
-        val cmd = nativeLinkCommand(testConfig(target = "native"))
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"))
 
         assertEquals(
             listOf(
@@ -243,7 +243,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandWithProjectName() {
-        val cmd = nativeLinkCommand(testConfig(name = "hello", target = "native"))
+        val cmd = nativeLinkCommand(testConfig(name = "hello", target = "linuxX64"))
 
         assertEquals("build/hello.kexe", cmd.outputPath)
         assertEquals(
@@ -264,7 +264,7 @@ class BuilderTest {
     @Test
     fun nativeLinkCommandWithManagedKonancPath() {
         val managedKonanc = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/konanc"
-        val cmd = nativeLinkCommand(testConfig(target = "native"), konancPath = managedKonanc)
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), konancPath = managedKonanc)
 
         assertEquals(managedKonanc, cmd.args.first())
     }
@@ -276,7 +276,7 @@ class BuilderTest {
         // by plugin-generated code) are still unresolved and need the
         // transitive klibs on the library path at link time.
         val cmd = nativeLinkCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             klibs = listOf("/cache/a.klib", "/cache/b.klib")
         )
 
@@ -299,7 +299,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandEmptyKlibsOmitsLibraryFlag() {
-        val cmd = nativeLinkCommand(testConfig(target = "native"), klibs = emptyList())
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), klibs = emptyList())
 
         assertFalse(cmd.args.contains("-l"))
     }
@@ -309,7 +309,7 @@ class BuilderTest {
         // config.main is already a Kotlin function FQN (validated by parseConfig),
         // so konanc -e consumes it verbatim. Without -e, konanc looks for `main`
         // in the root package and fails when the function lives in a named package.
-        val cmd = nativeLinkCommand(testConfig(target = "native"))
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"))
 
         val eIndex = cmd.args.indexOf("-e")
         assertTrue(eIndex >= 0, "Expected -e in: ${cmd.args}")
@@ -318,7 +318,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandEmitsRootPackageEntryPoint() {
-        val base = testConfig(target = "native")
+        val base = testConfig(target = "linuxX64")
         val cmd = nativeLinkCommand(base.copy(build = base.build.copy(main = "main")))
 
         val eIndex = cmd.args.indexOf("-e")
@@ -328,7 +328,7 @@ class BuilderTest {
 
     @Test
     fun nativeTestLibraryCommandIncludesMainAndTestSources() {
-        val cmd = nativeTestLibraryCommand(testConfig(target = "native"))
+        val cmd = nativeTestLibraryCommand(testConfig(target = "linuxX64"))
 
         assertEquals(
             listOf(
@@ -349,7 +349,7 @@ class BuilderTest {
             testConfig(
                 sources = listOf("src", "generated"),
                 testSources = listOf("test", "integration-test"),
-                target = "native"
+                target = "linuxX64"
             )
         )
 
@@ -368,7 +368,7 @@ class BuilderTest {
     @Test
     fun nativeTestLibraryCommandWithPluginArgs() {
         val cmd = nativeTestLibraryCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             pluginArgs = listOf("-Xplugin=foo.jar", "-Xplugin=bar.jar")
         )
 
@@ -388,7 +388,7 @@ class BuilderTest {
     @Test
     fun nativeTestLibraryCommandWithMultipleKlibsRepeatsLFlag() {
         val cmd = nativeTestLibraryCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             klibs = listOf("/cache/a.klib", "/cache/b.klib")
         )
 
@@ -409,14 +409,14 @@ class BuilderTest {
     @Test
     fun nativeTestLibraryCommandWithManagedKonancPath() {
         val managedKonanc = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/konanc"
-        val cmd = nativeTestLibraryCommand(testConfig(target = "native"), konancPath = managedKonanc)
+        val cmd = nativeTestLibraryCommand(testConfig(target = "linuxX64"), konancPath = managedKonanc)
 
         assertEquals(managedKonanc, cmd.args.first())
     }
 
     @Test
     fun nativeTestLinkCommandLinksWithGeneratedRunner() {
-        val cmd = nativeTestLinkCommand(testConfig(target = "native"))
+        val cmd = nativeTestLinkCommand(testConfig(target = "linuxX64"))
 
         assertEquals(
             listOf(
@@ -434,14 +434,14 @@ class BuilderTest {
 
     @Test
     fun nativeTestLinkCommandDoesNotEmitEntryPointFlag() {
-        val cmd = nativeTestLinkCommand(testConfig(target = "native"))
+        val cmd = nativeTestLinkCommand(testConfig(target = "linuxX64"))
 
         assertFalse(cmd.args.contains("-e"))
     }
 
     @Test
     fun nativeTestLinkCommandWithProjectName() {
-        val cmd = nativeTestLinkCommand(testConfig(name = "hello", target = "native"))
+        val cmd = nativeTestLinkCommand(testConfig(name = "hello", target = "linuxX64"))
 
         assertEquals("build/hello-test.kexe", cmd.outputPath)
         assertEquals(
@@ -460,7 +460,7 @@ class BuilderTest {
     @Test
     fun nativeTestLinkCommandWithMultipleKlibsRepeatsLFlag() {
         val cmd = nativeTestLinkCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             klibs = listOf("/cache/a.klib", "/cache/b.klib")
         )
 
@@ -482,7 +482,7 @@ class BuilderTest {
     @Test
     fun nativeTestLinkCommandWithManagedKonancPath() {
         val managedKonanc = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/konanc"
-        val cmd = nativeTestLinkCommand(testConfig(target = "native"), konancPath = managedKonanc)
+        val cmd = nativeTestLinkCommand(testConfig(target = "linuxX64"), konancPath = managedKonanc)
 
         assertEquals(managedKonanc, cmd.args.first())
     }
@@ -522,7 +522,7 @@ class BuilderTest {
 
     @Test
     fun nativeLibraryCommandInjectsLanguageVersionWhenCompilerHigherThanVersion() {
-        val cmd = nativeLibraryCommand(testConfig(target = "native", kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"))
+        val cmd = nativeLibraryCommand(testConfig(target = "linuxX64", kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"))
 
         val langIdx = cmd.args.indexOf("-language-version")
         val apiIdx = cmd.args.indexOf("-api-version")
@@ -533,7 +533,7 @@ class BuilderTest {
 
     @Test
     fun nativeLibraryCommandOmitsLanguageVersionWhenCompilerUnset() {
-        val cmd = nativeLibraryCommand(testConfig(target = "native"))
+        val cmd = nativeLibraryCommand(testConfig(target = "linuxX64"))
 
         assertFalse(cmd.args.contains("-language-version"))
         assertFalse(cmd.args.contains("-api-version"))
@@ -541,7 +541,7 @@ class BuilderTest {
 
     @Test
     fun nativeTestLibraryCommandInjectsLanguageVersionWhenCompilerHigherThanVersion() {
-        val cmd = nativeTestLibraryCommand(testConfig(target = "native", kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"))
+        val cmd = nativeTestLibraryCommand(testConfig(target = "linuxX64", kotlinVersion = "2.1.0", kotlinCompiler = "2.3.20"))
 
         val langIdx = cmd.args.indexOf("-language-version")
         val apiIdx = cmd.args.indexOf("-api-version")
@@ -552,7 +552,7 @@ class BuilderTest {
 
     @Test
     fun nativeTestLibraryCommandOmitsLanguageVersionWhenCompilerUnset() {
-        val cmd = nativeTestLibraryCommand(testConfig(target = "native"))
+        val cmd = nativeTestLibraryCommand(testConfig(target = "linuxX64"))
 
         assertFalse(cmd.args.contains("-language-version"))
         assertFalse(cmd.args.contains("-api-version"))

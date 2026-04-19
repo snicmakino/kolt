@@ -75,38 +75,38 @@ class RunnerTest {
 
     @Test
     fun nativeRunCommandExecutesKexeBinary() {
-        val cmd = nativeRunCommand(testConfig(target = "native"))
+        val cmd = nativeRunCommand(testConfig(target = "linuxX64"))
         assertEquals(listOf("build/my-app.kexe"), cmd.args)
     }
 
     @Test
     fun nativeRunCommandAppendsAppArgs() {
-        val cmd = nativeRunCommand(testConfig(target = "native"), listOf("--port", "8080"))
+        val cmd = nativeRunCommand(testConfig(target = "linuxX64"), listOf("--port", "8080"))
         assertEquals(listOf("build/my-app.kexe", "--port", "8080"), cmd.args)
     }
 
     @Test
     fun nativeRunCommandUsesProjectName() {
-        val cmd = nativeRunCommand(testConfig(name = "hello", target = "native"))
+        val cmd = nativeRunCommand(testConfig(name = "hello", target = "linuxX64"))
         assertEquals(listOf("build/hello.kexe"), cmd.args)
     }
 
     @Test
     fun nativeTestRunCommandExecutesTestKexeBinary() {
-        val cmd = nativeTestRunCommand(testConfig(target = "native"))
+        val cmd = nativeTestRunCommand(testConfig(target = "linuxX64"))
         assertEquals(listOf("build/my-app-test.kexe"), cmd.args)
     }
 
     @Test
     fun nativeTestRunCommandUsesProjectName() {
-        val cmd = nativeTestRunCommand(testConfig(name = "hello", target = "native"))
+        val cmd = nativeTestRunCommand(testConfig(name = "hello", target = "linuxX64"))
         assertEquals(listOf("build/hello-test.kexe"), cmd.args)
     }
 
     @Test
     fun nativeTestRunCommandAppendsTestArgs() {
         val cmd = nativeTestRunCommand(
-            testConfig(target = "native"),
+            testConfig(target = "linuxX64"),
             testArgs = listOf("--ktest_filter=MyTest.*", "--ktest_logger=SIMPLE")
         )
         assertEquals(

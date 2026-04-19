@@ -16,7 +16,7 @@ class CinteropTest {
             def = "src/nativeInterop/cinterop/libcurl.def"
         )
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertEquals(
             listOf("cinterop", "-target", "linux_x64", "-def", "src/nativeInterop/cinterop/libcurl.def", "-o", "build/libcurl"),
@@ -28,7 +28,7 @@ class CinteropTest {
     fun cinteropCommandOutputPathIsInBuildDir() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertEquals("build/libcurl", cmd.outputPath)
     }
@@ -41,7 +41,7 @@ class CinteropTest {
             packageName = "libcurl"
         )
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertTrue(cmd.args.contains("-pkg"), "Expected -pkg flag in: ${cmd.args}")
         val pkgIndex = cmd.args.indexOf("-pkg")
@@ -52,7 +52,7 @@ class CinteropTest {
     fun cinteropCommandWithoutPackageNameOmitsPkgFlag() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def", packageName = null)
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertFalse(cmd.args.contains("-pkg"), "Unexpected -pkg flag in: ${cmd.args}")
     }
@@ -65,7 +65,7 @@ class CinteropTest {
             packageName = "libcurl"
         )
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertEquals(
             listOf(
@@ -84,7 +84,7 @@ class CinteropTest {
         val managedPath = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/cinterop"
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry, cinteropPath = managedPath)
+        val cmd = cinteropCommand(entry, target = "linuxX64", cinteropPath = managedPath)
 
         assertEquals(managedPath, cmd.args.first())
     }
@@ -93,7 +93,7 @@ class CinteropTest {
     fun cinteropCommandWithNullCinteropPathDefaultsToSystemCinterop() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry, cinteropPath = null)
+        val cmd = cinteropCommand(entry, target = "linuxX64", cinteropPath = null)
 
         assertEquals("cinterop", cmd.args.first())
     }
@@ -102,7 +102,7 @@ class CinteropTest {
     fun cinteropCommandWithCustomOutputDir() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry, outputDir = "custom/build")
+        val cmd = cinteropCommand(entry, target = "linuxX64", outputDir = "custom/build")
 
         val outputIndex = cmd.args.indexOf("-o")
         assertEquals("custom/build/libcurl", cmd.args[outputIndex + 1])
@@ -113,7 +113,7 @@ class CinteropTest {
     fun cinteropCommandOutputPathDoesNotIncludeKlibExtension() {
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
 
         assertFalse(cmd.outputPath.endsWith(".klib.klib"), "outputPath must not double .klib: ${cmd.outputPath}")
         assertFalse(cmd.args.any { it.endsWith(".klib") }, "No .klib suffix expected in args: ${cmd.args}")

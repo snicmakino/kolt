@@ -117,7 +117,7 @@ package = "libcurl"
 | `[kotlin] version` | Kotlin language/API version (and the default compiler version) | (required) |
 | `[kotlin] compiler` | Override kotlinc/daemon version independently of `version`. Must be `>= version`. | `version` |
 | `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
-| `[build] target` | `"jvm"` or `"native"` | (required) |
+| `[build] target` | `"jvm"` or a KonanTarget (`"linuxX64"`, `"linuxArm64"`, `"macosX64"`, `"macosArm64"`, `"mingwX64"`) | (required) |
 | `[build] jvm_target` | JVM bytecode target | `"17"` |
 | `[build] jdk` | JDK version pin for daemon/runtime | (host JDK) |
 | `[build] main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
@@ -126,12 +126,12 @@ package = "libcurl"
 | `[build] resources` | Resource directories included in JAR | `[]` |
 | `[build] test_resources` | Test resource directories added to test classpath | `[]` |
 | `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
-| `[[cinterop]]` | C interop bindings for `target = "native"` (array of `.def` entries) | `[]` |
+| `[[cinterop]]` | C interop bindings for native targets (array of `.def` entries) | `[]` |
 | `[repositories]` | Maven repositories (name = URL, tried in order) | Maven Central only |
 
 ### C Interop
 
-For `target = "native"` projects, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool, caches `build/<name>.klib`, and links it via `konanc -l`. Fields: `name` (klib base), `def` (.def path), `package` (optional Kotlin package). Compiler and linker flags belong inside the `.def` file itself via the Kotlin/Native standard `compilerOpts.<platform>` / `linkerOpts.<platform>` keys — kolt does not duplicate them in `kolt.toml`. Klibs are regenerated when the `.def` file's mtime changes.
+For native target projects, declare one `[[cinterop]]` entry per `.def` file. kolt invokes the konan `cinterop` tool, caches `build/<name>.klib`, and links it via `konanc -l`. Fields: `name` (klib base), `def` (.def path), `package` (optional Kotlin package). Compiler and linker flags belong inside the `.def` file itself via the Kotlin/Native standard `compilerOpts.<platform>` / `linkerOpts.<platform>` keys — kolt does not duplicate them in `kolt.toml`. Klibs are regenerated when the `.def` file's mtime changes.
 
 ## Dependencies
 
@@ -169,7 +169,7 @@ kolt test -- <extra runner args>
 
 **JVM target (`target = "jvm"`):** kolt auto-injects `kotlin-test-junit5` matching the Kotlin version and runs via JUnit Platform Console Standalone. Supports kotlin.test, JUnit 5, and Kotest. Extra args are forwarded to the console launcher, e.g. `kolt test -- --include-classname ".*IntegrationTest"`.
 
-**Native target (`target = "native"`):** kolt compiles main + test sources into an intermediate klib (`build/<name>-test-klib`) with any enabled compiler plugins applied, then links that klib into `build/<name>-test.kexe` via `konanc -p program -generate-test-runner -Xinclude=...`. `kolt build` uses the same two-stage shape (`build/<name>-klib` → `build/<name>.kexe`). `kotlin.test` is provided by the bundled Kotlin/Native stdlib — no test dependency needs to be declared. Extra args are forwarded to the native test runner, e.g. `kolt test -- --ktest_filter=MyTest.*` or `--ktest_logger=SIMPLE`. The test executable exits non-zero on any failed test.
+**Native target (e.g. `target = "linuxX64"`):** kolt compiles main + test sources into an intermediate klib (`build/<name>-test-klib`) with any enabled compiler plugins applied, then links that klib into `build/<name>-test.kexe` via `konanc -p program -generate-test-runner -Xinclude=...`. `kolt build` uses the same two-stage shape (`build/<name>-klib` → `build/<name>.kexe`). `kotlin.test` is provided by the bundled Kotlin/Native stdlib — no test dependency needs to be declared. Extra args are forwarded to the native test runner, e.g. `kolt test -- --ktest_filter=MyTest.*` or `--ktest_logger=SIMPLE`. The test executable exits non-zero on any failed test.
 
 ## Toolchain Management
 

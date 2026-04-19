@@ -202,13 +202,14 @@ class CinteropNativeBuildIntegrationTest {
         )
         val config = testConfig(
             name = "myapp",
-            target = "native",
+            target = "linuxX64",
             cinterop = listOf(libcurlEntry)
         )
         val paths = KoltPaths("/home/testuser")
 
         val cinteropCmd = cinteropCommand(
             entry = libcurlEntry,
+            target = config.build.target,
             cinteropPath = paths.cinteropBin(config.kotlin.effectiveCompiler)
         )
         val klibPath = cinteropOutputKlibPath(libcurlEntry)
@@ -231,7 +232,7 @@ class CinteropNativeBuildIntegrationTest {
         // cinterop tool appends .klib to -o automatically; cinteropCommand.outputPath omits it.
         val entry = CinteropConfig(name = "libcurl", def = "libcurl.def")
 
-        val cmd = cinteropCommand(entry)
+        val cmd = cinteropCommand(entry, target = "linuxX64")
         val klibPath = cinteropOutputKlibPath(entry)
 
         assertEquals("${cmd.outputPath}.klib", klibPath)
@@ -242,7 +243,7 @@ class CinteropNativeBuildIntegrationTest {
         val libcurlEntry = CinteropConfig(name = "libcurl", def = "libcurl.def")
         val libsslEntry = CinteropConfig(name = "libssl", def = "libssl.def")
         val config = testConfig(
-            target = "native",
+            target = "linuxX64",
             cinterop = listOf(libcurlEntry, libsslEntry)
         )
 

@@ -2,6 +2,7 @@ package kolt.resolve
 
 import com.github.michaelbull.result.Result
 import kolt.config.KoltConfig
+import kolt.config.NATIVE_TARGETS
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -78,7 +79,7 @@ fun resolve(
     cacheBase: String,
     deps: ResolverDeps
 ): Result<ResolveResult, ResolveError> =
-    if (config.build.target == "native") resolveNative(config, cacheBase, deps)
+    if (config.build.target in NATIVE_TARGETS) resolveNative(config, cacheBase, deps)
     else resolveTransitive(config, existingLock, cacheBase, deps)
 
 fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lockfile {

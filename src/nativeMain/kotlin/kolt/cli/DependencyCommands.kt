@@ -228,11 +228,12 @@ internal fun doTree(): Result<Unit, Int> {
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_DEPENDENCY_ERROR) }
 
-    if (config.build.target == "native") {
+    if (config.build.target in NATIVE_TARGETS) {
         val nativeLookup = createNativeLookup(
             config.repositories.values.toList(),
             paths.cacheBase,
-            createResolverDeps()
+            createResolverDeps(),
+            nativeTarget = konanTargetGradleName(config.build.target)
         )
         if (config.dependencies.isNotEmpty()) {
             val tree = buildNativeDependencyTree(config.dependencies, nativeLookup)
