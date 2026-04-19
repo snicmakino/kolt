@@ -4,6 +4,7 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -356,6 +357,194 @@ class ConfigTest {
         assertNull(result.get())
         val error = assertIs<ConfigError.ParseFailed>(result.getError())
         assertTrue(error.message.contains("kind"), "missing 'kind' in: ${error.message}")
+    }
+
+    @Test
+    fun parseConfigWithSingleTargetTableDesugars() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.linuxX64]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("linuxX64", config.build.target)
+    }
+
+    @Test
+    fun parseConfigWithSingleJvmTargetTableDesugars() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.jvm]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("jvm", config.build.target)
+    }
+
+    @Test
+    fun multipleTargetTablesRejectedAsMultiTargetNotYetImplemented() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.jvm]
+            [build.targets.linuxX64]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(
+            error.message.contains("multi-target") && error.message.contains("not yet implemented"),
+            "expected multi-target rejection, got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun scalarTargetAndTargetTableTogetherIsSchemaError() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            target = "jvm"
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.linuxX64]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(
+            error.message.contains("[build] target") && error.message.contains("[build.targets"),
+            "expected mutual-exclusion error, got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun emptyBuildTargetsTableWithoutScalarReportsTargetRequired() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("target"), "missing 'target' in: ${error.message}")
+        assertFalse(
+            error.message.contains("multi-target"),
+            "should not report multi-target for empty table, got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun parseConfigWithQuotedTargetTableKeyDesugars() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets."linuxX64"]
+        """.trimIndent()
+
+        val config = assertNotNull(parseConfig(toml).get())
+        assertEquals("linuxX64", config.build.target)
+    }
+
+    @Test
+    fun bogusTargetTableKeyFallsThroughToTargetValidation() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.wasm]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("wasm"), "missing 'wasm' in: ${error.message}")
+    }
+
+    @Test
+    fun nativeInTargetTableIsRejectedWithMigrationHint() {
+        val toml = """
+            name = "my-app"
+            version = "0.1.0"
+
+            [kotlin]
+            version = "2.1.0"
+
+            [build]
+            main = "com.example.main"
+            sources = ["src"]
+
+            [build.targets.native]
+        """.trimIndent()
+
+        val result = parseConfig(toml)
+
+        assertNull(result.get())
+        val error = assertIs<ConfigError.ParseFailed>(result.getError())
+        assertTrue(error.message.contains("native"), "missing 'native' in: ${error.message}")
+        assertTrue(error.message.contains("linuxX64"), "missing migration hint in: ${error.message}")
     }
 
     @Test
