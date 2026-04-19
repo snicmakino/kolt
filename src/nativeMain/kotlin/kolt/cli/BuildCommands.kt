@@ -265,9 +265,14 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
         return Err(EXIT_BUILD_ERROR)
     }
 
+    ensureDirectoryRecursive(NATIVE_IC_CACHE_DIR).getOrElse { error ->
+        eprintln("error: could not create directory ${error.path}")
+        return Err(EXIT_BUILD_ERROR)
+    }
+
     val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
     println("linking ${config.name} (native)...")
-    executeCommand(linkCmd.args).getOrElse { error ->
+    runNativeLinkWithIcFallback(linkCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "linking"))
         return Err(EXIT_BUILD_ERROR)
     }
@@ -285,6 +290,38 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
     val elapsed = startMark.elapsedNow()
     println("built $kexePath in ${formatDuration(elapsed)}")
     return Ok(BuildResult(config, classpath = null, javaPath = null))
+}
+
+// On konanc non-zero exit, retry once after wiping the IC cache — konanc
+// can't distinguish "stale cache" from "real compile error" in its exit
+// code, so we treat every non-zero exit as potentially cache-induced.
+// The 2x cost on genuine source errors is acceptable because source
+// errors are caught at stage 1 (library), not stage 2 (link). Spike #160
+// confirmed konanc handles a missing .ic-cache gracefully.
+//
+// Fork/wait/signal failures are outside the cache-corruption hypothesis
+// (the konanc process never ran to completion), so they surface as-is.
+// If wipe itself fails, the retry would hit the same stale cache — skip
+// the retry and return the original error instead.
+internal fun runNativeLinkWithIcFallback(
+    args: List<String>,
+    execute: (List<String>) -> Result<Int, ProcessError> = ::executeCommand,
+    wipeCache: () -> Boolean = ::wipeNativeIcCache
+): Result<Int, ProcessError> {
+    val first = execute(args)
+    val firstError = first.getError() ?: return first
+    if (firstError !is ProcessError.NonZeroExit) return first
+    if (!wipeCache()) return first
+    return execute(args)
+}
+
+private fun wipeNativeIcCache(): Boolean {
+    if (!fileExists(NATIVE_IC_CACHE_DIR)) return true
+    val result = removeDirectoryRecursive(NATIVE_IC_CACHE_DIR)
+    if (result.isOk) return true
+    val error = result.getError()!!
+    eprintln("warning: could not remove ${error.path}")
+    return false
 }
 
 private fun newestDefMtime(config: KoltConfig): Long? {

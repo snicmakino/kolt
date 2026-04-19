@@ -1,6 +1,9 @@
 package kolt.cli
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.get
+import com.github.michaelbull.result.getError
 import kolt.testConfig
 import kolt.build.cinteropCommand
 import kolt.build.cinteropOutputKlibPath
@@ -8,12 +11,14 @@ import kolt.build.nativeLibraryCommand
 import kolt.build.nativeLinkCommand
 import kolt.config.CinteropConfig
 import kolt.config.KoltPaths
+import kolt.infra.ProcessError
 import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
 import kolt.tool.JdkBins
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -249,5 +254,125 @@ class CinteropNativeBuildIntegrationTest {
         assertEquals(2, lIndices.size)
         assertEquals("build/libcurl.klib", libraryCmd.args[lIndices[0] + 1])
         assertEquals("build/libssl.klib", libraryCmd.args[lIndices[1] + 1])
+    }
+}
+
+class RunNativeLinkWithIcFallbackTest {
+
+    @Test
+    fun successOnFirstCallSkipsWipeAndRetry() {
+        var executeCalls = 0
+        var wipeCalls = 0
+
+        val result = runNativeLinkWithIcFallback(
+            args = listOf("konanc"),
+            execute = { executeCalls++; Ok(0) },
+            wipeCache = { wipeCalls++; true }
+        )
+
+        assertTrue(result.isOk)
+        assertEquals(0, result.get())
+        assertEquals(1, executeCalls)
+        assertEquals(0, wipeCalls)
+    }
+
+    @Test
+    fun nonZeroExitTriggersWipeAndSingleRetrySucceeds() {
+        var executeCalls = 0
+        var wipeCalls = 0
+
+        val result = runNativeLinkWithIcFallback(
+            args = listOf("konanc"),
+            execute = {
+                executeCalls++
+                if (executeCalls == 1) Err(ProcessError.NonZeroExit(1)) else Ok(0)
+            },
+            wipeCache = { wipeCalls++; true }
+        )
+
+        assertEquals(0, result.get() ?: -1)
+        assertEquals(2, executeCalls)
+        assertEquals(1, wipeCalls)
+    }
+
+    @Test
+    fun retryFailureSurfacesRetryErrorNotOriginal() {
+        var executeCalls = 0
+        var wipeCalls = 0
+
+        val result = runNativeLinkWithIcFallback(
+            args = listOf("konanc"),
+            execute = {
+                executeCalls++
+                Err(ProcessError.NonZeroExit(if (executeCalls == 1) 1 else 2))
+            },
+            wipeCache = { wipeCalls++; true }
+        )
+
+        assertFalse(result.isOk)
+        val err = result.getError()
+        assertTrue(err is ProcessError.NonZeroExit && err.exitCode == 2)
+        assertEquals(2, executeCalls)
+        assertEquals(1, wipeCalls)
+    }
+
+    // Fork/wait/signal failures mean konanc never ran. Retry cannot help
+    // (the cache had no chance to become corrupt), so surface the error.
+    @Test
+    fun nonExitProcessErrorsSkipWipeAndRetry() {
+        val nonExitErrors = listOf(
+            ProcessError.ForkFailed,
+            ProcessError.WaitFailed,
+            ProcessError.SignalKilled,
+            ProcessError.EmptyArgs,
+        )
+        for (err in nonExitErrors) {
+            var executeCalls = 0
+            var wipeCalls = 0
+
+            val result = runNativeLinkWithIcFallback(
+                args = listOf("konanc"),
+                execute = { executeCalls++; Err(err) },
+                wipeCache = { wipeCalls++; true }
+            )
+
+            assertEquals(err, result.getError(), "error=$err")
+            assertEquals(1, executeCalls, "error=$err")
+            assertEquals(0, wipeCalls, "error=$err")
+        }
+    }
+
+    // If the wipe fails, the retry would hit the same stale cache and
+    // produce an identical error — skip it and surface the first error.
+    @Test
+    fun wipeFailureSkipsRetryAndReturnsOriginalError() {
+        var executeCalls = 0
+        var wipeCalls = 0
+
+        val result = runNativeLinkWithIcFallback(
+            args = listOf("konanc"),
+            execute = { executeCalls++; Err(ProcessError.NonZeroExit(1)) },
+            wipeCache = { wipeCalls++; false }
+        )
+
+        assertFalse(result.isOk)
+        val err = result.getError()
+        assertTrue(err is ProcessError.NonZeroExit && err.exitCode == 1)
+        assertEquals(1, executeCalls)
+        assertEquals(1, wipeCalls)
+    }
+}
+
+class NativeIcCacheLocationTest {
+
+    // `doClean` removes BUILD_DIR wholesale, so the IC cache is wiped
+    // transitively. A refactor that moves .ic-cache outside BUILD_DIR
+    // would silently break the "wiped by kolt clean" contract.
+    @Test
+    fun icCacheLivesUnderBuildDir() {
+        assertTrue(
+            kolt.build.NATIVE_IC_CACHE_DIR.startsWith("${kolt.build.BUILD_DIR}/"),
+            "NATIVE_IC_CACHE_DIR=${kolt.build.NATIVE_IC_CACHE_DIR} must live under BUILD_DIR=${kolt.build.BUILD_DIR}"
+        )
     }
 }

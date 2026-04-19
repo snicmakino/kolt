@@ -232,6 +232,8 @@ class BuilderTest {
                 "-p", "program",
                 "-e", "com.example.main",
                 "-Xinclude=build/my-app-klib",
+                "-Xenable-incremental-compilation",
+                "-Xic-cache-dir=build/.ic-cache",
                 "-o", "build/my-app"
             ),
             cmd.args
@@ -251,6 +253,8 @@ class BuilderTest {
                 "-p", "program",
                 "-e", "com.example.main",
                 "-Xinclude=build/hello-klib",
+                "-Xenable-incremental-compilation",
+                "-Xic-cache-dir=build/.ic-cache",
                 "-o", "build/hello"
             ),
             cmd.args
@@ -285,6 +289,8 @@ class BuilderTest {
                 "-l", "/cache/a.klib",
                 "-l", "/cache/b.klib",
                 "-Xinclude=build/my-app-klib",
+                "-Xenable-incremental-compilation",
+                "-Xic-cache-dir=build/.ic-cache",
                 "-o", "build/my-app"
             ),
             cmd.args

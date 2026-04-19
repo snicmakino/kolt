@@ -6,6 +6,11 @@ import kolt.config.KoltConfig
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 
+// Native IC cache. Wiped by `kolt clean` (it lives under BUILD_DIR).
+// Spike #160: touch/abi-neutral wall-time -30–39% at 25–50 files; cold
+// builds also speed up from konanc's IC strategy. Issue #168.
+internal const val NATIVE_IC_CACHE_DIR = "$BUILD_DIR/.ic-cache"
+
 // Passed explicitly so a cross-build cannot silently fall back to host default.
 internal const val NATIVE_TARGET = "linux_x64"
 
@@ -110,6 +115,8 @@ fun nativeLinkCommand(
             add(klib)
         }
         add("-Xinclude=$klibPath")
+        add("-Xenable-incremental-compilation")
+        add("-Xic-cache-dir=$NATIVE_IC_CACHE_DIR")
         add("-o")
         add(outputBase)
     }
