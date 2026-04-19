@@ -164,7 +164,7 @@ for n in "${SIZES[@]}"; do
 
   # Parse output: lines like "run 1: OK 12345ms"
   while IFS= read -r line; do
-    if [[ "$line" =~ ^run\ ([0-9]+):\ ([A-Z_]+)\ ([0-9]+)ms$ ]]; then
+    if [[ "$line" =~ ^run\ ([0-9]+):\ ([A-Z_]+)\ ([0-9]+)ms(\ [0-9]+MB)?$ ]]; then
       run_num="${BASH_REMATCH[1]}"
       exit_code="${BASH_REMATCH[2]}"
       wall_ms="${BASH_REMATCH[3]}"

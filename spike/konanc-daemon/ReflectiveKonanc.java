@@ -45,6 +45,9 @@ public class ReflectiveKonanc {
 
         long[] wallMs = new long[n];
         String[] exitCodes = new String[n];
+        long[] heapMb = new long[n];
+
+        Runtime rt = Runtime.getRuntime();
 
         for (int i = 0; i < n; i++) {
             long start = System.nanoTime();
@@ -57,12 +60,15 @@ public class ReflectiveKonanc {
                     i + 1, cause.getClass().getName(), cause.getMessage());
                 exitCodes[i] = "EXCEPTION";
                 wallMs[i] = (System.nanoTime() - start) / 1_000_000;
+                heapMb[i] = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
                 continue;
             }
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             wallMs[i] = elapsed;
             exitCodes[i] = exitCode.toString();
-            System.err.printf("invocation %d: %s  %dms%n", i + 1, exitCode, elapsed);
+            heapMb[i] = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+            System.err.printf("invocation %d: %s  %dms  heap=%dMB%n",
+                i + 1, exitCode, elapsed, heapMb[i]);
         }
 
         // Print structured output for the benchmark harness.
@@ -70,7 +76,7 @@ public class ReflectiveKonanc {
         System.out.println("invocations: " + n);
         System.out.println("args: " + Arrays.toString(konanArgs));
         for (int i = 0; i < n; i++) {
-            System.out.printf("run %d: %s %dms%n", i + 1, exitCodes[i], wallMs[i]);
+            System.out.printf("run %d: %s %dms %dMB%n", i + 1, exitCodes[i], wallMs[i], heapMb[i]);
         }
     }
 
