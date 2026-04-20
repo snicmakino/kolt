@@ -198,13 +198,20 @@ class DaemonServer(
     private fun outcomeToReply(outcome: NativeCompileOutcome): Message.NativeCompileResult =
         Message.NativeCompileResult(exitCode = outcome.exitCode, stderr = outcome.stderr)
 
-    // ADR 0024 §7: genuine reflective failures (the URLClassLoader cracked,
-    // K2Native.exec threw an uncaught exception) are surfaced to the client
-    // as exitCode=2 with a descriptive stderr. This keeps the wire contract
-    // uniform — every request gets a NativeCompileResult. Client-side fallback
-    // (ADR 0024 §7, implemented in PR 3) keys off whether the daemon replied
-    // at all, not off the exitCode; a reflective-error reply does NOT trigger
-    // the subprocess fallback because the daemon itself is healthy.
+    // ADR 0024 §7 (interpreted): genuine reflective failures (the
+    // URLClassLoader cracked, K2Native.exec threw an uncaught exception) are
+    // surfaced to the client as exitCode=2 with a descriptive stderr. §7
+    // names "connect refused, spawn failure, unexpected disconnect" as the
+    // explicit fallback triggers; a reflective crack is the same class of
+    // "daemon is not healthy for this request" signal and routes the same
+    // way. This keeps the wire contract uniform — every request gets a
+    // NativeCompileResult — while letting the client escape to the subprocess
+    // path when the daemon's execution vehicle is broken. The `native
+    // compiler invocation failed: ` stderr prefix is the load-bearing
+    // contract: the native client's `NativeDaemonBackend.isDaemonSideFailure`
+    // pattern-matches on it, and renaming on either side without updating
+    // the other turns daemon failures into silently-routed konanc errors
+    // and loses fallback.
     private fun errorToReply(error: NativeCompileError): Message.NativeCompileResult = when (error) {
         is NativeCompileError.InvocationFailed -> Message.NativeCompileResult(
             exitCode = 2,
