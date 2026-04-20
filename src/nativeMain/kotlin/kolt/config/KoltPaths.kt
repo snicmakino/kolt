@@ -19,6 +19,15 @@ internal data class KoltPaths(val home: String) {
     fun daemonLogPath(projectHash: String, kotlinVersion: String): String =
         "${daemonDir(projectHash, kotlinVersion)}/daemon.log"
 
+    // ADR 0024 §3: native daemon sits under the same <projectHash>/<version>
+    // directory as the JVM daemon, distinguished by its socket filename.
+    // Keeping both sockets under one directory lets `kolt daemon stop`
+    // enumerate them in a single pass (ADR 0020 §2).
+    fun nativeDaemonSocketPath(projectHash: String, kotlinVersion: String): String =
+        "${daemonDir(projectHash, kotlinVersion)}/native-daemon.sock"
+    fun nativeDaemonLogPath(projectHash: String, kotlinVersion: String): String =
+        "${daemonDir(projectHash, kotlinVersion)}/native-daemon.log"
+
     fun kotlincPath(version: String): String = "$toolchainsDir/kotlinc/$version"
     fun kotlincBin(version: String): String = "${kotlincPath(version)}/bin/kotlinc"
 
