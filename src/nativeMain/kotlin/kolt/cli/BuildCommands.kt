@@ -13,6 +13,11 @@ import kolt.build.daemon.DaemonSetup
 import kolt.build.daemon.cleanDaemonIcStateForProject
 import kolt.build.daemon.formatDaemonPreconditionWarning
 import kolt.build.daemon.resolveDaemonPreconditions
+import kolt.build.nativedaemon.NativeDaemonBackend
+import kolt.build.nativedaemon.NativeDaemonPreconditionError
+import kolt.build.nativedaemon.NativeDaemonSetup
+import kolt.build.nativedaemon.formatNativeDaemonPreconditionWarning
+import kolt.build.nativedaemon.resolveNativeDaemonPreconditions
 import kolt.config.*
 import kolt.infra.*
 import kolt.resolve.*
@@ -112,7 +117,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     val config = loadProjectConfig().getOrElse { return Err(it) }
 
     if (config.build.target in NATIVE_TARGETS) {
-        return doNativeBuild(config)
+        return doNativeBuild(config, useDaemon)
     }
 
     val currentState = BuildState(
@@ -221,7 +226,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     return Ok(BuildResult(config, classpath, managedJavaBin))
 }
 
-private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
+private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildResult, Int> {
     val startMark = TimeSource.Monotonic.markNow()
 
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
@@ -258,10 +263,27 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
     val cinteropKlibs = runCinterop(config, paths).getOrElse { return Err(it) }
     val klibs = depKlibs + cinteropKlibs
 
+    val cwd = currentWorkingDirectory() ?: run {
+        eprintln("error: could not determine current working directory")
+        return Err(EXIT_BUILD_ERROR)
+    }
+    val subprocessBackend = NativeSubprocessBackend(konancBin = managedKonancBin)
+    val backend: NativeCompilerBackend = resolveNativeCompilerBackend(
+        config = config,
+        paths = paths,
+        subprocessBackend = subprocessBackend,
+        useDaemon = useDaemon,
+        absProjectPath = cwd,
+    )
+
     val libraryCmd = nativeLibraryCommand(config, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
     println("compiling ${config.name} (native)...")
-    executeCommand(libraryCmd.args).getOrElse { error ->
-        eprintln("error: " + formatProcessError(error, "compilation"))
+    // ADR 0024 §4: backend.compile takes konanc args *after* the binary.
+    // `nativeLibraryCommand` / `nativeLinkCommand` put the binary at [0]
+    // for the subprocess call site; strip it when handing off to the
+    // backend so the daemon and subprocess paths share the same argv shape.
+    backend.compile(libraryCmd.args.drop(1)).getOrElse { error ->
+        reportNativeCompileError(error, "compilation")
         return Err(EXIT_BUILD_ERROR)
     }
 
@@ -272,8 +294,8 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
 
     val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
     println("linking ${config.name} (native)...")
-    runNativeLinkWithIcFallback(linkCmd.args).getOrElse { error ->
-        eprintln("error: " + formatProcessError(error, "linking"))
+    runNativeLinkWithIcFallback(backend, linkCmd.args.drop(1)).getOrElse { error ->
+        reportNativeCompileError(error, "linking")
         return Err(EXIT_BUILD_ERROR)
     }
 
@@ -292,6 +314,16 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
     return Ok(BuildResult(config, classpath = null, javaPath = null))
 }
 
+// Surface konanc stderr before the one-line fallback/error summary so the
+// user sees the actual diagnostic. CompilationFailed rides the
+// backend-supplied stderr; other variants don't have diagnostic content.
+private fun reportNativeCompileError(error: NativeCompileError, context: String) {
+    if (error is NativeCompileError.CompilationFailed && error.stderr.isNotEmpty()) {
+        eprintln(error.stderr.trimEnd('\n'))
+    }
+    eprintln(formatNativeCompileError(error, context))
+}
+
 // On konanc non-zero exit, retry once after wiping the IC cache — konanc
 // can't distinguish "stale cache" from "real compile error" in its exit
 // code, so we treat every non-zero exit as potentially cache-induced.
@@ -299,20 +331,23 @@ private fun doNativeBuild(config: KoltConfig): Result<BuildResult, Int> {
 // errors are caught at stage 1 (library), not stage 2 (link). Spike #160
 // confirmed konanc handles a missing .ic-cache gracefully.
 //
-// Fork/wait/signal failures are outside the cache-corruption hypothesis
-// (the konanc process never ran to completion), so they surface as-is.
+// After PR 4: the execute step goes through `NativeCompilerBackend`, so
+// BackendUnavailable variants (daemon unreachable, subprocess fork/wait
+// failures) surface directly — they are outside the cache-corruption
+// hypothesis. Only `CompilationFailed` (konanc returned non-zero) is
+// retry-eligible. InternalMisuse and NoCommand likewise skip retry.
 // If wipe itself fails, the retry would hit the same stale cache — skip
 // the retry and return the original error instead.
 internal fun runNativeLinkWithIcFallback(
+    backend: NativeCompilerBackend,
     args: List<String>,
-    execute: (List<String>) -> Result<Int, ProcessError> = ::executeCommand,
-    wipeCache: () -> Boolean = ::wipeNativeIcCache
-): Result<Int, ProcessError> {
-    val first = execute(args)
+    wipeCache: () -> Boolean = ::wipeNativeIcCache,
+): Result<NativeCompileOutcome, NativeCompileError> {
+    val first = backend.compile(args)
     val firstError = first.getError() ?: return first
-    if (firstError !is ProcessError.NonZeroExit) return first
+    if (firstError !is NativeCompileError.CompilationFailed) return first
     if (!wipeCache()) return first
-    return execute(args)
+    return backend.compile(args)
 }
 
 private fun wipeNativeIcCache(): Boolean {
@@ -572,6 +607,61 @@ internal fun resolveCompilerBackend(
         onFallback = ::reportFallback,
     )
 }
+
+// ADR 0024 §7: native daemon is never load-bearing either. Same fallback
+// shape as `resolveCompilerBackend`, but simpler: no plugin fingerprinting
+// (no daemon-side plugin channel per §6) and a different precondition
+// resolver.
+internal fun resolveNativeCompilerBackend(
+    config: KoltConfig,
+    paths: KoltPaths,
+    subprocessBackend: NativeCompilerBackend,
+    useDaemon: Boolean,
+    absProjectPath: String,
+    preconditionResolver: (KoltPaths, String, String) -> Result<NativeDaemonSetup, NativeDaemonPreconditionError> =
+        { p, kotlincVersion, cwd ->
+            resolveNativeDaemonPreconditions(p, kotlincVersion, cwd)
+        },
+    daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
+    daemonBackendFactory: (NativeDaemonSetup) -> NativeCompilerBackend = ::createNativeDaemonBackend,
+    warningSink: (String) -> Unit = ::eprintln,
+): NativeCompilerBackend {
+    if (!useDaemon) return subprocessBackend
+
+    val setup = preconditionResolver(
+        paths, config.kotlin.effectiveCompiler, absProjectPath,
+    ).getOrElse { err ->
+        warningSink(formatNativeDaemonPreconditionWarning(err))
+        return subprocessBackend
+    }
+
+    // spawnDetached opens the log with O_CREAT but not the parent dir;
+    // create it before the daemon tries to bind the socket. Mirrors the
+    // JVM daemon wiring.
+    if (daemonDirCreator(setup.daemonDir).getError() != null) {
+        warningSink(WARNING_DAEMON_DIR_UNWRITABLE)
+        return subprocessBackend
+    }
+
+    return FallbackNativeCompilerBackend(
+        primary = daemonBackendFactory(setup),
+        fallback = subprocessBackend,
+        onFallback = ::reportNativeFallback,
+    )
+}
+
+internal fun createNativeDaemonBackend(
+    setup: NativeDaemonSetup,
+): NativeCompilerBackend =
+    NativeDaemonBackend(
+        javaBin = setup.javaBin,
+        daemonJarPath = setup.daemonJarPath,
+        konancJar = setup.konancJar,
+        konanHome = setup.konanHome,
+        socketPath = setup.socketPath,
+        logPath = setup.logPath,
+        onSpawn = { eprintln("starting native compiler daemon...") },
+    )
 
 internal fun createDaemonBackend(
     setup: DaemonSetup,

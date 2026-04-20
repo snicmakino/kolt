@@ -2,9 +2,13 @@ package kolt.cli
 
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.testConfig
+import kolt.build.NativeCompileError
+import kolt.build.NativeCompileOutcome
+import kolt.build.NativeCompilerBackend
 import kolt.build.cinteropCommand
 import kolt.build.cinteropOutputKlibPath
 import kolt.build.nativeLibraryCommand
@@ -19,6 +23,7 @@ import kolt.tool.JdkBins
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -260,107 +265,118 @@ class CinteropNativeBuildIntegrationTest {
 
 class RunNativeLinkWithIcFallbackTest {
 
+    private class StubBackend(
+        private val replies: List<Result<NativeCompileOutcome, NativeCompileError>>,
+    ) : NativeCompilerBackend {
+        var calls: Int = 0
+            private set
+        override fun compile(args: List<String>): Result<NativeCompileOutcome, NativeCompileError> {
+            val reply = replies[calls.coerceAtMost(replies.size - 1)]
+            calls++
+            return reply
+        }
+    }
+
     @Test
     fun successOnFirstCallSkipsWipeAndRetry() {
-        var executeCalls = 0
+        val backend = StubBackend(listOf(Ok(NativeCompileOutcome(stderr = ""))))
         var wipeCalls = 0
 
         val result = runNativeLinkWithIcFallback(
-            args = listOf("konanc"),
-            execute = { executeCalls++; Ok(0) },
-            wipeCache = { wipeCalls++; true }
+            backend = backend,
+            args = listOf("-target", "linux_x64"),
+            wipeCache = { wipeCalls++; true },
         )
 
         assertTrue(result.isOk)
-        assertEquals(0, result.get())
-        assertEquals(1, executeCalls)
+        assertEquals(1, backend.calls)
         assertEquals(0, wipeCalls)
     }
 
     @Test
-    fun nonZeroExitTriggersWipeAndSingleRetrySucceeds() {
-        var executeCalls = 0
+    fun compilationFailedTriggersWipeAndSingleRetrySucceeds() {
+        val backend = StubBackend(
+            listOf(
+                Err(NativeCompileError.CompilationFailed(exitCode = 1, stderr = "stale cache")),
+                Ok(NativeCompileOutcome(stderr = "")),
+            ),
+        )
         var wipeCalls = 0
 
         val result = runNativeLinkWithIcFallback(
-            args = listOf("konanc"),
-            execute = {
-                executeCalls++
-                if (executeCalls == 1) Err(ProcessError.NonZeroExit(1)) else Ok(0)
-            },
-            wipeCache = { wipeCalls++; true }
+            backend = backend,
+            args = listOf("-target", "linux_x64"),
+            wipeCache = { wipeCalls++; true },
         )
 
-        assertEquals(0, result.get() ?: -1)
-        assertEquals(2, executeCalls)
+        assertTrue(result.isOk)
+        assertEquals(2, backend.calls)
         assertEquals(1, wipeCalls)
     }
 
     @Test
     fun retryFailureSurfacesRetryErrorNotOriginal() {
-        var executeCalls = 0
-        var wipeCalls = 0
+        val backend = StubBackend(
+            listOf(
+                Err(NativeCompileError.CompilationFailed(exitCode = 1, stderr = "first")),
+                Err(NativeCompileError.CompilationFailed(exitCode = 2, stderr = "second")),
+            ),
+        )
 
         val result = runNativeLinkWithIcFallback(
-            args = listOf("konanc"),
-            execute = {
-                executeCalls++
-                Err(ProcessError.NonZeroExit(if (executeCalls == 1) 1 else 2))
-            },
-            wipeCache = { wipeCalls++; true }
+            backend = backend,
+            args = listOf("-target", "linux_x64"),
+            wipeCache = { true },
         )
 
-        assertFalse(result.isOk)
-        val err = result.getError()
-        assertTrue(err is ProcessError.NonZeroExit && err.exitCode == 2)
-        assertEquals(2, executeCalls)
-        assertEquals(1, wipeCalls)
+        val err = assertIs<NativeCompileError.CompilationFailed>(result.getError())
+        assertEquals(2, err.exitCode)
+        assertEquals(2, backend.calls)
     }
 
-    // Fork/wait/signal failures mean konanc never ran. Retry cannot help
-    // (the cache had no chance to become corrupt), so surface the error.
+    // BackendUnavailable / InternalMisuse / NoCommand never reach here as
+    // the retry target, because they are either fallback-eligible (and
+    // handled by FallbackNativeCompilerBackend upstream) or genuinely
+    // unrecoverable. Only CompilationFailed can be cache-stale.
     @Test
-    fun nonExitProcessErrorsSkipWipeAndRetry() {
-        val nonExitErrors = listOf(
-            ProcessError.ForkFailed,
-            ProcessError.WaitFailed,
-            ProcessError.SignalKilled,
-            ProcessError.EmptyArgs,
+    fun nonCompilationFailedErrorsSkipWipeAndRetry() {
+        val errors: List<NativeCompileError> = listOf(
+            NativeCompileError.BackendUnavailable.ForkFailed,
+            NativeCompileError.BackendUnavailable.Other("subprocess popen failed"),
+            NativeCompileError.NoCommand,
+            NativeCompileError.InternalMisuse("socket path too long"),
         )
-        for (err in nonExitErrors) {
-            var executeCalls = 0
+        for (err in errors) {
+            val backend = StubBackend(listOf(Err(err)))
             var wipeCalls = 0
 
             val result = runNativeLinkWithIcFallback(
-                args = listOf("konanc"),
-                execute = { executeCalls++; Err(err) },
-                wipeCache = { wipeCalls++; true }
+                backend = backend,
+                args = listOf("-target", "linux_x64"),
+                wipeCache = { wipeCalls++; true },
             )
 
             assertEquals(err, result.getError(), "error=$err")
-            assertEquals(1, executeCalls, "error=$err")
+            assertEquals(1, backend.calls, "error=$err")
             assertEquals(0, wipeCalls, "error=$err")
         }
     }
 
-    // If the wipe fails, the retry would hit the same stale cache and
-    // produce an identical error — skip it and surface the first error.
     @Test
     fun wipeFailureSkipsRetryAndReturnsOriginalError() {
-        var executeCalls = 0
-        var wipeCalls = 0
-
-        val result = runNativeLinkWithIcFallback(
-            args = listOf("konanc"),
-            execute = { executeCalls++; Err(ProcessError.NonZeroExit(1)) },
-            wipeCache = { wipeCalls++; false }
+        val backend = StubBackend(
+            listOf(Err(NativeCompileError.CompilationFailed(exitCode = 1, stderr = "stale cache"))),
         )
 
-        assertFalse(result.isOk)
-        val err = result.getError()
-        assertTrue(err is ProcessError.NonZeroExit && err.exitCode == 1)
-        assertEquals(1, executeCalls)
-        assertEquals(1, wipeCalls)
+        val result = runNativeLinkWithIcFallback(
+            backend = backend,
+            args = listOf("-target", "linux_x64"),
+            wipeCache = { false },
+        )
+
+        val err = assertIs<NativeCompileError.CompilationFailed>(result.getError())
+        assertEquals(1, err.exitCode)
+        assertEquals(1, backend.calls)
     }
 }
 
