@@ -7,13 +7,15 @@ group = "com.github.snicmakino"
 
 // Canonical kotlinc version pin for the whole project. Sister constants live in
 // `src/nativeMain/kotlin/kolt/cli/BundledKotlinVersion.kt` (native client),
-// `kolt-compiler-daemon/src/main/kotlin/kolt/daemon/Main.kt` (daemon), and four
-// kotlinc/BTA artifact coordinates in kolt-compiler-daemon's build scripts.
-// ADR 0019 §1 requires all six to move in lockstep with this value. They are
-// hand-pinned rather than generated so the self-host path (`kolt.kexe build`
-// driven by `kolt.toml`) compiles without a prior Gradle step populating
-// `build/generated/`; `verifyDaemonKotlinVersion` asserts the sync at build
-// time. #138 will collapse the manual-sync requirement.
+// `kolt-compiler-daemon/src/main/kotlin/kolt/daemon/Main.kt` (JVM daemon),
+// `kolt-native-daemon/src/main/kotlin/kolt/nativedaemon/Main.kt` (native
+// daemon, ADR 0024), and four kotlinc/BTA artifact coordinates in
+// kolt-compiler-daemon's build scripts. ADR 0019 §1 requires all seven to
+// move in lockstep with this value. They are hand-pinned rather than
+// generated so the self-host path (`kolt.kexe build` driven by `kolt.toml`)
+// compiles without a prior Gradle step populating `build/generated/`;
+// `verifyDaemonKotlinVersion` asserts the sync at build time. #138 will
+// collapse the manual-sync requirement.
 val daemonKotlinVersion = "2.3.20"
 
 repositories {
@@ -35,11 +37,15 @@ val verifyDaemonKotlinVersion = tasks.register("verifyDaemonKotlinVersion") {
     val icBuildScript = layout.projectDirectory.file(
         "kolt-compiler-daemon/ic/build.gradle.kts",
     )
+    val nativeDaemonMain = layout.projectDirectory.file(
+        "kolt-native-daemon/src/main/kotlin/kolt/nativedaemon/Main.kt",
+    )
     val expected = daemonKotlinVersion
     inputs.file(nativeBundled)
     inputs.file(daemonMain)
     inputs.file(daemonBuildScript)
     inputs.file(icBuildScript)
+    inputs.file(nativeDaemonMain)
     inputs.property("expected", expected)
     doLast {
         data class Pin(val label: String, val file: java.io.File, val regex: Regex, val fixHint: String)
@@ -89,6 +95,14 @@ val verifyDaemonKotlinVersion = tasks.register("verifyDaemonKotlinVersion") {
                 file = icBuildScript.asFile,
                 regex = Regex("kotlin-build-tools-impl:([^\"\\s]+)\""),
                 fixHint = "pin `org.jetbrains.kotlin:kotlin-build-tools-impl:<version>` with a literal version",
+            ),
+            Pin(
+                label = "kolt-native-daemon Main.kt `KOLT_NATIVE_DAEMON_KOTLIN_VERSION`",
+                file = nativeDaemonMain.asFile,
+                regex = Regex(
+                    """const\s+val\s+KOLT_NATIVE_DAEMON_KOTLIN_VERSION\s*:\s*String\s*=\s*"([^"]+)"""",
+                ),
+                fixHint = "keep the declaration as `internal const val KOLT_NATIVE_DAEMON_KOTLIN_VERSION: String = \"<version>\"`",
             ),
         )
 
@@ -152,30 +166,34 @@ tasks.withType<Wrapper> {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-// Keep the existing "./gradlew build rebuilds the daemon fat jar too" DX after
-// the kolt-compiler-daemon split into an independent Gradle build. Without this
-// wiring, the dev-fallback path in DaemonJarResolver.kt could pick up a stale
-// jar produced before a local protocol change.
+// Keep the existing "./gradlew build rebuilds the daemon fat jars too" DX
+// after the kolt-compiler-daemon and kolt-native-daemon splits into
+// independent Gradle builds. Without this wiring, the dev-fallback paths in
+// DaemonJarResolver.kt (and the forthcoming native counterpart per ADR
+// 0024) could pick up stale jars produced before a local protocol change.
 tasks.named("build") {
     dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":build"))
+    dependsOn(gradle.includedBuild("kolt-native-daemon").task(":build"))
 }
 
-// Propagate `check` to the included build as well, so that ADR 0016's
-// `verifyShadowJar` regression guard (which rejects kotlin-compiler-embeddable
-// being baked into the fat jar) stays on the root `./gradlew check` path.
-// Without this, the silent-fallback footgun that ADR 0018 flags loses its
-// first line of defense.
+// Propagate `check` to both included builds as well, so that ADR 0016's and
+// ADR 0024's `verifyShadowJar` regression guards (which reject
+// kotlin-compiler-embeddable and kotlin-native-compiler-embeddable from
+// being baked into their respective fat jars) stay on the root
+// `./gradlew check` path.
 tasks.named("check") {
     dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":check"))
+    dependsOn(gradle.includedBuild("kolt-native-daemon").task(":check"))
     dependsOn(verifyDaemonKotlinVersion)
 }
 
 // Same rationale for `clean`: without this wiring, `./gradlew clean` at the
-// root leaves the daemon fat jar behind, and the dev-fallback path in
-// DaemonJarResolver.kt can keep resolving it across local protocol changes
-// until someone manually wipes kolt-compiler-daemon/build/.
+// root leaves the daemon fat jars behind, and the dev-fallback resolvers can
+// keep reading them across local protocol changes until someone manually
+// wipes the daemon build dirs.
 tasks.named("clean") {
     dependsOn(gradle.includedBuild("kolt-compiler-daemon").task(":clean"))
+    dependsOn(gradle.includedBuild("kolt-native-daemon").task(":clean"))
 }
 
 // Force `stageBtaImplJars` before any `linuxX64Test` run. Without this
