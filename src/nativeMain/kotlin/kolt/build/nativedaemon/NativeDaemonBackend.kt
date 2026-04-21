@@ -241,15 +241,13 @@ internal fun mapReplyToOutcome(reply: Message): Result<NativeCompileOutcome, Nat
     )
 }
 
-// DaemonServer emits these prefixes for server-side failures (writeProtocolError
-// and NativeCompileError.InvocationFailed → exitCode=2 replies). Any other
-// exitCode=2 reply is assumed to come from konanc itself (ExitCode.INTERNAL_ERROR
-// has code=2) and rides the CompilationFailed path. Collision risk: a konanc
-// error whose stderr happens to start with one of these prefixes would be
-// mis-routed as a daemon failure. The prefixes are long and specific enough
-// that this is not a realistic concern today, but the assumption is
-// load-bearing — renaming a prefix on either side without updating the other
-// silently breaks fallback routing.
+// Server emits these prefixes for `writeProtocolError` + `InvocationFailed`
+// replies (both exitCode=2). Other exitCode=2 replies come from konanc
+// itself (ExitCode.INTERNAL_ERROR=2) and ride the CompilationFailed path.
+// Prefix drift is pinned by two paired tests:
+//   - server: DaemonServerTest `InvocationFailed...` / `rejects server-only...`
+//   - client: NativeDaemonBackendTest `exitCode2With{Protocol,InvocationFailed}Prefix...`
+// Rename on either side without updating the other and one of the two fails.
 private const val DAEMON_PROTOCOL_ERROR_PREFIX = "protocol error: "
 private const val DAEMON_INVOCATION_FAILED_PREFIX = "native compiler invocation failed: "
 

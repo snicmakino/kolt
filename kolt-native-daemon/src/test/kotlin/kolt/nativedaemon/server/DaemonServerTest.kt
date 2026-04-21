@@ -122,6 +122,15 @@ class DaemonServerTest {
             FrameCodec.writeFrame(output, Message.NativeCompile(args = listOf("-target", "linux_x64")))
             val response = FrameCodec.readFrame(input).get() as Message.NativeCompileResult
             assertEquals(2, response.exitCode)
+            // LOAD-BEARING prefix — mirrored in the native client's
+            // `NativeDaemonBackend.isDaemonSideFailure` (and its mock-reply
+            // test in src/nativeTest/.../NativeDaemonBackendTest.kt). Rename
+            // without updating the client side turns reflective-invocation
+            // failures into silently-routed konanc errors and loses fallback.
+            assertTrue(
+                response.stderr.startsWith(INVOCATION_FAILED_PREFIX),
+                "expected stderr to start with '$INVOCATION_FAILED_PREFIX', got: ${response.stderr}",
+            )
             assertTrue(response.stderr.contains("K2Native.exec threw"))
         }
     }
@@ -159,11 +168,23 @@ class DaemonServerTest {
             FrameCodec.writeFrame(output, Message.Pong)
             val response = FrameCodec.readFrame(input).get() as Message.NativeCompileResult
             assertEquals(2, response.exitCode)
+            // LOAD-BEARING prefix — paired with the client side same as the
+            // InvocationFailed test above. See the comment there.
             assertTrue(
-                response.stderr.contains("protocol error"),
-                "expected protocol error in stderr, got: ${response.stderr}",
+                response.stderr.startsWith(PROTOCOL_ERROR_PREFIX),
+                "expected stderr to start with '$PROTOCOL_ERROR_PREFIX', got: ${response.stderr}",
             )
         }
+    }
+
+    companion object {
+        // These must match the prefixes the client matches on in
+        // `kolt.build.nativedaemon.NativeDaemonBackend.isDaemonSideFailure`.
+        // Hardcoding the literals on both sides is the contract; the two
+        // sibling tests (here + client-side NativeDaemonBackendTest mock
+        // replies) catch a drift on whichever side renames first.
+        private const val PROTOCOL_ERROR_PREFIX = "protocol error: "
+        private const val INVOCATION_FAILED_PREFIX = "native compiler invocation failed: "
     }
 
     private class FakeCompiler(
