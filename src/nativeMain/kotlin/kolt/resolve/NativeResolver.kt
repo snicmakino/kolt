@@ -216,6 +216,12 @@ private fun resolveNativeOnce(
         }
     }
 
+    // After BFS within this pass, re-check every resolved version against the
+    // accumulated rejects. Catches the case where a later-seen contributor's
+    // rejects would have blocked an earlier-accepted version (including direct
+    // deps): the BFS can't re-queue mid-pass. Rejects are per-pass, but the
+    // fixpoint driver rebuilds accumulatedRejects every pass from the same
+    // contributors, so any reject that fires in pass N also fires in pass N+1.
     for ((groupArtifact, versionAndDirect) in resolvedVersions) {
         val patterns = accumulatedRejects[groupArtifact] ?: continue
         val version = versionAndDirect.first

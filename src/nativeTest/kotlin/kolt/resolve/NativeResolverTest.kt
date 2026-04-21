@@ -352,6 +352,13 @@ class NativeResolverTest {
         // a -> lib:1.0 -> old-helper:1.0
         // b -> c -> lib:2.0 -> new-helper:1.0
         // After lib is upgraded to 2.0, old-helper (pulled only by lib:1.0) must be dropped.
+        //
+        // BFS order matters: {a, b} dequeues lib:1.0 before lib:2.0 (via c), so
+        // old-helper is enqueued before the stale-version guard can kick in.
+        // The reverse direct-dep order would let the guard skip lib:1.0 and
+        // mask the bug. If this test ever stops failing on main after an
+        // unrelated refactor, check whether queue ordering still exercises
+        // the dequeue-before-upgrade path.
         val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(
                 "com.example:a" to "1.0.0",
