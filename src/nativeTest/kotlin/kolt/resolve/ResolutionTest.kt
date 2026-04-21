@@ -373,6 +373,43 @@ class ResolutionTest {
     }
 
     @Test
+    fun resolveGraphExclusionIsEvaluatedPerPath() {
+        // direct: a, b
+        // a -> lib (exclude c)
+        // b -> lib (no exclusion)
+        // lib -> c
+        //
+        // Path-aware evaluation (Maven spec): c is excluded only if ALL paths
+        // to lib exclude it. b's path doesn't, so c reaches the resolved set.
+        val poms = mapOf(
+            "com.example:a:1.0.0" to pomInfo(
+                "com.example", "a", "1.0.0",
+                deps = listOf(
+                    pomDep("com.example", "lib", "1.0.0",
+                        exclusions = listOf(PomExclusion("com.example", "c")))
+                )
+            ),
+            "com.example:b:1.0.0" to pomInfo(
+                "com.example", "b", "1.0.0",
+                deps = listOf(pomDep("com.example", "lib", "1.0.0"))
+            ),
+            "com.example:lib:1.0.0" to pomInfo(
+                "com.example", "lib", "1.0.0",
+                deps = listOf(pomDep("com.example", "c", "1.0.0"))
+            ),
+            "com.example:c:1.0.0" to pomInfo("com.example", "c", "1.0.0")
+        )
+        val result = resolveGraph(
+            mapOf("com.example:a" to "1.0.0", "com.example:b" to "1.0.0"),
+            poms.pomLookup()
+        )
+        val nodes = assertNotNull(result.get())
+        val names = nodes.map { it.groupArtifact }.toSet()
+        assertTrue("com.example:lib" in names)
+        assertTrue("com.example:c" in names)
+    }
+
+    @Test
     fun resolveGraphExclusionDoesNotAffectOtherPaths() {
         val poms = mapOf(
             "com.example:a:1.0.0" to pomInfo(

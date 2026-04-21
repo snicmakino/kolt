@@ -34,8 +34,7 @@ data class Child(
  * the fixpoint loop iterates until [versions] stops changing. Internal per-pass
  * scratch buffers (rejects, strict pins, visited, queue) stay mutable for
  * readability and are rebuilt each pass from the same contributors, so they
- * don't need to be threaded across passes today. Future reachability-aware
- * resolution (#216) may need to extend this record.
+ * don't need to be threaded across passes today.
  */
 data class Resolution(
     val versions: Map<String, Pair<String, Boolean>>
@@ -104,7 +103,12 @@ private fun iterate(
 
     while (queue.isNotEmpty()) {
         val entry = queue.removeFirst()
-        val visitKey = "${entry.groupArtifact}:${entry.version}"
+        // Path-aware exclusion: a (ga, version) reached through two different
+        // parent paths with different exclusion sets must enumerate children
+        // under each set independently. Keying visited by exclusions lets both
+        // visits proceed so that a child excluded on one path can still reach
+        // the resolved set via the other.
+        val visitKey = "${entry.groupArtifact}:${entry.version}:${exclusionsKey(entry.exclusions)}"
         if (visitKey in visited) continue
         visited.add(visitKey)
 
@@ -155,11 +159,17 @@ private fun iterate(
             if (existing != null) {
                 val (existingVersion, isDirect) = existing
                 if (isDirect) continue
-                if (compareVersions(depVersion, existingVersion) <= 0) continue
+                // Keep enqueueing same-version entries with different exclusion
+                // sets so the per-path exclusion check runs against each one.
+                // Strictly-lower versions stay skipped (they'd lose the
+                // highest-wins anyway).
+                if (compareVersions(depVersion, existingVersion) < 0) continue
             }
 
             val mergedExclusions = entry.exclusions + child.exclusions
-            versions[depGA] = Pair(depVersion, false)
+            if (existing == null || compareVersions(depVersion, existing.first) > 0) {
+                versions[depGA] = Pair(depVersion, false)
+            }
             queue.addLast(QueueEntry(depGA, depVersion, mergedExclusions))
         }
     }
@@ -211,6 +221,13 @@ private fun pomChildLookup(
         }
         Ok(children)
     }
+}
+
+private fun exclusionsKey(exclusions: Set<PomExclusion>): String {
+    if (exclusions.isEmpty()) return ""
+    return exclusions
+        .sortedWith(compareBy({ it.groupId }, { it.artifactId }))
+        .joinToString("|") { "${it.groupId}:${it.artifactId}" }
 }
 
 private fun isExcluded(groupArtifact: String, exclusions: Set<PomExclusion>): Boolean {
