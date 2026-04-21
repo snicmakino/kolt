@@ -53,7 +53,9 @@ data class NativeArtifact(
 data class NativeDependency(
     val group: String,
     val module: String,
-    val version: String
+    val version: String,
+    val strict: Boolean = false,
+    val rejects: List<String> = emptyList()
 )
 
 // Unlike parseJvmRedirect, a variant without available-at is skipped (not aborted)
@@ -88,7 +90,13 @@ fun parseNativeArtifact(moduleJson: String, nativeTarget: String): NativeArtifac
         if (!matchesNativeVariant(variant.attributes, nativeTarget)) continue
         val klibFile = variant.files.firstOrNull { it.url.endsWith(".klib") } ?: continue
         val deps = variant.dependencies.map { d ->
-            NativeDependency(group = d.group, module = d.module, version = d.version.requires)
+            NativeDependency(
+                group = d.group,
+                module = d.module,
+                version = d.version.selectedVersion(),
+                strict = d.version.strictly.isNotEmpty(),
+                rejects = d.version.rejects
+            )
         }
         return NativeArtifact(
             klibFileUrl = klibFile.url,
@@ -155,7 +163,16 @@ private data class GradleDependency(
     val version: GradleVersionSpec
 )
 
+// Precedence: strictly > requires > prefers. This mirrors Gradle's own
+// "winning version" selection for a single constraint declaration. `rejects`
+// filters candidates during graph resolution; see NativeResolver.
 @Serializable
 private data class GradleVersionSpec(
-    val requires: String = ""
+    val requires: String = "",
+    val strictly: String = "",
+    val prefers: String = "",
+    val rejects: List<String> = emptyList()
 )
+
+private fun GradleVersionSpec.selectedVersion(): String =
+    strictly.ifEmpty { requires.ifEmpty { prefers } }

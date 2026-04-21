@@ -720,4 +720,97 @@ class GradleMetadataTest {
         assertEquals("lib-linuxx64", redirect?.module)
         assertEquals("1.0", redirect?.version)
     }
+
+    @Test
+    fun parseNativeArtifactPicksStrictlyOverRequiresAndSetsStrictFlag() {
+        val json = nativeArtifactJson(
+            """{ "strictly": "1.5.0", "requires": "1.7.0" }"""
+        )
+
+        val dep = parseNativeArtifact(json, "linux_x64")?.dependencies?.single()
+
+        assertEquals("1.5.0", dep?.version)
+        assertEquals(true, dep?.strict)
+        assertEquals(emptyList(), dep?.rejects)
+    }
+
+    @Test
+    fun parseNativeArtifactPicksRequiresOverPrefers() {
+        val json = nativeArtifactJson(
+            """{ "requires": "1.7.0", "prefers": "2.0.0" }"""
+        )
+
+        val dep = parseNativeArtifact(json, "linux_x64")?.dependencies?.single()
+
+        assertEquals("1.7.0", dep?.version)
+        assertEquals(false, dep?.strict)
+    }
+
+    @Test
+    fun parseNativeArtifactFallsBackToPrefersWhenOnlyPrefersPresent() {
+        val json = nativeArtifactJson(
+            """{ "prefers": "2.0.0" }"""
+        )
+
+        val dep = parseNativeArtifact(json, "linux_x64")?.dependencies?.single()
+
+        assertEquals("2.0.0", dep?.version)
+        assertEquals(false, dep?.strict)
+    }
+
+    @Test
+    fun parseNativeArtifactCarriesRejectsIncludingIntervalSyntax() {
+        val json = nativeArtifactJson(
+            """{ "requires": "1.7.0", "rejects": ["1.6.0", "[1.0.0,1.5.0)"] }"""
+        )
+
+        val dep = parseNativeArtifact(json, "linux_x64")?.dependencies?.single()
+
+        assertEquals("1.7.0", dep?.version)
+        assertEquals(listOf("1.6.0", "[1.0.0,1.5.0)"), dep?.rejects)
+    }
+
+    @Test
+    fun parseNativeArtifactDefaultsStrictFalseAndRejectsEmptyForBareRequires() {
+        val json = nativeArtifactJson(
+            """{ "requires": "1.0.0" }"""
+        )
+
+        val dep = parseNativeArtifact(json, "linux_x64")?.dependencies?.single()
+
+        assertEquals("1.0.0", dep?.version)
+        assertEquals(false, dep?.strict)
+        assertEquals(emptyList(), dep?.rejects)
+    }
+
+    private fun nativeArtifactJson(versionSpec: String): String = """
+        {
+          "formatVersion": "1.1",
+          "variants": [
+            {
+              "name": "linuxX64ApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.usage": "kotlin-api",
+                "org.jetbrains.kotlin.native.target": "linux_x64",
+                "org.jetbrains.kotlin.platform.type": "native"
+              },
+              "dependencies": [
+                {
+                  "group": "com.example",
+                  "module": "lib",
+                  "version": $versionSpec
+                }
+              ],
+              "files": [
+                {
+                  "name": "x.klib",
+                  "url": "x-linuxx64-1.0.klib",
+                  "sha256": "abc"
+                }
+              ]
+            }
+          ]
+        }
+    """.trimIndent()
 }
