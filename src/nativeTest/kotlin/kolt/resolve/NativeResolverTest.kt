@@ -348,6 +348,92 @@ class NativeResolverTest {
     }
 
     @Test
+    fun dropsSupersededTransitiveChildren() {
+        // a -> lib:1.0 -> old-helper:1.0
+        // b -> c -> lib:2.0 -> new-helper:1.0
+        // After lib is upgraded to 2.0, old-helper (pulled only by lib:1.0) must be dropped.
+        //
+        // BFS order matters: {a, b} dequeues lib:1.0 before lib:2.0 (via c), so
+        // old-helper is enqueued before the stale-version guard can kick in.
+        // The reverse direct-dep order would let the guard skip lib:1.0 and
+        // mask the bug. If this test ever stops failing on main after an
+        // unrelated refactor, check whether queue ordering still exercises
+        // the dequeue-before-upgrade path.
+        val config = testConfig(target = "linuxX64").copy(
+            dependencies = mapOf(
+                "com.example:a" to "1.0.0",
+                "com.example:b" to "1.0.0"
+            )
+        )
+
+        val aRoot = rootModuleJson("com.example", "a-linuxx64", "1.0.0")
+        val aPlatform = platformModuleJson(
+            "a-linuxx64-1.0.0.klib", "h-a",
+            listOf(NativeDependency("com.example", "lib", "1.0.0"))
+        )
+        val bRoot = rootModuleJson("com.example", "b-linuxx64", "1.0.0")
+        val bPlatform = platformModuleJson(
+            "b-linuxx64-1.0.0.klib", "h-b",
+            listOf(NativeDependency("com.example", "c", "1.0.0"))
+        )
+        val cRoot = rootModuleJson("com.example", "c-linuxx64", "1.0.0")
+        val cPlatform = platformModuleJson(
+            "c-linuxx64-1.0.0.klib", "h-c",
+            listOf(NativeDependency("com.example", "lib", "2.0.0"))
+        )
+        val lib10Root = rootModuleJson("com.example", "lib-linuxx64", "1.0.0")
+        val lib10Platform = platformModuleJson(
+            "lib-linuxx64-1.0.0.klib", "h-lib10",
+            listOf(NativeDependency("com.example", "old-helper", "1.0.0"))
+        )
+        val lib20Root = rootModuleJson("com.example", "lib-linuxx64", "2.0.0")
+        val lib20Platform = platformModuleJson(
+            "lib-linuxx64-2.0.0.klib", "h-lib20",
+            listOf(NativeDependency("com.example", "new-helper", "1.0.0"))
+        )
+        val oldHelperRoot = rootModuleJson("com.example", "old-helper-linuxx64", "1.0.0")
+        val oldHelperPlatform = platformModuleJson("old-helper-linuxx64-1.0.0.klib", "h-old", emptyList())
+        val newHelperRoot = rootModuleJson("com.example", "new-helper-linuxx64", "1.0.0")
+        val newHelperPlatform = platformModuleJson("new-helper-linuxx64-1.0.0.klib", "h-new", emptyList())
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/a/1.0.0/a-1.0.0.module" to aRoot,
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.module" to aPlatform,
+                "/cache/com/example/b/1.0.0/b-1.0.0.module" to bRoot,
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.module" to bPlatform,
+                "/cache/com/example/c/1.0.0/c-1.0.0.module" to cRoot,
+                "/cache/com/example/c-linuxx64/1.0.0/c-linuxx64-1.0.0.module" to cPlatform,
+                "/cache/com/example/lib/1.0.0/lib-1.0.0.module" to lib10Root,
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.module" to lib10Platform,
+                "/cache/com/example/lib/2.0.0/lib-2.0.0.module" to lib20Root,
+                "/cache/com/example/lib-linuxx64/2.0.0/lib-linuxx64-2.0.0.module" to lib20Platform,
+                "/cache/com/example/old-helper/1.0.0/old-helper-1.0.0.module" to oldHelperRoot,
+                "/cache/com/example/old-helper-linuxx64/1.0.0/old-helper-linuxx64-1.0.0.module" to oldHelperPlatform,
+                "/cache/com/example/new-helper/1.0.0/new-helper-1.0.0.module" to newHelperRoot,
+                "/cache/com/example/new-helper-linuxx64/1.0.0/new-helper-linuxx64-1.0.0.module" to newHelperPlatform
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.klib" to "h-a",
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.klib" to "h-b",
+                "/cache/com/example/c-linuxx64/1.0.0/c-linuxx64-1.0.0.klib" to "h-c",
+                "/cache/com/example/lib-linuxx64/1.0.0/lib-linuxx64-1.0.0.klib" to "h-lib10",
+                "/cache/com/example/lib-linuxx64/2.0.0/lib-linuxx64-2.0.0.klib" to "h-lib20",
+                "/cache/com/example/old-helper-linuxx64/1.0.0/old-helper-linuxx64-1.0.0.klib" to "h-old",
+                "/cache/com/example/new-helper-linuxx64/1.0.0/new-helper-linuxx64-1.0.0.klib" to "h-new"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        val names = resolved.deps.map { it.groupArtifact }.toSet()
+        val lib = resolved.deps.first { it.groupArtifact == "com.example:lib" }
+        assertEquals("2.0.0", lib.version)
+        assertTrue("com.example:new-helper" in names)
+        assertFalse("com.example:old-helper" in names)
+    }
+
+    @Test
     fun directDepVersionWinsOverTransitive() {
         val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf(

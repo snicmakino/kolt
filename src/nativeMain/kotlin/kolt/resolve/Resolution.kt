@@ -19,18 +19,47 @@ private data class QueueEntry(
 
 // Direct deps always win; among transitives, highest version wins.
 // Exclusions propagate transitively.
+//
+// Resolution iterates a BFS pass to a fixpoint. Each pass seeds child versions
+// with the prior pass's committed version (highest-wins), so an upgrade that
+// happened late in pass N is visible at every child-selection site in pass N+1.
+// Children pulled only by a superseded version stop reappearing and drop out
+// of the result.
 fun resolveGraph(
     directDeps: Map<String, String>,
     pomLookup: (groupArtifact: String, version: String) -> PomInfo?
 ): Result<List<DependencyNode>, ResolveError> {
+    for ((groupArtifact, version) in directDeps) {
+        parseCoordinate(groupArtifact, version).getOrElse {
+            return Err(ResolveError.InvalidDependency(groupArtifact))
+        }
+    }
+
+    var committed: Map<String, Pair<String, Boolean>> =
+        directDeps.mapValues { (_, v) -> Pair(v, true) }
+
+    while (true) {
+        val next = resolveGraphOnce(directDeps, committed, pomLookup)
+        if (next == committed) break
+        committed = next
+    }
+
+    val nodes = committed.map { (groupArtifact, versionAndDirect) ->
+        DependencyNode(groupArtifact, versionAndDirect.first, versionAndDirect.second)
+    }
+    return Ok(nodes)
+}
+
+private fun resolveGraphOnce(
+    directDeps: Map<String, String>,
+    committed: Map<String, Pair<String, Boolean>>,
+    pomLookup: (String, String) -> PomInfo?
+): Map<String, Pair<String, Boolean>> {
     val resolvedVersions = mutableMapOf<String, Pair<String, Boolean>>()
     val queue = ArrayDeque<QueueEntry>()
     val visited = mutableSetOf<String>()
 
     for ((groupArtifact, version) in directDeps) {
-        parseCoordinate(groupArtifact, version).getOrElse {
-            return Err(ResolveError.InvalidDependency(groupArtifact))
-        }
         resolvedVersions[groupArtifact] = Pair(version, true)
         queue.addLast(QueueEntry(groupArtifact, version, emptySet()))
     }
@@ -56,7 +85,15 @@ fun resolveGraph(
             val rawVersion = pomDep.version
                 ?: depMgmt[depGroupArtifact]
                 ?: continue
-            val depVersion = selectVersion(rawVersion)
+            val proposedVersion = selectVersion(rawVersion)
+
+            val committedEntry = committed[depGroupArtifact]
+            val depVersion = when {
+                committedEntry == null -> proposedVersion
+                committedEntry.second -> continue
+                compareVersions(committedEntry.first, proposedVersion) > 0 -> committedEntry.first
+                else -> proposedVersion
+            }
 
             val existing = resolvedVersions[depGroupArtifact]
             if (existing != null) {
@@ -72,10 +109,7 @@ fun resolveGraph(
         }
     }
 
-    val nodes = resolvedVersions.map { (groupArtifact, versionAndDirect) ->
-        DependencyNode(groupArtifact, versionAndDirect.first, versionAndDirect.second)
-    }
-    return Ok(nodes)
+    return resolvedVersions
 }
 
 private fun isExcluded(groupId: String, artifactId: String, exclusions: Set<PomExclusion>): Boolean {

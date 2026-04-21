@@ -332,6 +332,47 @@ class ResolutionTest {
     }
 
     @Test
+    fun resolveGraphDropsSupersededTransitiveChildren() {
+        // a -> lib:1.0 -> old-helper:1.0
+        // b -> c -> lib:2.0 -> new-helper:1.0
+        // After lib is upgraded to 2.0, old-helper (pulled only by lib:1.0) must be dropped.
+        val poms = mapOf(
+            "com.example:a:1.0.0" to pomInfo(
+                "com.example", "a", "1.0.0",
+                deps = listOf(pomDep("com.example", "lib", "1.0.0"))
+            ),
+            "com.example:b:1.0.0" to pomInfo(
+                "com.example", "b", "1.0.0",
+                deps = listOf(pomDep("com.example", "c", "1.0.0"))
+            ),
+            "com.example:c:1.0.0" to pomInfo(
+                "com.example", "c", "1.0.0",
+                deps = listOf(pomDep("com.example", "lib", "2.0.0"))
+            ),
+            "com.example:lib:1.0.0" to pomInfo(
+                "com.example", "lib", "1.0.0",
+                deps = listOf(pomDep("com.example", "old-helper", "1.0.0"))
+            ),
+            "com.example:lib:2.0.0" to pomInfo(
+                "com.example", "lib", "2.0.0",
+                deps = listOf(pomDep("com.example", "new-helper", "1.0.0"))
+            ),
+            "com.example:old-helper:1.0.0" to pomInfo("com.example", "old-helper", "1.0.0"),
+            "com.example:new-helper:1.0.0" to pomInfo("com.example", "new-helper", "1.0.0")
+        )
+        val result = resolveGraph(
+            mapOf("com.example:a" to "1.0.0", "com.example:b" to "1.0.0"),
+            poms.pomLookup()
+        )
+        val nodes = assertNotNull(result.get())
+        val names = nodes.map { it.groupArtifact }.toSet()
+        val lib = nodes.first { it.groupArtifact == "com.example:lib" }
+        assertEquals("2.0.0", lib.version)
+        assertTrue("com.example:new-helper" in names)
+        assertFalse("com.example:old-helper" in names)
+    }
+
+    @Test
     fun resolveGraphExclusionDoesNotAffectOtherPaths() {
         val poms = mapOf(
             "com.example:a:1.0.0" to pomInfo(
