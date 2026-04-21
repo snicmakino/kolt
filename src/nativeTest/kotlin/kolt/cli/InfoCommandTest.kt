@@ -1,10 +1,17 @@
 package kolt.cli
 
+import com.github.michaelbull.result.getOrElse
 import kolt.build.daemon.KOTLIN_VERSION_FLOOR
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class InfoCommandTest {
     private val withProject = InfoSnapshot(
@@ -16,6 +23,43 @@ class InfoCommandTest {
         jdk = JdkInfo("21", "~/.kolt/toolchains/jdk/21/bin/java"),
         host = "linux-x86_64",
         project = ProjectInfo("my-app", "0.1.0", "app", "jvm")
+    )
+
+    private val verboseProject = withProject.copy(
+        koltHomeBytes = (100L + 30L + 10L + 2L) * 1024 * 1024,
+        koltHomeBreakdown = HomeBreakdown(
+            cacheBytes = 100L * 1024 * 1024,
+            toolchainsBytes = 30L * 1024 * 1024,
+            daemonBytes = 10L * 1024 * 1024,
+            toolsBytes = 2L * 1024 * 1024,
+            cachePath = "~/.kolt/cache",
+            toolchainsPath = "~/.kolt/toolchains",
+            daemonPath = "~/.kolt/daemon",
+            toolsPath = "~/.kolt/tools"
+        ),
+        kotlin = KotlinInfo(
+            version = "2.3.20",
+            mode = "daemon",
+            path = "~/.kolt/toolchains/kotlinc/2.3.20/bin/kotlinc",
+            requestedVersion = "2.3.0",
+            daemonBaseline = "2.3.0",
+            subprocessFallbackReason = null
+        ),
+        jdk = JdkInfo(
+            version = "21",
+            path = "~/.kolt/toolchains/jdk/21/bin/java",
+            source = "managed"
+        ),
+        project = ProjectInfo(
+            name = "my-app",
+            version = "0.1.0",
+            kind = "app",
+            target = "jvm",
+            manifestPath = "/abs/path/kolt.toml",
+            dependencyCount = 3,
+            testDependencyCount = 1,
+            enabledPlugins = listOf("serialization")
+        )
     )
 
     @Test
@@ -82,5 +126,228 @@ class InfoCommandTest {
         // and mangle every absolute path into "~/..." form.
         assertEquals("/usr/local/bin/kolt", abbreviateHomePath("/usr/local/bin/kolt", ""))
         assertEquals("/home/alice/.kolt", abbreviateHomePath("/home/alice/.kolt", ""))
+    }
+
+    @Test
+    fun verboseExpandsKoltHomeIntoBreakdown() {
+        val lines = formatInfo(verboseProject, verbose = true).lines()
+
+        val homeLineIdx = lines.indexOfFirst { it.startsWith("kolt home") }
+        assertTrue(homeLineIdx >= 0)
+        assertEquals("  cache         ~/.kolt/cache (100.0 MB)", lines[homeLineIdx + 1])
+        assertEquals("  toolchains    ~/.kolt/toolchains (30.0 MB)", lines[homeLineIdx + 2])
+        assertEquals("  daemon        ~/.kolt/daemon (10.0 MB)", lines[homeLineIdx + 3])
+        assertEquals("  tools         ~/.kolt/tools (2.0 MB)", lines[homeLineIdx + 4])
+    }
+
+    @Test
+    fun verboseExpandsKotlinSection() {
+        val lines = formatInfo(verboseProject, verbose = true).lines()
+        val kotlinIdx = lines.indexOfFirst { it.startsWith("kotlin") }
+
+        assertTrue(kotlinIdx >= 0)
+        assertEquals("  requested     2.3.0", lines[kotlinIdx + 1])
+        assertEquals("  resolved      2.3.20", lines[kotlinIdx + 2])
+        assertEquals("  compiler      ~/.kolt/toolchains/kotlinc/2.3.20/bin/kotlinc", lines[kotlinIdx + 3])
+        assertEquals("  daemon base   2.3.0", lines[kotlinIdx + 4])
+    }
+
+    @Test
+    fun verboseExpandsKotlinSubprocessFallback() {
+        val snap = verboseProject.copy(
+            kotlin = verboseProject.kotlin!!.copy(
+                version = "2.2.0",
+                mode = "subprocess [<$KOTLIN_VERSION_FLOOR]",
+                path = "~/.kolt/toolchains/kotlinc/2.2.0/bin/kotlinc",
+                requestedVersion = "2.2.0",
+                subprocessFallbackReason = "compiler 2.2.0 is below daemon baseline $KOTLIN_VERSION_FLOOR"
+            )
+        )
+        val lines = formatInfo(snap, verbose = true).lines()
+
+        assertTrue(lines.any { it.trim().startsWith("fallback") && it.contains(KOTLIN_VERSION_FLOOR) })
+    }
+
+    @Test
+    fun verboseExpandsJdkSection() {
+        val lines = formatInfo(verboseProject, verbose = true).lines()
+        val jdkIdx = lines.indexOfFirst { it.startsWith("jdk") }
+
+        assertTrue(jdkIdx >= 0)
+        assertEquals("  path          ~/.kolt/toolchains/jdk/21/bin/java", lines[jdkIdx + 1])
+        assertEquals("  source        managed", lines[jdkIdx + 2])
+    }
+
+    @Test
+    fun verboseExpandsProjectSection() {
+        val lines = formatInfo(verboseProject, verbose = true).lines()
+        val projectIdx = lines.indexOfFirst { it.startsWith("project") }
+
+        assertTrue(projectIdx >= 0)
+        assertEquals("  manifest      /abs/path/kolt.toml", lines[projectIdx + 1])
+        assertEquals("  kind          app", lines[projectIdx + 2])
+        assertEquals("  target        jvm", lines[projectIdx + 3])
+        assertEquals("  dependencies  3", lines[projectIdx + 4])
+        assertEquals("  test deps     1", lines[projectIdx + 5])
+        assertEquals("  plugins       serialization", lines[projectIdx + 6])
+    }
+
+    @Test
+    fun verboseOmitsPluginsLineWhenNoneEnabled() {
+        val snap = verboseProject.copy(
+            project = verboseProject.project!!.copy(enabledPlugins = emptyList())
+        )
+        val lines = formatInfo(snap, verbose = true).lines()
+
+        assertFalse(lines.any { it.trim().startsWith("plugins") })
+    }
+
+    @Test
+    fun verboseOutsideProjectStillShowsHomeBreakdown() {
+        val snap = verboseProject.copy(kotlin = null, jdk = null, project = null)
+        val lines = formatInfo(snap, verbose = true).lines()
+
+        assertTrue(lines.any { it.trim().startsWith("cache") })
+        assertFalse(lines.any { it.startsWith("kotlin") })
+        assertFalse(lines.any { it.startsWith("project") })
+        assertTrue(lines.any { it.contains("not in a kolt project") })
+    }
+
+    @Test
+    fun verboseFallsBackToSingleLineHomeWhenBreakdownMissing() {
+        val snap = verboseProject.copy(koltHomeBreakdown = null)
+        val lines = formatInfo(snap, verbose = true).lines()
+
+        val homeLine = lines.first { it.startsWith("kolt home") }
+        assertEquals("kolt home     ~/.kolt (142.0 MB)", homeLine)
+        val nextLine = lines[lines.indexOf(homeLine) + 1]
+        assertFalse(nextLine.trim().startsWith("cache"))
+    }
+
+    @Test
+    fun jsonFormatEmitsAllFields() {
+        val json = formatInfoJson(verboseProject)
+
+        assertTrue(json.contains("\"version\": \"0.12.0\""))
+        assertTrue(json.contains("\"homeBytes\""))
+        assertTrue(json.contains("\"cacheBytes\": 104857600"))
+        assertTrue(json.contains("\"requestedVersion\": \"2.3.0\""))
+        assertTrue(json.contains("\"resolvedVersion\": \"2.3.20\""))
+        assertTrue(json.contains("\"daemonBaseline\": \"2.3.0\""))
+        assertTrue(json.contains("\"source\": \"managed\""))
+        assertTrue(json.contains("\"manifestPath\": \"/abs/path/kolt.toml\""))
+        assertTrue(json.contains("\"dependencyCount\": 3"))
+        assertTrue(json.contains("\"enabledPlugins\""))
+        assertTrue(json.contains("\"host\": \"linux-x86_64\""))
+    }
+
+    @Test
+    fun jsonFormatOmitsUnavailableFields() {
+        val snap = verboseProject.copy(kotlin = null, jdk = null, project = null)
+        val json = formatInfoJson(snap)
+
+        assertFalse(json.contains("\"kotlin\""))
+        assertFalse(json.contains("\"jdk\""))
+        assertFalse(json.contains("\"project\""))
+        assertFalse(json.contains("null"))
+    }
+
+    @Test
+    fun jsonFormatOmitsSubprocessFallbackReasonWhenAbsent() {
+        val json = formatInfoJson(verboseProject)
+        assertFalse(json.contains("subprocessFallbackReason"))
+    }
+
+    @Test
+    fun parseInfoArgsAcceptsEmpty() {
+        val opts = parseInfoArgs(emptyList()).getOrElse { fail("expected Ok, got $it") }
+        assertFalse(opts.verbose)
+        assertFalse(opts.json)
+    }
+
+    @Test
+    fun parseInfoArgsAcceptsVerbose() {
+        val opts = parseInfoArgs(listOf("--verbose")).getOrElse { fail("expected Ok, got $it") }
+        assertTrue(opts.verbose)
+        assertFalse(opts.json)
+    }
+
+    @Test
+    fun parseInfoArgsAcceptsFormatJson() {
+        val opts = parseInfoArgs(listOf("--format=json")).getOrElse { fail("expected Ok, got $it") }
+        assertFalse(opts.verbose)
+        assertTrue(opts.json)
+    }
+
+    @Test
+    fun parseInfoArgsAcceptsBoth() {
+        val opts = parseInfoArgs(listOf("--verbose", "--format=json")).getOrElse { fail("expected Ok, got $it") }
+        assertTrue(opts.verbose)
+        assertTrue(opts.json)
+    }
+
+    @Test
+    fun parseInfoArgsRejectsUnknownFlag() {
+        val result = parseInfoArgs(listOf("--bogus"))
+        result.getOrElse {
+            assertTrue(it.contains("usage:"))
+            return
+        }
+        fail("expected Err, got Ok")
+    }
+
+    @Test
+    fun jsonFormatIsParseable() {
+        val parsed = Json.parseToJsonElement(formatInfoJson(verboseProject)).jsonObject
+
+        val kolt = parsed["kolt"]?.jsonObject ?: fail("missing kolt object")
+        assertEquals("0.12.0", kolt["version"]?.jsonPrimitive?.content)
+        val kotlin = parsed["kotlin"]?.jsonObject ?: fail("missing kotlin object")
+        assertEquals("2.3.20", kotlin["resolvedVersion"]?.jsonPrimitive?.content)
+        val project = parsed["project"]?.jsonObject ?: fail("missing project object")
+        assertEquals("my-app", project["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun jsonFormatOmitsKoltPathWhenUnknown() {
+        val snap = verboseProject.copy(koltPath = null)
+        val parsed = Json.parseToJsonElement(formatInfoJson(snap)).jsonObject
+        val kolt = parsed["kolt"] as? JsonObject ?: fail("missing kolt object")
+        assertFalse(kolt.containsKey("path"))
+    }
+
+    @Test
+    fun verboseOmitsJdkSectionForNativeTarget() {
+        val snap = verboseProject.copy(
+            jdk = null,
+            project = verboseProject.project!!.copy(target = "linuxX64")
+        )
+        val lines = formatInfo(snap, verbose = true).lines()
+
+        assertFalse(lines.any { it.startsWith("jdk") })
+        assertFalse(lines.any { it.trim().startsWith("source") })
+        assertNotNull(lines.firstOrNull { it.startsWith("kotlin") })
+    }
+
+    @Test
+    fun jsonOmitsJdkSectionForNativeTarget() {
+        val snap = verboseProject.copy(
+            jdk = null,
+            project = verboseProject.project!!.copy(target = "linuxX64")
+        )
+        val parsed = Json.parseToJsonElement(formatInfoJson(snap)).jsonObject
+
+        assertFalse(parsed.containsKey("jdk"))
+        assertTrue(parsed.containsKey("project"))
+    }
+
+    @Test
+    fun parseInfoArgsRejectsUnsupportedFormat() {
+        val result = parseInfoArgs(listOf("--format=yaml"))
+        result.getOrElse {
+            assertTrue(it.contains("--format"))
+            return
+        }
+        fail("expected Err, got Ok")
     }
 }
