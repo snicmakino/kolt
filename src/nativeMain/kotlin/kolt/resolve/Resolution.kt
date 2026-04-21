@@ -27,6 +27,25 @@ data class Child(
     val exclusions: Set<PomExclusion> = emptySet()
 )
 
+/**
+ * Immutable snapshot of the resolution state between fixpoint passes.
+ *
+ * - [versions] — `groupArtifact -> (version, isDirect)`. The committed version
+ *   each pass sees when seeding child version proposals.
+ * - [rejects] — union of reject patterns observed across the last pass.
+ * - [strictPins] — strict pins observed across the last pass.
+ *
+ * The kernel treats a pass as `Resolution -> Result<Resolution, ResolveError>`;
+ * the fixpoint loop iterates until [versions] stops changing. Internal per-pass
+ * scratch buffers stay mutable for clarity; only the snapshot handed to the
+ * next pass is immutable.
+ */
+data class Resolution(
+    val versions: Map<String, Pair<String, Boolean>>,
+    val rejects: Map<String, List<String>>,
+    val strictPins: Map<String, String>
+)
+
 private data class QueueEntry(
     val groupArtifact: String,
     val version: String,
@@ -55,35 +74,38 @@ fun fixpointResolve(
         }
     }
 
-    var committed: Map<String, Pair<String, Boolean>> =
-        directDeps.mapValues { (_, v) -> Pair(v, true) }
+    var state = Resolution(
+        versions = directDeps.mapValues { (_, v) -> Pair(v, true) },
+        rejects = emptyMap(),
+        strictPins = emptyMap()
+    )
 
     while (true) {
-        val next = resolveOnce(directDeps, committed, childLookup).getOrElse { return Err(it) }
-        if (next == committed) break
-        committed = next
+        val next = iterate(state, directDeps, childLookup).getOrElse { return Err(it) }
+        if (next.versions == state.versions) {
+            return Ok(next.versions.map { (ga, vd) -> DependencyNode(ga, vd.first, vd.second) })
+        }
+        state = next
     }
-
-    return Ok(committed.map { (ga, vd) -> DependencyNode(ga, vd.first, vd.second) })
 }
 
-private fun resolveOnce(
+private fun iterate(
+    prev: Resolution,
     directDeps: Map<String, String>,
-    committed: Map<String, Pair<String, Boolean>>,
     childLookup: (String, String) -> Result<List<Child>, ResolveError>
-): Result<Map<String, Pair<String, Boolean>>, ResolveError> {
-    val resolvedVersions = mutableMapOf<String, Pair<String, Boolean>>()
+): Result<Resolution, ResolveError> {
+    val versions = mutableMapOf<String, Pair<String, Boolean>>()
     val queue = ArrayDeque<QueueEntry>()
     val visited = mutableSetOf<String>()
     // Per-GA union of rejects declared by every contributor seen so far.
     // Accumulated even when the contributor's own version proposal loses the
     // conflict, mirroring Gradle's "rejects applies to the GA globally".
-    val accumulatedRejects = mutableMapOf<String, MutableList<String>>()
+    val rejects = mutableMapOf<String, MutableList<String>>()
     // Per-GA strict pin. Any other proposal for the same GA is a hard error.
     val strictPins = mutableMapOf<String, String>()
 
     for ((groupArtifact, version) in directDeps) {
-        resolvedVersions[groupArtifact] = Pair(version, true)
+        versions[groupArtifact] = Pair(version, true)
         queue.addLast(QueueEntry(groupArtifact, version, emptySet()))
     }
 
@@ -96,7 +118,7 @@ private fun resolveOnce(
         // A higher version may have superseded this entry while it waited in
         // the queue. Skip the lookup for versions no longer current — only the
         // final version needs its children enumerated.
-        if (resolvedVersions[entry.groupArtifact]?.first != entry.version) continue
+        if (versions[entry.groupArtifact]?.first != entry.version) continue
 
         val children = childLookup(entry.groupArtifact, entry.version).getOrElse { return Err(it) }
 
@@ -106,10 +128,10 @@ private fun resolveOnce(
             if (isExcluded(depGA, entry.exclusions)) continue
 
             if (child.rejects.isNotEmpty()) {
-                accumulatedRejects.getOrPut(depGA) { mutableListOf() }.addAll(child.rejects)
+                rejects.getOrPut(depGA) { mutableListOf() }.addAll(child.rejects)
             }
 
-            val patterns = accumulatedRejects[depGA]
+            val patterns = rejects[depGA]
             if (patterns != null && patterns.any { matchesRejectPattern(child.version, it) }) continue
 
             val pin = strictPins[depGA]
@@ -119,7 +141,7 @@ private fun resolveOnce(
                 )
             }
             if (child.strict) {
-                val alreadyResolved = resolvedVersions[depGA]
+                val alreadyResolved = versions[depGA]
                 if (alreadyResolved != null && alreadyResolved.first != child.version) {
                     return Err(
                         ResolveError.StrictVersionConflict(depGA, child.version, alreadyResolved.first)
@@ -128,7 +150,7 @@ private fun resolveOnce(
                 strictPins[depGA] = child.version
             }
 
-            val committedEntry = committed[depGA]
+            val committedEntry = prev.versions[depGA]
             val depVersion = when {
                 committedEntry == null -> child.version
                 committedEntry.second -> continue
@@ -136,7 +158,7 @@ private fun resolveOnce(
                 else -> child.version
             }
 
-            val existing = resolvedVersions[depGA]
+            val existing = versions[depGA]
             if (existing != null) {
                 val (existingVersion, isDirect) = existing
                 if (isDirect) continue
@@ -144,25 +166,30 @@ private fun resolveOnce(
             }
 
             val mergedExclusions = entry.exclusions + child.exclusions
-            resolvedVersions[depGA] = Pair(depVersion, false)
+            versions[depGA] = Pair(depVersion, false)
             queue.addLast(QueueEntry(depGA, depVersion, mergedExclusions))
         }
     }
 
-    // Re-check resolved versions against the fully-populated accumulatedRejects.
-    // Catches the case where a later-seen contributor's rejects would have
-    // blocked an earlier-accepted version (including direct deps): the BFS
-    // can't re-queue mid-pass. Rejects are per-pass, but the fixpoint driver
-    // rebuilds accumulatedRejects every pass from the same contributors, so
+    // Re-check resolved versions against the fully-populated rejects. Catches
+    // the case where a later-seen contributor's rejects would have blocked an
+    // earlier-accepted version (including direct deps): the BFS can't re-queue
+    // mid-pass. Rejects are rebuilt each pass from the same contributors, so
     // any reject that fires in pass N also fires in pass N+1.
-    for ((groupArtifact, versionAndDirect) in resolvedVersions) {
-        val patterns = accumulatedRejects[groupArtifact] ?: continue
+    for ((groupArtifact, versionAndDirect) in versions) {
+        val patterns = rejects[groupArtifact] ?: continue
         val version = versionAndDirect.first
         val matched = patterns.firstOrNull { matchesRejectPattern(version, it) } ?: continue
         return Err(ResolveError.RejectedVersionResolved(groupArtifact, version, matched))
     }
 
-    return Ok(resolvedVersions)
+    return Ok(
+        Resolution(
+            versions = versions.toMap(),
+            rejects = rejects.mapValues { it.value.toList() },
+            strictPins = strictPins.toMap()
+        )
+    )
 }
 
 /**
