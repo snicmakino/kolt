@@ -36,6 +36,12 @@ import java.nio.file.StandardOpenOption
 // already safe by construction (A never touches the current version;
 // B only removes dangling projectRoots that a live daemon cannot have
 // spawned from), so the lock probe is belt-and-suspenders insurance.
+//
+// Known gap (#199): `BtaIncrementalCompiler.compile` creates the
+// working dir and writes the breadcrumb before calling `ensureLock`,
+// so a concurrent-daemon-boot reaper can unlink a live dir mid-setup.
+// Symptom is a cold recompile, not corruption. Fix lives on the writer
+// side (reorder to lock-first), tracked separately.
 object IcReaper {
 
     data class Report(
