@@ -30,20 +30,15 @@ data class Child(
 /**
  * Immutable snapshot of the resolution state between fixpoint passes.
  *
- * - [versions] — `groupArtifact -> (version, isDirect)`. The committed version
- *   each pass sees when seeding child version proposals.
- * - [rejects] — union of reject patterns observed across the last pass.
- * - [strictPins] — strict pins observed across the last pass.
- *
  * The kernel treats a pass as `Resolution -> Result<Resolution, ResolveError>`;
  * the fixpoint loop iterates until [versions] stops changing. Internal per-pass
- * scratch buffers stay mutable for clarity; only the snapshot handed to the
- * next pass is immutable.
+ * scratch buffers (rejects, strict pins, visited, queue) stay mutable for
+ * readability and are rebuilt each pass from the same contributors, so they
+ * don't need to be threaded across passes today. Future reachability-aware
+ * resolution (#216) may need to extend this record.
  */
 data class Resolution(
-    val versions: Map<String, Pair<String, Boolean>>,
-    val rejects: Map<String, List<String>>,
-    val strictPins: Map<String, String>
+    val versions: Map<String, Pair<String, Boolean>>
 )
 
 private data class QueueEntry(
@@ -75,9 +70,7 @@ fun fixpointResolve(
     }
 
     var state = Resolution(
-        versions = directDeps.mapValues { (_, v) -> Pair(v, true) },
-        rejects = emptyMap(),
-        strictPins = emptyMap()
+        versions = directDeps.mapValues { (_, v) -> Pair(v, true) }
     )
 
     while (true) {
@@ -183,13 +176,7 @@ private fun iterate(
         return Err(ResolveError.RejectedVersionResolved(groupArtifact, version, matched))
     }
 
-    return Ok(
-        Resolution(
-            versions = versions.toMap(),
-            rejects = rejects.mapValues { it.value.toList() },
-            strictPins = strictPins.toMap()
-        )
-    )
+    return Ok(Resolution(versions = versions.toMap()))
 }
 
 /**
