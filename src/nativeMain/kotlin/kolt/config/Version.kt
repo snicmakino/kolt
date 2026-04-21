@@ -1,5 +1,5 @@
 package kolt.config
 
-const val KOLT_VERSION = "0.11.1"
+const val KOLT_VERSION = "0.12.0"
 
 fun versionString(): String = "kolt $KOLT_VERSION"
