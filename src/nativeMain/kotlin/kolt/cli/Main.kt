@@ -58,6 +58,7 @@ fun main(args: Array<String>) {
         "tree" -> doDeps(listOf("tree")).getOrElse { exitProcess(it) }
         "toolchain" -> doToolchain(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
         "daemon" -> doDaemon(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
+        "cache" -> doCache(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
         "--version", "version" -> println(versionString())
         else -> {
             eprintln("error: unknown command '${filteredArgs[0]}'")
@@ -86,6 +87,7 @@ private fun printUsage() {
     eprintln("             install, update, tree are also available as top-level aliases")
     eprintln("  toolchain  Manage toolchains (install, list, remove)")
     eprintln("  daemon     Manage compiler daemons (stop)")
+    eprintln("  cache      Manage the global dependency cache (clean)")
     eprintln("  version    Show version information")
     eprintln("")
     eprintln("flags:")

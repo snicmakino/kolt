@@ -142,6 +142,38 @@ fun fileMtime(path: String): Long? {
     }
 }
 
+// `lstat` (not `stat`) so a symlink's own inode size is counted rather
+// than the size of whatever it points at — prevents double-counting
+// when a symlink inside the tree targets a file also enumerated here,
+// and prevents escaping the tree via symlinks to outside paths.
+@OptIn(ExperimentalForeignApi::class)
+fun directorySize(path: String): Long {
+    if (!fileExists(path)) return 0L
+    var total = 0L
+    val dir = opendir(path) ?: return 0L
+    try {
+        while (true) {
+            val entry = readdir(dir) ?: break
+            val name = entry.pointed.d_name.toKString()
+            if (name == "." || name == "..") continue
+            val child = "$path/$name"
+            if (isDirectory(child)) {
+                total += directorySize(child)
+            } else {
+                memScoped {
+                    val statBuf = alloc<stat>()
+                    if (lstat(child, statBuf.ptr) == 0) {
+                        total += statBuf.st_size
+                    }
+                }
+            }
+        }
+    } finally {
+        closedir(dir)
+    }
+    return total
+}
+
 fun newestMtime(directories: List<String>): Long {
     var newest = 0L
     for (dir in directories) {
