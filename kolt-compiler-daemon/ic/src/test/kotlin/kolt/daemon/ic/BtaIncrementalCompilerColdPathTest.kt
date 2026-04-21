@@ -79,6 +79,13 @@ class BtaIncrementalCompilerColdPathTest {
         val breadcrumb = workingDir.resolve("project.path")
         assertTrue(breadcrumb.exists(), "expected project.path breadcrumb at $breadcrumb")
         assertEquals(workRoot.toString(), breadcrumb.readText().trim())
+
+        // #199: LOCK must exist under workingDir after compile. The
+        // ordering (LOCK before breadcrumb write) is the invariant
+        // IcReaper relies on; this assertion is a regression fence —
+        // the ordering itself lives in BtaIncrementalCompiler.compile.
+        val lock = workingDir.resolve("LOCK")
+        assertTrue(lock.exists(), "expected LOCK at $lock")
     }
 
     // A user type error is the only BTA outcome that maps to CompilationFailed.

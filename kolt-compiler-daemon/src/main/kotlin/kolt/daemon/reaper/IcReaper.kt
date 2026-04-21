@@ -32,16 +32,11 @@ import java.nio.file.StandardOpenOption
 // Exclusion: an advisory `tryLock` probe on `<projectIdDir>/LOCK`.
 // `BtaIncrementalCompiler` holds this lock for the daemon's lifetime,
 // so a dir whose LOCK is held cannot be the current daemon's active
-// working directory — even across hash collisions. Rules A+B are
-// already safe by construction (A never touches the current version;
-// B only removes dangling projectRoots that a live daemon cannot have
-// spawned from), so the lock probe is belt-and-suspenders insurance.
-//
-// Known gap (#199): `BtaIncrementalCompiler.compile` creates the
-// working dir and writes the breadcrumb before calling `ensureLock`,
-// so a concurrent-daemon-boot reaper can unlink a live dir mid-setup.
-// Symptom is a cold recompile, not corruption. Fix lives on the writer
-// side (reorder to lock-first), tracked separately.
+// working directory — even across hash collisions. The probe is
+// load-bearing for concurrent-daemon-boot: `BtaIncrementalCompiler.compile`
+// acquires LOCK immediately after `createDirectories(workingDir)` and
+// before any other write (breadcrumb, BTA subdir), so a reaper firing
+// mid-setup either sees the LOCK or the dir not yet created.
 object IcReaper {
 
     data class Report(

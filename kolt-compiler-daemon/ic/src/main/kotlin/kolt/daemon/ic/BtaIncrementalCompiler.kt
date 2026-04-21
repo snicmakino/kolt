@@ -110,6 +110,17 @@ class BtaIncrementalCompiler private constructor(
         // arrives. `createDirectories` is a no-op if the tree already
         // exists, which is the common case for every non-initial request.
         Files.createDirectories(request.workingDir)
+
+        // #199: LOCK acquisition must be the first action on workingDir
+        // after `createDirectories` creates the parent. The IcReaper
+        // (documented in IcReaper.kt) treats LOCK as the invariant that
+        // proves a dir is alive — any write before LOCK leaves a window
+        // where a concurrent-daemon-boot reaper can wipe the dir. Order
+        // below: create workingDir → take LOCK → create BTA subdir →
+        // write breadcrumb.
+        runCatching { ensureLock(request.workingDir) }
+            .onFailure { metrics.record(METRIC_REAPER_LOCK_FAILED) }
+
         val btaWorkingDir = request.workingDir.resolve(BTA_SUBDIR)
         val wasEmptyBeforeCompile = isEmptyDir(btaWorkingDir)
         Files.createDirectories(btaWorkingDir)
@@ -118,14 +129,11 @@ class BtaIncrementalCompiler private constructor(
         // breadcrumb next to BTA state so the reaper can decide whether
         // this projectId's source tree still exists. Idempotent on every
         // compile — overwrite is cheap and resilient to a truncation by
-        // the self-heal path. Failure to write is logged as a reaper
-        // concern and does not fail the compile.
-        // ADR 0019 §Negative follow-up (IC reaper): drop a `project.path`
-        // breadcrumb next to the BTA subdir so the reaper can decide
-        // whether this projectId's source tree still exists. Kept
-        // above `btaWorkingDir` because BTA clears its workingDirectory
-        // on cold-path startup; a breadcrumb sitting inside BTA state
-        // would be swept away on every first compile.
+        // the self-heal path. Kept above `btaWorkingDir` because BTA
+        // clears its workingDirectory on cold-path startup; a breadcrumb
+        // sitting inside BTA state would be swept away on every first
+        // compile. Failure to write is logged as a reaper concern and
+        // does not fail the compile.
         runCatching {
             Files.writeString(
                 request.workingDir.resolve(PROJECT_PATH_BREADCRUMB),
@@ -135,9 +143,6 @@ class BtaIncrementalCompiler private constructor(
                 StandardOpenOption.TRUNCATE_EXISTING,
             )
         }.onFailure { metrics.record(METRIC_REAPER_BREADCRUMB_FAILED) }
-
-        runCatching { ensureLock(request.workingDir) }
-            .onFailure { metrics.record(METRIC_REAPER_LOCK_FAILED) }
 
         val builder = toolchain.jvm.jvmCompilationOperationBuilder(request.sources, request.outputDir)
 
