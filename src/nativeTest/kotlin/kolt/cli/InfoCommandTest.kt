@@ -350,4 +350,58 @@ class InfoCommandTest {
         }
         fail("expected Err, got Ok")
     }
+
+    @Test
+    fun parseErrorBannerReplacesNotInProjectBanner() {
+        val snap = withProject.copy(
+            kotlin = null,
+            jdk = null,
+            project = null,
+            parseError = "kolt.toml:3: expected '='"
+        )
+        val text = formatInfo(snap)
+        assertFalse(
+            text.contains("not in a kolt project"),
+            "parse-error must not masquerade as missing kolt.toml"
+        )
+        assertTrue(
+            text.contains("kolt.toml failed to parse"),
+            "must tell the user the project section is absent because the file is broken"
+        )
+    }
+
+    @Test
+    fun verboseParseErrorBannerReplacesNotInProjectBanner() {
+        val snap = verboseProject.copy(
+            kotlin = null,
+            jdk = null,
+            project = null,
+            parseError = "kolt.toml:3: expected '='"
+        )
+        val text = formatInfo(snap, verbose = true)
+        assertFalse(text.contains("not in a kolt project"))
+        assertTrue(text.contains("kolt.toml failed to parse"))
+    }
+
+    @Test
+    fun jsonEmitsParseErrorFieldWhenPresent() {
+        val snap = verboseProject.copy(
+            kotlin = null,
+            jdk = null,
+            project = null,
+            parseError = "kolt.toml:3: expected '='"
+        )
+        val parsed = Json.parseToJsonElement(formatInfoJson(snap)).jsonObject
+        assertEquals(
+            "kolt.toml:3: expected '='",
+            parsed["parseError"]?.jsonPrimitive?.content
+        )
+        assertFalse(parsed.containsKey("project"))
+    }
+
+    @Test
+    fun jsonOmitsParseErrorFieldWhenAbsent() {
+        val parsed = Json.parseToJsonElement(formatInfoJson(verboseProject)).jsonObject
+        assertFalse(parsed.containsKey("parseError"))
+    }
 }

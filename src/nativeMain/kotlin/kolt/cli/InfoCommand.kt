@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.build.daemon.KOTLIN_VERSION_FLOOR
+import kolt.config.ConfigError
 import kolt.config.KOLT_VERSION
 import kolt.config.KoltConfig
 import kolt.config.KoltPaths
@@ -79,7 +80,14 @@ internal data class InfoSnapshot(
     val host: String,
     val project: ProjectInfo?,
     val koltHomeBreakdown: HomeBreakdown? = null,
+    val parseError: String? = null,
 )
+
+internal sealed class ProjectLoad {
+    data object NotAProject : ProjectLoad()
+    data class Loaded(val config: KoltConfig) : ProjectLoad()
+    data class ParseFailed(val message: String) : ProjectLoad()
+}
 
 private const val UNKNOWN_DISPLAY = "(unknown)"
 
@@ -124,9 +132,16 @@ private fun formatInfoDefault(snap: InfoSnapshot): String = buildString {
         append(labeled("target", snap.project.target))
     } else {
         appendLine()
-        append("(not in a kolt project -- no kolt.toml in current directory)")
+        append(projectPlaceholder(snap.parseError))
     }
 }.trimEnd('\n')
+
+private fun projectPlaceholder(parseError: String?): String =
+    if (parseError != null) {
+        "(kolt.toml failed to parse -- see error above)"
+    } else {
+        "(not in a kolt project -- no kolt.toml in current directory)"
+    }
 
 private fun formatInfoVerbose(snap: InfoSnapshot): String = buildString {
     appendLine(labeled("kolt", "v${snap.koltVersion} (${snap.koltPath ?: UNKNOWN_DISPLAY})", VERBOSE_LABEL_WIDTH))
@@ -182,7 +197,7 @@ private fun formatInfoVerbose(snap: InfoSnapshot): String = buildString {
             ?.let { appendLine(subLabeled("plugins", it.joinToString(", "))) }
     } else {
         appendLine()
-        append("(not in a kolt project -- no kolt.toml in current directory)")
+        append(projectPlaceholder(snap.parseError))
     }
 }.trimEnd('\n')
 
@@ -220,12 +235,13 @@ internal fun doInfo(args: List<String>): Result<Unit, Int> {
     // `--verbose --format=json` is equivalent to `--format=json` — json always
     // carries the full field set.
     val snap = gatherInfo(verbose = opts.verbose || opts.json)
+    snap.parseError?.let { eprintln("error: $it") }
     if (opts.json) {
         println(formatInfoJson(snap))
     } else {
         println(formatInfo(snap, verbose = opts.verbose))
     }
-    return Ok(Unit)
+    return if (snap.parseError != null) Err(EXIT_CONFIG_ERROR) else Ok(Unit)
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -240,7 +256,9 @@ private fun gatherInfo(verbose: Boolean): InfoSnapshot {
     val breakdown = if (verbose && paths != null) walkHomeBreakdown(paths, home) else null
     val koltHomeBytes = breakdown?.totalBytes
 
-    val project = loadProjectForInfo()
+    val load = loadProjectForInfo()
+    val project = (load as? ProjectLoad.Loaded)?.config
+    val parseError = (load as? ProjectLoad.ParseFailed)?.message
 
     val kotlinInfo = project?.let { config ->
         val version = config.kotlin.effectiveCompiler
@@ -307,6 +325,7 @@ private fun gatherInfo(verbose: Boolean): InfoSnapshot {
         host = hostString(),
         project = projectInfo,
         koltHomeBreakdown = breakdown,
+        parseError = parseError,
     )
 }
 
@@ -327,10 +346,16 @@ private fun absoluteManifestPath(): String {
     return absolutise(KOLT_TOML, cwd)
 }
 
-private fun loadProjectForInfo(): KoltConfig? {
-    if (!fileExists(KOLT_TOML)) return null
-    val toml = readFileAsString(KOLT_TOML).getOrElse { return null }
-    return parseConfig(toml).getOrElse { null }
+internal fun loadProjectForInfo(): ProjectLoad {
+    if (!fileExists(KOLT_TOML)) return ProjectLoad.NotAProject
+    val toml = readFileAsString(KOLT_TOML).getOrElse { err ->
+        return ProjectLoad.ParseFailed("could not read ${err.path}")
+    }
+    val config = parseConfig(toml).getOrElse { err ->
+        val message = when (err) { is ConfigError.ParseFailed -> err.message }
+        return ProjectLoad.ParseFailed(message)
+    }
+    return ProjectLoad.Loaded(config)
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -354,6 +379,7 @@ private data class InfoJson(
     val kotlin: InfoKotlinJson? = null,
     val jdk: InfoJdkJson? = null,
     val project: InfoProjectJson? = null,
+    val parseError: String? = null,
 )
 
 @Serializable
@@ -449,6 +475,7 @@ internal fun formatInfoJson(snap: InfoSnapshot): String {
         kotlin = kotlin,
         jdk = jdk,
         project = project,
+        parseError = snap.parseError,
     )
     return infoJson.encodeToString(InfoJson.serializer(), dto)
 }
