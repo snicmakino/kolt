@@ -53,11 +53,14 @@ private data class QueueEntry(
  * Direct deps always win; among transitives, highest version wins. Exclusions
  * propagate transitively; strict pins and rejects error out.
  *
- * Resolution iterates a BFS pass to a fixpoint. Each pass seeds child versions
- * with the prior pass's committed version (highest-wins), so an upgrade that
- * happened late in pass N is visible at every child-selection site in pass N+1.
- * Children pulled only by a superseded version stop reappearing and drop out
- * of the result.
+ * Resolution iterates a BFS pass to a fixpoint. Each pass walks direct deps
+ * and, for every visited GA, fetches its children using the *prior pass's
+ * chosen version* — so a GA that gets upgraded in pass N is traversed through
+ * its new version in pass N+1, and children pulled only by the superseded
+ * version drop out. Inside one pass the `visited` set is keyed by GA (not by
+ * GA+version), so the first dequeue for a GA determines which version's
+ * children are enumerated this pass. All version proposals are collected and
+ * reduced by highest-wins at the end of the pass.
  */
 fun fixpointResolve(
     directDeps: Map<String, String>,
@@ -73,110 +76,118 @@ fun fixpointResolve(
         versions = directDeps.mapValues { (_, v) -> Pair(v, true) }
     )
 
-    while (true) {
+    // Safety cap on iterations. Fixpoint convergence is not proven monotone in
+    // pathological graphs; a non-converging input should fail loudly rather
+    // than hang. Bumped well past any realistic depth.
+    repeat(MAX_FIXPOINT_PASSES) {
         val next = iterate(state, directDeps, childLookup).getOrElse { return Err(it) }
         if (next.versions == state.versions) {
             return Ok(next.versions.map { (ga, vd) -> DependencyNode(ga, vd.first, vd.second) })
         }
         state = next
     }
+    return Err(ResolveError.ResolutionDidNotConverge(MAX_FIXPOINT_PASSES))
 }
+
+private const val MAX_FIXPOINT_PASSES = 100
 
 private fun iterate(
     prev: Resolution,
     directDeps: Map<String, String>,
     childLookup: (String, String) -> Result<List<Child>, ResolveError>
 ): Result<Resolution, ResolveError> {
-    val versions = mutableMapOf<String, Pair<String, Boolean>>()
+    // ga -> all version proposals this pass (highest-wins reduced at the end).
+    val proposals = mutableMapOf<String, MutableList<String>>()
     val queue = ArrayDeque<QueueEntry>()
+    // ga:version-keyed. Same GA may dequeue at multiple versions; the
+    // winning-version gate below decides which one actually fetches children.
     val visited = mutableSetOf<String>()
-    // Per-GA union of rejects declared by every contributor seen so far.
-    // Accumulated even when the contributor's own version proposal loses the
-    // conflict, mirroring Gradle's "rejects applies to the GA globally".
+    // Per-GA union of rejects declared by every contributor seen this pass.
     val rejects = mutableMapOf<String, MutableList<String>>()
     // Per-GA strict pin. Any other proposal for the same GA is a hard error.
     val strictPins = mutableMapOf<String, String>()
 
     for ((groupArtifact, version) in directDeps) {
-        versions[groupArtifact] = Pair(version, true)
+        proposals.getOrPut(groupArtifact) { mutableListOf() }.add(version)
         queue.addLast(QueueEntry(groupArtifact, version, emptySet()))
     }
 
     while (queue.isNotEmpty()) {
         val entry = queue.removeFirst()
-        val visitKey = "${entry.groupArtifact}:${entry.version}"
+        val ga = entry.groupArtifact
+        val visitKey = "$ga:${entry.version}"
         if (visitKey in visited) continue
+
+        // Winning-version gate: only fetch children for the version that will
+        // actually win for this GA. `prev.versions[ga]` wins when set (the
+        // previous pass's committed choice); otherwise fall back to the highest
+        // proposal seen so far in this pass. This avoids fetching metadata for
+        // a losing version (e.g., diamond test whose losing version has no
+        // published metadata at all).
+        val winningVersion = prev.versions[ga]?.first
+            ?: proposals.getValue(ga).reduce { a, b -> if (compareVersions(a, b) >= 0) a else b }
+        if (entry.version != winningVersion) continue
         visited.add(visitKey)
 
-        // A higher version may have superseded this entry while it waited in
-        // the queue. Skip the lookup for versions no longer current — only the
-        // final version needs its children enumerated.
-        if (versions[entry.groupArtifact]?.first != entry.version) continue
-
-        val children = childLookup(entry.groupArtifact, entry.version).getOrElse { return Err(it) }
+        val children = childLookup(ga, entry.version).getOrElse { return Err(it) }
 
         for (child in children) {
-            val depGA = child.groupArtifact
+            val cga = child.groupArtifact
 
-            if (isExcluded(depGA, entry.exclusions)) continue
+            if (isExcluded(cga, entry.exclusions)) continue
 
             if (child.rejects.isNotEmpty()) {
-                rejects.getOrPut(depGA) { mutableListOf() }.addAll(child.rejects)
+                rejects.getOrPut(cga) { mutableListOf() }.addAll(child.rejects)
             }
 
-            val patterns = rejects[depGA]
+            val patterns = rejects[cga]
             if (patterns != null && patterns.any { matchesRejectPattern(child.version, it) }) continue
 
-            val pin = strictPins[depGA]
+            val pin = strictPins[cga]
             if (pin != null && pin != child.version) {
                 return Err(
-                    ResolveError.StrictVersionConflict(depGA, pin, child.version, otherIsStrict = child.strict)
+                    ResolveError.StrictVersionConflict(cga, pin, child.version, otherIsStrict = child.strict)
                 )
             }
             if (child.strict) {
-                val alreadyResolved = versions[depGA]
-                if (alreadyResolved != null && alreadyResolved.first != child.version) {
-                    return Err(
-                        ResolveError.StrictVersionConflict(depGA, child.version, alreadyResolved.first)
-                    )
+                val existing = proposals[cga]?.firstOrNull { it != child.version }
+                if (existing != null) {
+                    return Err(ResolveError.StrictVersionConflict(cga, child.version, existing))
                 }
-                strictPins[depGA] = child.version
+                strictPins[cga] = child.version
             }
 
-            val committedEntry = prev.versions[depGA]
-            val depVersion = when {
-                committedEntry == null -> child.version
-                committedEntry.second -> continue
-                compareVersions(committedEntry.first, child.version) > 0 -> committedEntry.first
-                else -> child.version
-            }
-
-            val existing = versions[depGA]
-            if (existing != null) {
-                val (existingVersion, isDirect) = existing
-                if (isDirect) continue
-                if (compareVersions(depVersion, existingVersion) <= 0) continue
-            }
+            proposals.getOrPut(cga) { mutableListOf() }.add(child.version)
 
             val mergedExclusions = entry.exclusions + child.exclusions
-            versions[depGA] = Pair(depVersion, false)
-            queue.addLast(QueueEntry(depGA, depVersion, mergedExclusions))
+            queue.addLast(QueueEntry(cga, child.version, mergedExclusions))
         }
     }
 
-    // Re-check resolved versions against the fully-populated rejects. Catches
+    // Reduce proposals to a single chosen version per GA: direct wins,
+    // otherwise highest-wins across everything proposed this pass.
+    val newVersions = mutableMapOf<String, Pair<String, Boolean>>()
+    for ((ga, v) in directDeps) {
+        newVersions[ga] = Pair(v, true)
+    }
+    for ((ga, versionList) in proposals) {
+        if (ga in directDeps) continue
+        val highest = versionList.reduce { a, b -> if (compareVersions(a, b) >= 0) a else b }
+        newVersions[ga] = Pair(highest, false)
+    }
+
+    // Re-check chosen versions against the fully-populated rejects. Catches
     // the case where a later-seen contributor's rejects would have blocked an
     // earlier-accepted version (including direct deps): the BFS can't re-queue
     // mid-pass. Rejects are rebuilt each pass from the same contributors, so
     // any reject that fires in pass N also fires in pass N+1.
-    for ((groupArtifact, versionAndDirect) in versions) {
-        val patterns = rejects[groupArtifact] ?: continue
-        val version = versionAndDirect.first
-        val matched = patterns.firstOrNull { matchesRejectPattern(version, it) } ?: continue
-        return Err(ResolveError.RejectedVersionResolved(groupArtifact, version, matched))
+    for ((ga, versionAndDirect) in newVersions) {
+        val patterns = rejects[ga] ?: continue
+        val matched = patterns.firstOrNull { matchesRejectPattern(versionAndDirect.first, it) } ?: continue
+        return Err(ResolveError.RejectedVersionResolved(ga, versionAndDirect.first, matched))
     }
 
-    return Ok(Resolution(versions = versions.toMap()))
+    return Ok(Resolution(versions = newVersions.toMap()))
 }
 
 /**

@@ -373,6 +373,62 @@ class ResolutionTest {
     }
 
     @Test
+    fun resolveGraphChildFollowsWinningParentChain() {
+        // a -> b:1.0 -> c:2.0 -> e:1.0
+        // d -> x -> b:2.0 -> c:1.0 -> f:1.0
+        //
+        // The extra `x` hop delays b's upgrade past b:1.0's first visit: b:1.0
+        // is dequeued (and gets to enqueue c:2.0) before x visits and upgrades
+        // b to 2.0, so the stale-version guard can't help. Reachability-correct
+        // result: b=2.0, c=1.0, f=1.0. c:2.0 and e:1.0 must be dropped —
+        // b:1.0's chain is superseded, so its children must not survive.
+        val poms = mapOf(
+            "com.example:a:1.0.0" to pomInfo(
+                "com.example", "a", "1.0.0",
+                deps = listOf(pomDep("com.example", "b", "1.0.0"))
+            ),
+            "com.example:d:1.0.0" to pomInfo(
+                "com.example", "d", "1.0.0",
+                deps = listOf(pomDep("com.example", "x", "1.0.0"))
+            ),
+            "com.example:x:1.0.0" to pomInfo(
+                "com.example", "x", "1.0.0",
+                deps = listOf(pomDep("com.example", "b", "2.0.0"))
+            ),
+            "com.example:b:1.0.0" to pomInfo(
+                "com.example", "b", "1.0.0",
+                deps = listOf(pomDep("com.example", "c", "2.0.0"))
+            ),
+            "com.example:b:2.0.0" to pomInfo(
+                "com.example", "b", "2.0.0",
+                deps = listOf(pomDep("com.example", "c", "1.0.0"))
+            ),
+            "com.example:c:1.0.0" to pomInfo(
+                "com.example", "c", "1.0.0",
+                deps = listOf(pomDep("com.example", "f", "1.0.0"))
+            ),
+            "com.example:c:2.0.0" to pomInfo(
+                "com.example", "c", "2.0.0",
+                deps = listOf(pomDep("com.example", "e", "1.0.0"))
+            ),
+            "com.example:e:1.0.0" to pomInfo("com.example", "e", "1.0.0"),
+            "com.example:f:1.0.0" to pomInfo("com.example", "f", "1.0.0")
+        )
+        val result = resolveGraph(
+            mapOf("com.example:a" to "1.0.0", "com.example:d" to "1.0.0"),
+            poms.pomLookup()
+        )
+        val nodes = assertNotNull(result.get())
+        val names = nodes.map { it.groupArtifact }.toSet()
+        val b = nodes.first { it.groupArtifact == "com.example:b" }
+        val c = nodes.first { it.groupArtifact == "com.example:c" }
+        assertEquals("2.0.0", b.version)
+        assertEquals("1.0.0", c.version)
+        assertTrue("com.example:f" in names)
+        assertFalse("com.example:e" in names)
+    }
+
+    @Test
     fun resolveGraphExclusionDoesNotAffectOtherPaths() {
         val poms = mapOf(
             "com.example:a:1.0.0" to pomInfo(

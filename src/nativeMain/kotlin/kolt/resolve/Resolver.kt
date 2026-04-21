@@ -32,6 +32,7 @@ sealed class ResolveError {
         val version: String,
         val rejectPattern: String
     ) : ResolveError()
+    data class ResolutionDidNotConverge(val maxPasses: Int) : ResolveError()
 }
 
 fun formatResolveError(error: ResolveError): String = when (error) {
@@ -59,6 +60,8 @@ fun formatResolveError(error: ResolveError): String = when (error) {
                 "${error.strictVersion} required strictly, but ${error.otherVersion} also requested"
     is ResolveError.RejectedVersionResolved ->
         "error: resolved ${error.groupArtifact}:${error.version} is rejected by constraint '${error.rejectPattern}'"
+    is ResolveError.ResolutionDidNotConverge ->
+        "error: dependency resolution did not converge within ${error.maxPasses} passes"
 }
 
 data class ResolvedDep(
