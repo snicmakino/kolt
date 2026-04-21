@@ -64,6 +64,13 @@ fun resolveNative(
     val visited = mutableSetOf<String>()
     // processed[ga:version] = (redirect, artifact) populated during BFS
     val processed = mutableMapOf<String, NativeResolved>()
+    // Per-GA union of rejects declared by every contributor seen so far.
+    // Accumulated even when the contributor's own version proposal loses the
+    // conflict, mirroring Gradle's "rejects applies to the GA globally".
+    // Known approximation: rejects do NOT revoke an already-accepted version
+    // (the BFS doesn't re-queue); order can therefore affect outcome for
+    // contrived inputs. See NativeResolverTest.
+    val accumulatedRejects = mutableMapOf<String, MutableList<String>>()
 
     // Seed direct deps (skipping stdlib)
     for ((groupArtifact, version) in config.dependencies) {
@@ -92,6 +99,13 @@ fun resolveNative(
         for (dep in resolved.artifact.dependencies) {
             val depGA = "${dep.group}:${dep.module}"
             if (isKotlinStdlib(depGA)) continue
+
+            if (dep.rejects.isNotEmpty()) {
+                accumulatedRejects.getOrPut(depGA) { mutableListOf() }.addAll(dep.rejects)
+            }
+
+            val patterns = accumulatedRejects[depGA]
+            if (patterns != null && patterns.any { matchesRejectPattern(dep.version, it) }) continue
 
             val existing = resolvedVersions[depGA]
             if (existing != null) {

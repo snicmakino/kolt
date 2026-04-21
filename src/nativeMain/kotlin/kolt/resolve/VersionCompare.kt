@@ -140,3 +140,15 @@ fun selectVersion(constraint: String): String {
     val interval = vc.interval ?: return constraint
     return interval.from ?: interval.to ?: constraint
 }
+
+// A Gradle `rejects` pattern may be either an exact version ("1.6.0") or a
+// Maven-style interval ("[1.0.0,1.5.0)"). parseVersionConstraint already
+// handles both shapes — this helper just dispatches on which one it parsed.
+fun matchesRejectPattern(version: String, rejectPattern: String): Boolean {
+    val vc = parseVersionConstraint(rejectPattern)
+    return when {
+        vc.interval != null -> vc.interval.contains(version)
+        vc.preferred != null -> vc.preferred == version
+        else -> false
+    }
+}

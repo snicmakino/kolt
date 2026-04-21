@@ -219,4 +219,31 @@ class VersionCompareTest {
         val vc = parseVersionConstraint("(1.0.0,2.0.0)")
         assertFalse(vc.interval!!.contains("1.0.0"))
     }
+
+    // --- matchesRejectPattern ---
+
+    @Test
+    fun rejectExactVersionMatchesIdenticalString() {
+        assertTrue(matchesRejectPattern("1.6.0", "1.6.0"))
+    }
+
+    @Test
+    fun rejectExactVersionDoesNotMatchDifferentString() {
+        assertFalse(matchesRejectPattern("1.7.0", "1.6.0"))
+    }
+
+    @Test
+    fun rejectIntervalMatchesVersionInRange() {
+        assertTrue(matchesRejectPattern("1.2.0", "[1.0.0,1.5.0)"))
+    }
+
+    @Test
+    fun rejectIntervalExcludesVersionAtExclusiveUpperBound() {
+        assertFalse(matchesRejectPattern("1.5.0", "[1.0.0,1.5.0)"))
+    }
+
+    @Test
+    fun rejectUnboundedUpperIntervalMatchesAnyHigherVersion() {
+        assertTrue(matchesRejectPattern("3.0.0", "[2.0.0,)"))
+    }
 }

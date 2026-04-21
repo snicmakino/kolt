@@ -385,6 +385,141 @@ class NativeResolverTest {
     }
 
     @Test
+    fun rejectsExactVersionBlocksTransitiveUpgrade() {
+        val config = testConfig(target = "linuxX64").copy(
+            dependencies = mapOf(
+                "com.example:a" to "1.0.0",
+                "com.example:b" to "1.0.0"
+            )
+        )
+
+        val aRoot = rootModuleJson("com.example", "a-linuxx64", "1.0.0")
+        val aPlatform = platformModuleJson(
+            "a-linuxx64-1.0.0.klib", "h-a",
+            listOf(NativeDependency("com.example", "shared", "1.0.0", rejects = listOf("2.0.0")))
+        )
+        val bRoot = rootModuleJson("com.example", "b-linuxx64", "1.0.0")
+        val bPlatform = platformModuleJson(
+            "b-linuxx64-1.0.0.klib", "h-b",
+            listOf(NativeDependency("com.example", "shared", "2.0.0"))
+        )
+        val sharedRoot10 = rootModuleJson("com.example", "shared-linuxx64", "1.0.0")
+        val sharedPlatform10 = platformModuleJson("shared-linuxx64-1.0.0.klib", "h-s10", emptyList())
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/a/1.0.0/a-1.0.0.module" to aRoot,
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.module" to aPlatform,
+                "/cache/com/example/b/1.0.0/b-1.0.0.module" to bRoot,
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.module" to bPlatform,
+                "/cache/com/example/shared/1.0.0/shared-1.0.0.module" to sharedRoot10,
+                "/cache/com/example/shared-linuxx64/1.0.0/shared-linuxx64-1.0.0.module" to sharedPlatform10
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.klib" to "h-a",
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.klib" to "h-b",
+                "/cache/com/example/shared-linuxx64/1.0.0/shared-linuxx64-1.0.0.klib" to "h-s10"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        val shared = resolved.deps.first { it.groupArtifact == "com.example:shared" }
+        assertEquals("1.0.0", shared.version)
+    }
+
+    @Test
+    fun rejectsIntervalBlocksTransitiveUpgrade() {
+        val config = testConfig(target = "linuxX64").copy(
+            dependencies = mapOf(
+                "com.example:a" to "1.0.0",
+                "com.example:b" to "1.0.0"
+            )
+        )
+
+        val aRoot = rootModuleJson("com.example", "a-linuxx64", "1.0.0")
+        val aPlatform = platformModuleJson(
+            "a-linuxx64-1.0.0.klib", "h-a",
+            listOf(NativeDependency("com.example", "shared", "1.0.0", rejects = listOf("[2.0.0,)")))
+        )
+        val bRoot = rootModuleJson("com.example", "b-linuxx64", "1.0.0")
+        val bPlatform = platformModuleJson(
+            "b-linuxx64-1.0.0.klib", "h-b",
+            listOf(NativeDependency("com.example", "shared", "2.5.0"))
+        )
+        val sharedRoot10 = rootModuleJson("com.example", "shared-linuxx64", "1.0.0")
+        val sharedPlatform10 = platformModuleJson("shared-linuxx64-1.0.0.klib", "h-s10", emptyList())
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/a/1.0.0/a-1.0.0.module" to aRoot,
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.module" to aPlatform,
+                "/cache/com/example/b/1.0.0/b-1.0.0.module" to bRoot,
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.module" to bPlatform,
+                "/cache/com/example/shared/1.0.0/shared-1.0.0.module" to sharedRoot10,
+                "/cache/com/example/shared-linuxx64/1.0.0/shared-linuxx64-1.0.0.module" to sharedPlatform10
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.klib" to "h-a",
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.klib" to "h-b",
+                "/cache/com/example/shared-linuxx64/1.0.0/shared-linuxx64-1.0.0.klib" to "h-s10"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        val shared = resolved.deps.first { it.groupArtifact == "com.example:shared" }
+        assertEquals("1.0.0", shared.version)
+    }
+
+    // Known approximation: once a version is accepted it is not revoked by a
+    // later-seen rejects. The BFS pre-selection means contributor order affects
+    // the outcome in this pathological case.
+    @Test
+    fun rejectsDoNotRevokeAlreadyAcceptedVersionFromEarlierContributor() {
+        val config = testConfig(target = "linuxX64").copy(
+            dependencies = mapOf(
+                "com.example:a" to "1.0.0",
+                "com.example:b" to "1.0.0"
+            )
+        )
+
+        val aRoot = rootModuleJson("com.example", "a-linuxx64", "1.0.0")
+        val aPlatform = platformModuleJson(
+            "a-linuxx64-1.0.0.klib", "h-a",
+            listOf(NativeDependency("com.example", "shared", "2.0.0"))
+        )
+        val bRoot = rootModuleJson("com.example", "b-linuxx64", "1.0.0")
+        val bPlatform = platformModuleJson(
+            "b-linuxx64-1.0.0.klib", "h-b",
+            listOf(NativeDependency("com.example", "shared", "1.0.0", rejects = listOf("2.0.0")))
+        )
+        val sharedRoot20 = rootModuleJson("com.example", "shared-linuxx64", "2.0.0")
+        val sharedPlatform20 = platformModuleJson("shared-linuxx64-2.0.0.klib", "h-s20", emptyList())
+
+        val deps = fakeDeps(
+            contents = mapOf(
+                "/cache/com/example/a/1.0.0/a-1.0.0.module" to aRoot,
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.module" to aPlatform,
+                "/cache/com/example/b/1.0.0/b-1.0.0.module" to bRoot,
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.module" to bPlatform,
+                "/cache/com/example/shared/2.0.0/shared-2.0.0.module" to sharedRoot20,
+                "/cache/com/example/shared-linuxx64/2.0.0/shared-linuxx64-2.0.0.module" to sharedPlatform20
+            ),
+            sha256 = mapOf(
+                "/cache/com/example/a-linuxx64/1.0.0/a-linuxx64-1.0.0.klib" to "h-a",
+                "/cache/com/example/b-linuxx64/1.0.0/b-linuxx64-1.0.0.klib" to "h-b",
+                "/cache/com/example/shared-linuxx64/2.0.0/shared-linuxx64-2.0.0.klib" to "h-s20"
+            )
+        )
+
+        val result = resolveNative(config, "/cache", deps)
+        val resolved = assertNotNull(result.get())
+        val shared = resolved.deps.first { it.groupArtifact == "com.example:shared" }
+        assertEquals("2.0.0", shared.version)
+    }
+
+    @Test
     fun failsOnInvalidCoordinate() {
         val config = testConfig(target = "linuxX64").copy(
             dependencies = mapOf("invalid-no-colon" to "1.0.0")
@@ -446,11 +581,19 @@ class NativeResolverTest {
         dependencies: List<NativeDependency>
     ): String {
         val depsJson = dependencies.joinToString(",\n") { d ->
+            val versionParts = buildList {
+                if (d.strict) add(""""strictly": "${d.version}"""")
+                else add(""""requires": "${d.version}"""")
+                if (d.rejects.isNotEmpty()) {
+                    val list = d.rejects.joinToString(",") { "\"$it\"" }
+                    add(""""rejects": [$list]""")
+                }
+            }
             """
               {
                 "group": "${d.group}",
                 "module": "${d.module}",
-                "version": { "requires": "${d.version}" }
+                "version": { ${versionParts.joinToString(", ")} }
               }
             """.trimIndent()
         }
