@@ -112,12 +112,12 @@ class BtaIncrementalCompiler private constructor(
         Files.createDirectories(request.workingDir)
 
         // #199: LOCK acquisition must be the first action on workingDir
-        // after `createDirectories` creates the parent. The IcReaper
-        // (documented in IcReaper.kt) treats LOCK as the invariant that
-        // proves a dir is alive — any write before LOCK leaves a window
-        // where a concurrent-daemon-boot reaper can wipe the dir. Order
-        // below: create workingDir → take LOCK → create BTA subdir →
-        // write breadcrumb.
+        // after `createDirectories(workingDir)` creates the dir itself.
+        // The IcReaper (documented in IcReaper.kt) treats LOCK as the
+        // invariant that proves a dir is alive — any write before LOCK
+        // leaves a window where a concurrent-daemon-boot reaper can
+        // wipe the dir. Order below: create workingDir → take LOCK →
+        // create BTA subdir → write breadcrumb.
         runCatching { ensureLock(request.workingDir) }
             .onFailure { metrics.record(METRIC_REAPER_LOCK_FAILED) }
 
