@@ -95,7 +95,7 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
         println("created $GITIGNORE")
     }
 
-    if (!fileExists(GIT_DIR)) {
+    if (!fileExists(GIT_DIR) && !isInsideExistingGitWorktree()) {
         val err = executeCommand(listOf("git", "init", "-q")).getError()
         if (err == null) {
             println("initialized git repository")
@@ -107,6 +107,12 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
     println("initialized project '$projectName'")
     return Ok(Unit)
 }
+
+// stderr is redirected so the "fatal: not a git repository" message from
+// git doesn't leak into kolt's output when we're *not* in a worktree —
+// that's the expected signal, not an error.
+private fun isInsideExistingGitWorktree(): Boolean =
+    executeAndCapture("git rev-parse --is-inside-work-tree 2>/dev/null").getError() == null
 
 internal fun doAdd(args: List<String>): Result<Unit, Int> {
     val addArgs = parseAddArgs(args).getOrElse { error ->
