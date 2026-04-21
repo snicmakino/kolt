@@ -108,9 +108,13 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
     return Ok(Unit)
 }
 
-// stderr is redirected so the "fatal: not a git repository" message from
-// git doesn't leak into kolt's output when we're *not* in a worktree —
-// that's the expected signal, not an error.
+// `executeAndCapture` only redirects stdout via popen("r"); git's
+// "fatal: not a git repository" still goes to the parent's stderr.
+// The 2>/dev/null is load-bearing: it suppresses that noise on the
+// expected non-zero-exit path (= cwd not in any worktree).
+// Any failure (popen error, missing git, weird permission denied) is
+// treated as "not in a worktree" — false negatives are safe (we'd
+// just create a fresh `.git/`); false positives would be worse.
 private fun isInsideExistingGitWorktree(): Boolean =
     executeAndCapture("git rev-parse --is-inside-work-tree 2>/dev/null").getError() == null
 
