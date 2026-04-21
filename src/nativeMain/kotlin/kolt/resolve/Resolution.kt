@@ -158,6 +158,9 @@ private fun iterate(
             val existing = versions[depGA]
             if (existing != null) {
                 val (existingVersion, isDirect) = existing
+                // Direct-dep wins even over a transitive path with a different
+                // exclusion context: the user-declared direct dep decides the
+                // children, not a transitive's exclusion list. Matches Gradle.
                 if (isDirect) continue
                 // Keep enqueueing same-version entries with different exclusion
                 // sets so the per-path exclusion check runs against each one.
