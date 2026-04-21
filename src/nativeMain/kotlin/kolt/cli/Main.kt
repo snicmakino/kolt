@@ -59,6 +59,7 @@ fun main(args: Array<String>) {
         "toolchain" -> doToolchain(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
         "daemon" -> doDaemon(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
         "cache" -> doCache(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
+        "info" -> doInfo(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
         "--version", "version" -> println(versionString())
         else -> {
             eprintln("error: unknown command '${filteredArgs[0]}'")
@@ -88,6 +89,7 @@ private fun printUsage() {
     eprintln("  toolchain  Manage toolchains (install, list, remove)")
     eprintln("  daemon     Manage compiler daemons (stop)")
     eprintln("  cache      Manage the global dependency cache (clean)")
+    eprintln("  info       Display environment and project information")
     eprintln("  version    Show version information")
     eprintln("")
     eprintln("flags:")
