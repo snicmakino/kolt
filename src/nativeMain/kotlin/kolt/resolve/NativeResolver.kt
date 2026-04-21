@@ -71,6 +71,8 @@ fun resolveNative(
     // (the BFS doesn't re-queue); order can therefore affect outcome for
     // contrived inputs. See NativeResolverTest.
     val accumulatedRejects = mutableMapOf<String, MutableList<String>>()
+    // Per-GA strict pin. Any other proposal for the same GA is a hard error.
+    val strictPins = mutableMapOf<String, String>()
 
     // Seed direct deps (skipping stdlib)
     for ((groupArtifact, version) in config.dependencies) {
@@ -106,6 +108,20 @@ fun resolveNative(
 
             val patterns = accumulatedRejects[depGA]
             if (patterns != null && patterns.any { matchesRejectPattern(dep.version, it) }) continue
+
+            val pin = strictPins[depGA]
+            if (pin != null && pin != dep.version) {
+                return Err(ResolveError.StrictVersionConflict(depGA, pin, dep.version))
+            }
+            if (dep.strict) {
+                val alreadyResolved = resolvedVersions[depGA]
+                if (alreadyResolved != null && alreadyResolved.first != dep.version) {
+                    return Err(
+                        ResolveError.StrictVersionConflict(depGA, dep.version, alreadyResolved.first)
+                    )
+                }
+                strictPins[depGA] = dep.version
+            }
 
             val existing = resolvedVersions[depGA]
             if (existing != null) {
