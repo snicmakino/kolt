@@ -497,39 +497,61 @@ private fun doNativeTest(config: KoltConfig, testArgs: List<String>): Result<Uni
     }
 
     val testStartMark = TimeSource.Monotonic.markNow()
-
-    val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
-    val managedKonancBin = ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
-    val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
-
-    val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
-
-    ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-        eprintln("error: could not create directory ${error.path}")
-        return Err(EXIT_BUILD_ERROR)
-    }
-
-    val cinteropKlibs = runCinterop(config, paths).getOrElse { return Err(it) }
-    val klibs = depKlibs + cinteropKlibs
-
     val testConfig = config.copy(build = config.build.copy(testSources = existingTestSources))
-    val libraryCmd = nativeTestLibraryCommand(testConfig, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
-    println("compiling tests (native)...")
-    executeCommand(libraryCmd.args).getOrElse { error ->
-        eprintln("error: " + formatProcessError(error, "test compilation"))
-        return Err(EXIT_BUILD_ERROR)
-    }
+    val testKexePath = outputNativeTestKexePath(testConfig)
 
-    val linkCmd = nativeTestLinkCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
-    println("linking tests (native)...")
-    executeCommand(linkCmd.args).getOrElse { error ->
-        eprintln("error: " + formatProcessError(error, "test linking"))
-        return Err(EXIT_BUILD_ERROR)
-    }
+    val currentState = TestBuildState(
+        configMtime = fileMtime(KOLT_TOML) ?: 0L,
+        sourcesNewestMtime = newestMtime(config.build.sources),
+        testSourcesNewestMtime = newestMtime(existingTestSources),
+        testKexeMtime = if (fileExists(testKexePath)) fileMtime(testKexePath) else null,
+        defNewestMtime = newestDefMtime(config),
+    )
+    val cachedState = readFileAsString(TEST_BUILD_STATE_FILE).getOrElse { null }
+        ?.let { parseTestBuildState(it) }
 
-    if (!fileExists(linkCmd.outputPath)) {
-        eprintln("error: ${linkCmd.outputPath} not produced by konanc")
-        return Err(EXIT_BUILD_ERROR)
+    if (!isTestBuildUpToDate(current = currentState, cached = cachedState)) {
+        // Out of date → rebuild. Drop the state file first so any failure
+        // below leaves cached=null for the next run (mirror of #50).
+        if (fileExists(TEST_BUILD_STATE_FILE)) deleteFile(TEST_BUILD_STATE_FILE)
+
+        val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_TEST_ERROR) }
+        val managedKonancBin = ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_TEST_ERROR) }
+        val nativePluginArgs = resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
+
+        val depKlibs = resolveNativeDependencies(config, paths).getOrElse { return Err(it) }
+
+        ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+            eprintln("error: could not create directory ${error.path}")
+            return Err(EXIT_BUILD_ERROR)
+        }
+
+        val cinteropKlibs = runCinterop(config, paths).getOrElse { return Err(it) }
+        val klibs = depKlibs + cinteropKlibs
+
+        val libraryCmd = nativeTestLibraryCommand(testConfig, pluginArgs = nativePluginArgs, konancPath = managedKonancBin, klibs = klibs)
+        println("compiling tests (native)...")
+        executeCommand(libraryCmd.args).getOrElse { error ->
+            eprintln("error: " + formatProcessError(error, "test compilation"))
+            return Err(EXIT_BUILD_ERROR)
+        }
+
+        val linkCmd = nativeTestLinkCommand(testConfig, konancPath = managedKonancBin, klibs = klibs)
+        println("linking tests (native)...")
+        executeCommand(linkCmd.args).getOrElse { error ->
+            eprintln("error: " + formatProcessError(error, "test linking"))
+            return Err(EXIT_BUILD_ERROR)
+        }
+
+        if (!fileExists(linkCmd.outputPath)) {
+            eprintln("error: ${linkCmd.outputPath} not produced by konanc")
+            return Err(EXIT_BUILD_ERROR)
+        }
+
+        val newState = currentState.copy(testKexeMtime = fileMtime(linkCmd.outputPath))
+        writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
+            eprintln("warning: could not write test state file")
+        }
     }
 
     val runCmd = nativeTestRunCommand(testConfig, testArgs)
