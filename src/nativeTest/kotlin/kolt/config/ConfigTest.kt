@@ -308,34 +308,6 @@ class ConfigTest {
     }
 
     @Test
-    fun kindLibIsRejectedAsNotYetImplemented() {
-        val toml = """
-            name = "my-lib"
-            version = "0.1.0"
-            kind = "lib"
-
-            [kotlin]
-            version = "2.1.0"
-
-            [build]
-            target = "jvm"
-            main = "com.example.main"
-            sources = ["src"]
-        """.trimIndent()
-
-        val result = parseConfig(toml)
-
-        assertNull(result.get())
-        val error = assertIs<ConfigError.ParseFailed>(result.getError())
-        assertTrue(error.message.contains("kind"), "missing 'kind' in: ${error.message}")
-        assertTrue(error.message.contains("lib"), "missing 'lib' in: ${error.message}")
-        assertTrue(
-            error.message.contains("not yet implemented"),
-            "missing 'not yet implemented' in: ${error.message}"
-        )
-    }
-
-    @Test
     fun unknownKindReturnsErr() {
         val toml = """
             name = "my-app"

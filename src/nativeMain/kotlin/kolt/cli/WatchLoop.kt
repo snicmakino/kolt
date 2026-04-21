@@ -284,7 +284,13 @@ internal fun watchRunLoop(
         val runCmd = if (buildResult.config.build.target in NATIVE_TARGETS) {
             nativeRunCommand(buildResult.config, appArgs)
         } else {
-            runCommand(buildResult.config, buildResult.classpath, appArgs, javaPath = buildResult.javaPath)
+            // Parser invariant `kind == "app" ⇒ main != null` guarantees
+            // non-null; Task 3.2 will add an early lib rejection upstream.
+            val jvmMain = buildResult.config.build.main ?: run {
+                eprintln("error: [build] main is required to run")
+                break
+            }
+            runCommand(buildResult.config, main = jvmMain, classpath = buildResult.classpath, appArgs = appArgs, javaPath = buildResult.javaPath)
         }
         val childPid = spawnInProcessGroup(runCmd.args)
         if (childPid < 0) {

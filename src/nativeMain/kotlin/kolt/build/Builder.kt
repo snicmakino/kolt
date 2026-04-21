@@ -93,8 +93,12 @@ fun nativeLibraryCommand(
     return BuildCommand(args = args, outputPath = outputBase)
 }
 
+// `main` is passed explicitly (not read from `config.build.main`) because
+// `BuildSection.main` became nullable in the lib-build-pipeline spec; the
+// kind gate and null-check live at the caller per ADR 0001.
 fun nativeLinkCommand(
     config: KoltConfig,
+    main: String,
     konancPath: String? = null,
     klibs: List<String> = emptyList()
 ): BuildCommand {
@@ -109,7 +113,7 @@ fun nativeLinkCommand(
         add("-p")
         add("program")
         add("-e")
-        add(config.build.main)
+        add(main)
         for (klib in klibs) {
             add("-l")
             add(klib)

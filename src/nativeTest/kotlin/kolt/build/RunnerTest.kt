@@ -8,13 +8,13 @@ class RunnerTest {
 
     @Test
     fun runCommandUsesClassesDirAsClasspath() {
-        val cmd = runCommand(testConfig(), null)
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null)
         assertEquals(listOf("java", "-cp", "build/classes", "com.example.MainKt"), cmd.args)
     }
 
     @Test
     fun runCommandWithClasspathAppendedToClassesDir() {
-        val cmd = runCommand(testConfig(), "/cache/lib.jar:/cache/util.jar")
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = "/cache/lib.jar:/cache/util.jar")
         assertEquals(
             listOf("java", "-cp", "build/classes:/cache/lib.jar:/cache/util.jar", "com.example.MainKt"),
             cmd.args
@@ -23,7 +23,7 @@ class RunnerTest {
 
     @Test
     fun runCommandWithAppArgs() {
-        val cmd = runCommand(testConfig(), null, listOf("--port", "8080"))
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null, appArgs = listOf("--port", "8080"))
         assertEquals(
             listOf("java", "-cp", "build/classes", "com.example.MainKt", "--port", "8080"),
             cmd.args
@@ -32,13 +32,13 @@ class RunnerTest {
 
     @Test
     fun runCommandWithEmptyAppArgs() {
-        val cmd = runCommand(testConfig(), null, emptyList())
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null, appArgs = emptyList())
         assertEquals(listOf("java", "-cp", "build/classes", "com.example.MainKt"), cmd.args)
     }
 
     @Test
     fun runCommandEmptyClasspathIsIgnored() {
-        val cmd = runCommand(testConfig(), "")
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = "")
         assertEquals(listOf("java", "-cp", "build/classes", "com.example.MainKt"), cmd.args)
     }
 
@@ -46,7 +46,7 @@ class RunnerTest {
     fun runCommandWithManagedJavaPathUsesItAsJava() {
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        val cmd = runCommand(testConfig(), null, javaPath = managedJavaBin)
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null, javaPath = managedJavaBin)
 
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes", "com.example.MainKt"),
@@ -56,7 +56,7 @@ class RunnerTest {
 
     @Test
     fun runCommandWithNullJavaPathDefaultsToSystemJava() {
-        val cmd = runCommand(testConfig(), null, javaPath = null)
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null, javaPath = null)
 
         assertEquals("java", cmd.args.first())
     }
@@ -65,7 +65,7 @@ class RunnerTest {
     fun runCommandWithManagedJavaAndClasspath() {
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        val cmd = runCommand(testConfig(), "/cache/lib.jar", javaPath = managedJavaBin)
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = "/cache/lib.jar", javaPath = managedJavaBin)
 
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes:/cache/lib.jar", "com.example.MainKt"),
@@ -119,7 +119,7 @@ class RunnerTest {
     fun runCommandWithManagedJavaAndAppArgs() {
         val managedJavaBin = "/home/user/.kolt/toolchains/jdk/21/bin/java"
 
-        val cmd = runCommand(testConfig(), null, listOf("--port", "8080"), javaPath = managedJavaBin)
+        val cmd = runCommand(testConfig(), main = "com.example.main", classpath = null, appArgs = listOf("--port", "8080"), javaPath = managedJavaBin)
 
         assertEquals(
             listOf(managedJavaBin, "-cp", "build/classes", "com.example.MainKt", "--port", "8080"),

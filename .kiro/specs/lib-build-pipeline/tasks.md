@@ -6,14 +6,14 @@ convention, red/green/refactor do not need to be separate commits).
 
 ## 1. Config parser — accept `kind = "lib"` with conditional `[build] main`
 
-- [ ] 1.1 Replace the "not yet implemented" rejection test with the new kind × main matrix
+- [x] 1.1 Replace the "not yet implemented" rejection test with the new kind × main matrix
   - Remove the existing `kindLibIsRejectedAsNotYetImplemented` case from the config test suite
   - Add unit coverage for five cases: lib without main parses; lib with main rejects with canonical text; app without main rejects with canonical text; app with main parses; missing kind defaults to app
   - Each rejecting assertion matches the canonical error string from design.md as a substring (`main has no meaning for a library; remove it` / `[build] main is required for kind = "app"`)
   - Observable: the new test file compiles and runs; every case fails against current production code before 1.2 lands.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 1.2 Update the parser to make `main` nullable, accept `kind = "lib"`, enforce the conditional rule, and propagate the type ripple to the native link helper
+- [x] 1.2 Update the parser to make `main` nullable, accept `kind = "lib"`, enforce the conditional rule, and propagate the type ripple to the native link helper
   - Make the `main` field nullable in both the raw deserialization shape and the parsed build section; neither ktoml nor downstream callers should require a value for libraries
   - Remove the `"lib"` rejection branch from kind validation; leave the unknown-kind rejection in place
   - Introduce the two canonical error strings as top-level `private const val` with one-line ADR 0023 §1 citation comments

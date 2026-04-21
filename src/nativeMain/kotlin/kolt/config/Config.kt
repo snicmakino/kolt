@@ -23,6 +23,12 @@ val VALID_TARGETS = setOf("jvm") + NATIVE_TARGETS
 
 val VALID_KINDS = setOf("app", "lib")
 
+// ADR 0023 §1: `kind = "lib"` forbids `[build] main`.
+private const val LIB_WITH_MAIN_ERROR = "main has no meaning for a library; remove it"
+
+// ADR 0023 §1: `kind = "app"` requires `[build] main`.
+private const val APP_WITHOUT_MAIN_ERROR = "[build] main is required for kind = \"app\""
+
 // Maps a schema-level KonanTarget identifier (camelCase, e.g. `linuxX64`) to
 // the snake_case form used by both konanc CLI (`-target linux_x64`) and the
 // `org.jetbrains.kotlin.native.target` attribute in Gradle Module Metadata.
@@ -59,7 +65,7 @@ data class BuildSection(
     val target: String,
     @SerialName("jvm_target") val jvmTarget: String = "17",
     val jdk: String? = null,
-    val main: String,
+    val main: String?,
     val sources: List<String>,
     @SerialName("test_sources") val testSources: List<String> = listOf("test"),
     val resources: List<String> = emptyList(),
@@ -103,7 +109,7 @@ private data class RawBuildSection(
     val target: String? = null,
     @SerialName("jvm_target") val jvmTarget: String = "17",
     val jdk: String? = null,
-    val main: String,
+    val main: String? = null,
     val sources: List<String>,
     @SerialName("test_sources") val testSources: List<String> = listOf("test"),
     val resources: List<String> = emptyList(),
@@ -126,11 +132,6 @@ private data class RawKoltConfig(
 )
 
 private fun validateKind(kind: String): Result<Unit, ConfigError> {
-    if (kind == "lib") {
-        return Err(ConfigError.ParseFailed(
-            "kind = \"lib\" is reserved but not yet implemented (ADR 0023)"
-        ))
-    }
     if (kind !in VALID_KINDS) {
         return Err(ConfigError.ParseFailed(
             "invalid kind '$kind' (valid kinds: ${VALID_KINDS.joinToString(", ")})"
@@ -180,10 +181,20 @@ private fun resolveEffectiveTarget(raw: RawBuildSection): Result<String, ConfigE
 fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
     return try {
         val raw = toml.decodeFromString(RawKoltConfig.serializer(), tomlString)
+        // Validation order is load-bearing: tests match on canonical error
+        // substrings per design.md §Components → Config parser kind+main rule.
         validateKind(raw.kind).getError()?.let { return Err(it) }
+        if (raw.kind == "lib" && raw.build.main != null) {
+            return Err(ConfigError.ParseFailed(LIB_WITH_MAIN_ERROR))
+        }
+        if (raw.kind == "app" && raw.build.main == null) {
+            return Err(ConfigError.ParseFailed(APP_WITHOUT_MAIN_ERROR))
+        }
+        raw.build.main?.let { main ->
+            validateMainFqn(main).getError()?.let { return Err(it) }
+        }
         val effectiveTarget = resolveEffectiveTarget(raw.build).getOrElse { return Err(it) }
         validateTarget(effectiveTarget).getError()?.let { return Err(it) }
-        validateMainFqn(raw.build.main).getError()?.let { return Err(it) }
         raw.kotlin.compiler?.let { compiler ->
             if (compareVersions(compiler, raw.kotlin.version) < 0) {
                 return Err(ConfigError.ParseFailed(
@@ -225,3 +236,5 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
         Err(ConfigError.ParseFailed("failed to parse kolt.toml: ${e.message}"))
     }
 }
+
+internal fun KoltConfig.isLibrary(): Boolean = kind == "lib"

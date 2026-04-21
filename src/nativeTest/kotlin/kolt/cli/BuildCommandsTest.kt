@@ -162,7 +162,7 @@ class CinteropNativeBuildIntegrationTest {
         val libLIdx = libraryCmd.args.indexOf("-l")
         assertEquals("build/libcurl.klib", libraryCmd.args[libLIdx + 1])
 
-        val linkCmd = nativeLinkCommand(config, klibs = listOf(klibPath))
+        val linkCmd = nativeLinkCommand(config, main = "com.example.main", klibs = listOf(klibPath))
         val linkLIdx = linkCmd.args.indexOf("-l")
         assertEquals("build/libcurl.klib", linkCmd.args[linkLIdx + 1])
         assertEquals("build/myapp.kexe", linkCmd.outputPath)

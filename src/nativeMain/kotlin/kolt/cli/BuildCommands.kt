@@ -296,7 +296,10 @@ private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildR
         return Err(EXIT_BUILD_ERROR)
     }
 
-    val linkCmd = nativeLinkCommand(config, konancPath = managedKonancBin, klibs = klibs)
+    // Parser invariant `kind == "app" ⇒ main != null` guarantees non-null;
+    // the `?: return` keeps ADR 0001 safe until the Task 2.2 kind gate lands.
+    val main = config.build.main ?: return Err(EXIT_BUILD_ERROR)
+    val linkCmd = nativeLinkCommand(config, main = main, konancPath = managedKonancBin, klibs = klibs)
     println("linking ${config.name} (native)...")
     runNativeLinkWithIcFallback(backend, linkCmd.args.drop(1)).getOrElse { error ->
         reportNativeCompileError(error, "linking")
@@ -424,7 +427,10 @@ internal fun doRun(config: KoltConfig, classpath: String?, appArgs: List<String>
         return Err(EXIT_BUILD_ERROR)
     }
 
-    val cmd = runCommand(config, classpath, appArgs, javaPath = javaPath)
+    // Parser invariant `kind == "app" ⇒ main != null` guarantees non-null;
+    // the `?: return` keeps ADR 0001 safe until the Task 3.2 kind gate lands.
+    val jvmMain = config.build.main ?: return Err(EXIT_BUILD_ERROR)
+    val cmd = runCommand(config, main = jvmMain, classpath = classpath, appArgs = appArgs, javaPath = javaPath)
     executeCommand(cmd.args).getOrElse { error ->
         return Err(when (error) {
             is ProcessError.NonZeroExit -> error.exitCode

@@ -223,7 +223,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandLinksKlibToProgramKexe() {
-        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"))
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), main = "com.example.main")
 
         assertEquals(
             listOf(
@@ -243,7 +243,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandWithProjectName() {
-        val cmd = nativeLinkCommand(testConfig(name = "hello", target = "linuxX64"))
+        val cmd = nativeLinkCommand(testConfig(name = "hello", target = "linuxX64"), main = "com.example.main")
 
         assertEquals("build/hello.kexe", cmd.outputPath)
         assertEquals(
@@ -264,7 +264,7 @@ class BuilderTest {
     @Test
     fun nativeLinkCommandWithManagedKonancPath() {
         val managedKonanc = "/home/user/.kolt/toolchains/konanc/2.1.0/bin/konanc"
-        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), konancPath = managedKonanc)
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), main = "com.example.main", konancPath = managedKonanc)
 
         assertEquals(managedKonanc, cmd.args.first())
     }
@@ -277,6 +277,7 @@ class BuilderTest {
         // transitive klibs on the library path at link time.
         val cmd = nativeLinkCommand(
             testConfig(target = "linuxX64"),
+            main = "com.example.main",
             klibs = listOf("/cache/a.klib", "/cache/b.klib")
         )
 
@@ -299,7 +300,7 @@ class BuilderTest {
 
     @Test
     fun nativeLinkCommandEmptyKlibsOmitsLibraryFlag() {
-        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), klibs = emptyList())
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), main = "com.example.main", klibs = emptyList())
 
         assertFalse(cmd.args.contains("-l"))
     }
@@ -309,7 +310,7 @@ class BuilderTest {
         // config.main is already a Kotlin function FQN (validated by parseConfig),
         // so konanc -e consumes it verbatim. Without -e, konanc looks for `main`
         // in the root package and fails when the function lives in a named package.
-        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"))
+        val cmd = nativeLinkCommand(testConfig(target = "linuxX64"), main = "com.example.main")
 
         val eIndex = cmd.args.indexOf("-e")
         assertTrue(eIndex >= 0, "Expected -e in: ${cmd.args}")
@@ -319,7 +320,7 @@ class BuilderTest {
     @Test
     fun nativeLinkCommandEmitsRootPackageEntryPoint() {
         val base = testConfig(target = "linuxX64")
-        val cmd = nativeLinkCommand(base.copy(build = base.build.copy(main = "main")))
+        val cmd = nativeLinkCommand(base, main = "main")
 
         val eIndex = cmd.args.indexOf("-e")
         assertTrue(eIndex >= 0)
