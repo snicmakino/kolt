@@ -26,14 +26,14 @@ convention, red/green/refactor do not need to be separate commits).
 
 ## 2. Native build — stop after stage 1 for libraries
 
-- [ ] 2.1 Add failing tests for the native kind gate
+- [x] 2.1 Add failing tests for the native kind gate
   - Assert that the native build orchestration invokes only stage 1 (library compile) when the config is a library, and writes no `.kexe` artifact
   - Assert that an app native config still invokes both stages and produces the executable at the canonical output path
   - Use scoped fixture configs created inside the test; do not reuse or mutate the repository's own kolt.toml
   - Observable: the two new test cases exist, compile, and fail against current production code.
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 2.2 Add the kind gate in native build orchestration
+- [x] 2.2 Add the kind gate in native build orchestration
   - After stage 1 succeeds, return early when `isLibrary()` is true — do not invoke the link helper
   - On the app path, extract the entry-point FQN using a defensive `?: return Err(EXIT_BUILD_ERROR)` (ADR 0001 safe; unreachable by parser invariant) and pass it into the link helper whose signature was already adjusted in 1.2
   - Distinguish artifact kind ("library" / "executable") in the user-facing build-success stdout message
@@ -87,6 +87,12 @@ convention, red/green/refactor do not need to be separate commits).
   - Execute `./gradlew check` end-to-end (unit tests, daemon version verification, linuxX64 tests) and confirm no regressions in existing app paths
   - Build a throwaway `kind = "lib"` fixture against both the JVM and linuxX64 targets; confirm artifacts match the design invariants (`.klib` on native with no `.kexe`; thin `.jar` on JVM with no `Main-Class`)
   - Record the fixture contents and produced artifact listings in the PR description so reviewers can replay
-  - Observable: `./gradlew check` exits zero; fixture artifacts at `build/<name>.klib` and `build/<name>.jar` match the documented invariants.
+  - Observable: `./gradlew check` exits zero; fixture artifacts at `build/<name>-klib` (directory, stage 1 `-nopack` output) and `build/<name>.jar` match the documented invariants.
   - _Requirements: 2.4, 3.4, 4.4, 5.3_
   - _Depends: 2.2, 3.2, 4.1, 5.1_
+
+## Implementation Notes
+
+- **Task 1.1/1.2 and 2.1/2.2 were executed as atomic RED/GREEN pairs** in single implementer dispatches. Splitting into separate reviewer cycles would have mechanically rejected the RED-only state (reviewer check #1 runs the test suite).
+- **Native library artifact path**: kolt's stage 1 emits with `-p library -nopack`, so the library artifact is a DIRECTORY at `build/<name>-klib`, not a packed `.klib` file. Design §6.1 wording was written with the packed form in mind; updated to reflect the actual convention.
+- **Follow-up refactor candidate**: `NativeStagePlan` (`BuildCommands.kt`) uses `linkMain: String?` + `artifactKind: String` to discriminate library vs application. Consider migrating to a sealed hierarchy (`object Library` / `data class Application(val main: String)`) post-v1 to match `steering/structure.md`'s preference for ADTs over primitive-obsession.

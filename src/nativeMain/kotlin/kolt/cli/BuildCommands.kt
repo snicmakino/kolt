@@ -31,6 +31,34 @@ internal data class BuildResult(
     val javaPath: String? = null,
 )
 
+// Kind-gated plan for a native build (ADR 0014 two-stage × ADR 0023 §1).
+// `linkMain == null` ⇒ skip stage 2 (library), stage 1 klib is the artifact.
+// `linkMain != null` ⇒ run stage 2 (app link) with that entry-point FQN.
+internal data class NativeStagePlan(
+    val linkMain: String?,
+    val artifactKind: String,
+    val artifactPath: String,
+)
+
+// ADR 0023 §1: library kind has no entry point; app kind must carry one
+// (parser invariant). The `?: return` keeps ADR 0001 safe without `!!`;
+// it is unreachable for apps produced by `parseConfig`.
+internal fun nativeStagePlan(config: KoltConfig): Result<NativeStagePlan, Int> {
+    if (config.isLibrary()) {
+        return Ok(NativeStagePlan(
+            linkMain = null,
+            artifactKind = "library",
+            artifactPath = outputNativeKlibPath(config),
+        ))
+    }
+    val main = config.build.main ?: return Err(EXIT_BUILD_ERROR)
+    return Ok(NativeStagePlan(
+        linkMain = main,
+        artifactKind = "executable",
+        artifactPath = outputKexePath(config),
+    ))
+}
+
 internal fun filterExistingDirs(
     paths: List<String>,
     kind: String,
@@ -231,12 +259,18 @@ private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildR
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
     val managedKonancBin = ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
-    val kexePath = outputKexePath(config)
+    // ADR 0014 (two-stage native) × ADR 0023 §1 (kind schema): library
+    // kind stops at stage 1 (the `-klib` directory), app kind continues
+    // into stage 2 (`.kexe`). Artifact path drives both the up-to-date
+    // check and the success message so lib builds don't chase a missing
+    // `.kexe`.
+    val stagePlan = nativeStagePlan(config).getOrElse { return Err(it) }
+    val artifactPath = stagePlan.artifactPath
     val defNewestMtime = newestDefMtime(config)
     val currentState = BuildState(
         configMtime = fileMtime(KOLT_TOML) ?: 0L,
         sourcesNewestMtime = newestMtime(config.build.sources),
-        classesDirMtime = if (fileExists(kexePath)) fileMtime(kexePath) else null,
+        classesDirMtime = if (fileExists(artifactPath)) fileMtime(artifactPath) else null,
         lockfileMtime = null,
         resourcesNewestMtime = null,
         defNewestMtime = defNewestMtime
@@ -291,33 +325,34 @@ private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildR
         return Err(EXIT_BUILD_ERROR)
     }
 
-    ensureDirectoryRecursive(NATIVE_IC_CACHE_DIR).getOrElse { error ->
-        eprintln("error: could not create directory ${error.path}")
+    // ADR 0014 stage 2 × ADR 0023 §1: skip the native link step for library
+    // kind; stage 1 already produced the `.klib` artifact.
+    if (stagePlan.linkMain != null) {
+        ensureDirectoryRecursive(NATIVE_IC_CACHE_DIR).getOrElse { error ->
+            eprintln("error: could not create directory ${error.path}")
+            return Err(EXIT_BUILD_ERROR)
+        }
+
+        val linkCmd = nativeLinkCommand(config, main = stagePlan.linkMain, konancPath = managedKonancBin, klibs = klibs)
+        println("linking ${config.name} (native)...")
+        runNativeLinkWithIcFallback(backend, linkCmd.args.drop(1)).getOrElse { error ->
+            reportNativeCompileError(error, "linking")
+            return Err(EXIT_BUILD_ERROR)
+        }
+    }
+
+    if (!fileExists(artifactPath)) {
+        eprintln("error: $artifactPath not produced by konanc")
         return Err(EXIT_BUILD_ERROR)
     }
 
-    // Parser invariant `kind == "app" ⇒ main != null` guarantees non-null;
-    // the `?: return` keeps ADR 0001 safe until the Task 2.2 kind gate lands.
-    val main = config.build.main ?: return Err(EXIT_BUILD_ERROR)
-    val linkCmd = nativeLinkCommand(config, main = main, konancPath = managedKonancBin, klibs = klibs)
-    println("linking ${config.name} (native)...")
-    runNativeLinkWithIcFallback(backend, linkCmd.args.drop(1)).getOrElse { error ->
-        reportNativeCompileError(error, "linking")
-        return Err(EXIT_BUILD_ERROR)
-    }
-
-    if (!fileExists(kexePath)) {
-        eprintln("error: $kexePath not produced by konanc")
-        return Err(EXIT_BUILD_ERROR)
-    }
-
-    val newState = currentState.copy(classesDirMtime = fileMtime(kexePath))
+    val newState = currentState.copy(classesDirMtime = fileMtime(artifactPath))
     writeFileAsString(BUILD_STATE_FILE, serializeBuildState(newState)).getOrElse {
         eprintln("warning: could not write build state file")
     }
 
     val elapsed = startMark.elapsedNow()
-    println("built $kexePath in ${formatDuration(elapsed)}")
+    println("built ${stagePlan.artifactKind} $artifactPath in ${formatDuration(elapsed)}")
     return Ok(BuildResult(config, classpath = null, javaPath = null))
 }
 
