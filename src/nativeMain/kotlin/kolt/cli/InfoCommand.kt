@@ -9,8 +9,6 @@ import kolt.config.KOLT_VERSION
 import kolt.config.KoltConfig
 import kolt.config.parseConfig
 import kolt.config.resolveKoltPaths
-import kolt.infra.currentWorkingDirectory
-import kolt.infra.directorySize
 import kolt.infra.eprintln
 import kolt.infra.fileExists
 import kolt.infra.formatBytes
@@ -64,15 +62,21 @@ internal fun formatInfo(snap: InfoSnapshot): String = buildString {
     }
     appendLine(labeled("host", snap.host))
 
-    snap.project?.let {
+    if (snap.project != null) {
         appendLine()
-        appendLine(labeled("project", "${it.name} v${it.version}"))
-        appendLine(labeled("kind", it.kind))
-        append(labeled("target", it.target))
+        appendLine(labeled("project", "${snap.project.name} v${snap.project.version}"))
+        appendLine(labeled("kind", snap.project.kind))
+        append(labeled("target", snap.project.target))
+    } else {
+        appendLine()
+        append("(not in a kolt project — no kolt.toml in current directory)")
     }
 }.trimEnd('\n')
 
 internal fun abbreviateHomePath(path: String, home: String): String {
+    // Without this guard, an empty `home` turns `prefix` into "/", which
+    // matches every absolute path and mangles them into bogus "~/..." forms.
+    if (home.isEmpty()) return path
     if (path == home) return "~"
     val prefix = "$home/"
     return if (path.startsWith(prefix)) "~/" + path.substring(prefix.length) else path
@@ -90,25 +94,28 @@ internal fun doInfo(args: List<String>): Result<Unit, Int> {
 @OptIn(ExperimentalForeignApi::class)
 private fun gatherInfo(): InfoSnapshot {
     val koltPath = readSelfExe().getOrElse { "(unknown)" }
-    val home = homeDirectory().getOrElse { null }
+    val home = homeDirectory().getOrElse { null }.orEmpty()
     val paths = resolveKoltPaths().getOrElse { null }
 
     val koltHomeAbs = paths?.let { "${it.home}/.kolt" }
-    val koltHomeDisplay = koltHomeAbs?.let { abbreviateHomePath(it, home ?: "") } ?: "(unknown)"
-    val koltHomeBytes = koltHomeAbs?.takeIf { fileExists(it) }?.let { directorySize(it) }
+    val koltHomeDisplay = koltHomeAbs?.let { abbreviateHomePath(it, home) } ?: "(unknown)"
 
     val project = loadProjectForInfo()
 
     val kotlinInfo = project?.let { config ->
         val version = config.kotlin.effectiveCompiler
-        val mode = if (compareVersions(version, KOTLIN_VERSION_FLOOR) >= 0) "daemon" else "subprocess"
+        val mode = if (compareVersions(version, KOTLIN_VERSION_FLOOR) >= 0) {
+            "daemon"
+        } else {
+            "subprocess [<$KOTLIN_VERSION_FLOOR]"
+        }
         val rawPath = paths?.kotlincBin(version) ?: ""
-        KotlinInfo(version, mode, abbreviateHomePath(rawPath, home ?: ""))
+        KotlinInfo(version, mode, abbreviateHomePath(rawPath, home))
     }
 
     val jdkInfo = project?.build?.jdk?.let { version ->
         val rawPath = paths?.javaBin(version) ?: ""
-        JdkInfo(version, abbreviateHomePath(rawPath, home ?: ""))
+        JdkInfo(version, abbreviateHomePath(rawPath, home))
     }
 
     val projectInfo = project?.let {
@@ -119,7 +126,9 @@ private fun gatherInfo(): InfoSnapshot {
         koltVersion = KOLT_VERSION,
         koltPath = koltPath,
         koltHomeDisplay = koltHomeDisplay,
-        koltHomeBytes = koltHomeBytes,
+        // Total size is deferred to `kolt info --verbose` (issue #207):
+        // walking multi-GB caches makes the default path sluggish.
+        koltHomeBytes = null,
         kotlin = kotlinInfo,
         jdk = jdkInfo,
         host = hostString(),

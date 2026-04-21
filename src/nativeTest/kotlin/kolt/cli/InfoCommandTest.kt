@@ -33,15 +33,18 @@ class InfoCommandTest {
     }
 
     @Test
-    fun omitsProjectSectionWhenOutsideProject() {
+    fun showsOutsideProjectHintInsteadOfProjectSection() {
         val snap = withProject.copy(kotlin = null, jdk = null, project = null)
-        val output = formatInfo(snap)
+        val lines = formatInfo(snap).lines()
 
-        assertTrue(output.contains("kolt        v0.12.0"))
-        assertTrue(output.contains("host        linux-x86_64"))
-        assertFalse(output.contains("kotlin"))
-        assertFalse(output.contains("project"))
-        assertFalse(output.contains("target"))
+        assertTrue(lines[0].startsWith("kolt        v0.12.0"))
+        assertTrue(lines.any { it.startsWith("host") })
+        assertFalse(lines.any { it.startsWith("kotlin") })
+        assertFalse(lines.any { it.startsWith("project") })
+        assertTrue(
+            lines.any { it.contains("not in a kolt project") },
+            "must tell the user why the project section is absent"
+        )
     }
 
     @Test
@@ -52,9 +55,26 @@ class InfoCommandTest {
     }
 
     @Test
+    fun kotlinLineShowsFloorHintWhenSubprocess() {
+        val snap = withProject.copy(
+            kotlin = KotlinInfo("2.2.0", "subprocess [<2.3.0]", "~/.kolt/toolchains/kotlinc/2.2.0/bin/kotlinc")
+        )
+        val kotlinLine = formatInfo(snap).lines().first { it.startsWith("kotlin") }
+        assertTrue(kotlinLine.contains("<2.3.0"), "subprocess mode must disclose the daemon floor: $kotlinLine")
+    }
+
+    @Test
     fun abbreviateHomePathReplacesHomeWithTilde() {
         assertEquals("~/.kolt", abbreviateHomePath("/home/alice/.kolt", "/home/alice"))
         assertEquals("/etc/kolt", abbreviateHomePath("/etc/kolt", "/home/alice"))
         assertEquals("~", abbreviateHomePath("/home/alice", "/home/alice"))
+    }
+
+    @Test
+    fun abbreviateHomePathLeavesPathAloneWhenHomeIsEmpty() {
+        // Guards against a bug where empty home would turn prefix into "/"
+        // and mangle every absolute path into "~/..." form.
+        assertEquals("/usr/local/bin/kolt", abbreviateHomePath("/usr/local/bin/kolt", ""))
+        assertEquals("/home/alice/.kolt", abbreviateHomePath("/home/alice/.kolt", ""))
     }
 }

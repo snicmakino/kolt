@@ -19,6 +19,8 @@ import platform.posix.strerror
 data class SelfExeError(val errno: Int, val message: String)
 
 // readlink does not NUL-terminate; we reserve one byte and add it.
+// Linux-only: `/proc/self/exe` is not present on macOS (use `_NSGetExecutablePath`)
+// or BSD/Windows. Revisit when adding non-linux targets.
 @OptIn(ExperimentalForeignApi::class)
 fun readSelfExe(): Result<String, SelfExeError> {
     return memScoped {
