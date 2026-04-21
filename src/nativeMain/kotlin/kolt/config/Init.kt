@@ -38,6 +38,8 @@ fun generateMainKt(): String = buildString {
     appendLine("}")
 }
 
+fun generateGitignore(): String = "build/\n"
+
 fun inferProjectName(dirPath: String): String {
     val name = dirPath.trimEnd('/').substringAfterLast('/')
     return name.ifEmpty { "project" }

@@ -75,6 +75,11 @@ class InitTest {
     }
 
     @Test
+    fun generateGitignoreContainsBuildDir() {
+        assertEquals("build/\n", generateGitignore())
+    }
+
+    @Test
     fun invalidProjectNames() {
         assertFalse(isValidProjectName(""))
         assertFalse(isValidProjectName("my\"app"))
