@@ -283,6 +283,23 @@ class DaemonStopEnumerationTest {
     }
 
     @Test
+    fun isJvmDaemonSocketPredicateShape() {
+        // `applyPluginsFingerprintToFile` never emits an empty fingerprint
+        // (`pluginsFingerprint` returns "noplugins" or 8 hex chars), so
+        // `daemon-.sock` is not a real on-disk name — but the predicate
+        // stays strict to survive a future refactor of the fingerprint
+        // source.
+        assertEquals(true, isJvmDaemonSocket("daemon.sock"))
+        assertEquals(true, isJvmDaemonSocket("daemon-noplugins.sock"))
+        assertEquals(true, isJvmDaemonSocket("daemon-abcd1234.sock"))
+        assertEquals(false, isJvmDaemonSocket("daemon-.sock"))
+        assertEquals(false, isJvmDaemonSocket("daemon.log"))
+        assertEquals(false, isJvmDaemonSocket("daemon-noplugins.log"))
+        assertEquals(false, isJvmDaemonSocket("native-daemon.sock"))
+        assertEquals(false, isJvmDaemonSocket("Daemon.sock"))
+    }
+
+    @Test
     fun nonExistentProjectDirReturnsZero() {
         val fs = FakeFs(existing = emptySet())
 
