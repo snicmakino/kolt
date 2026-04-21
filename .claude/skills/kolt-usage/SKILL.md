@@ -18,6 +18,14 @@ kolt build
 kolt run
 ```
 
+`kolt init [name]` writes into the current directory — it does **not** create a subdirectory, so `mkdir + cd` first. Without `[name]`, the project name is inferred from the directory. Generated files:
+
+- `kolt.toml` — defaults to `target = "jvm"`, `jvm_target = "17"`, `main = "main"`, `sources = ["src"]`, `[kotlin] version = "2.3.20"`
+- `src/Main.kt` — `fun main()` hello-world stub
+- `test/MainTest.kt` — `kotlin.test` example
+
+JVM is the default target; change `[build] target` in `kolt.toml` for native (`linuxX64`, etc.).
+
 ## Commands
 
 ```
