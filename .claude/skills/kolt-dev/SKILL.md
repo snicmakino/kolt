@@ -27,53 +27,43 @@ Binary: `build/bin/linuxX64/debugExecutable/kolt.kexe`
 
 ## Architecture
 
-| Package | File | Role |
-|---|---|---|
-| cli | Main.kt | CLI entrypoint, command dispatch |
-| cli | BuildCommands.kt | Build pipeline orchestration (check, build, run, test, clean) |
-| cli | DependencyCommands.kt | Dependency commands (deps add, install, update, tree) |
-| cli | DaemonCommands.kt | Daemon management commands (daemon stop, daemon reap) |
-| cli | DaemonReaper.kt | Probe-based reaper for orphaned daemon sockets |
-| cli | ToolchainCommands.kt | Toolchain management commands (install) |
-| cli | FormatCommands.kt | Format command (kolt fmt) |
-| cli | PluginSupport.kt | Compiler plugin argument resolution |
-| cli | WatchLoop.kt | Watch mode: file change detection, settle-window debounce, command re-execution loop, process group management for `run --watch` |
-| cli | ExitCode.kt | Standardized exit code constants |
-| config | Config.kt | Parse kolt.toml, KoltConfig data class |
-| config | KoltPaths.kt | ~/.kolt/ path resolution (cache, tools, toolchains) |
-| config | Init.kt | Project template generation (kolt.toml, Main.kt) |
-| config | Main.kt | Validate `main` field as Kotlin function FQN; derive JVM facade class name for JVM builds; see ADR 0015 |
-| config | Version.kt | Kolt version string |
-| build | Builder.kt | Build kotlinc / konanc command args (pure function). Native builds are a library → link two-stage split (ADR 0014); link stage emits `-e config.main` and every konanc / cinterop call carries `-target linux_x64` (ADR 0015) |
-| build | CompilerBackend.kt | `CompilerBackend` interface + `CompileRequest` / `CompileOutcome` / `CompileError` types. Seam for swapping between subprocess and warm daemon compilation (ADR 0016) |
-| build | SubprocessCompilerBackend.kt | `CompilerBackend` implementation that shells out to kotlinc via `Process.executeCommand` |
-| build | BuildCache.kt | Build state tracking via mtime comparison |
-| build | Runner.kt | Build java -jar command args (pure function) |
-| build | TestBuilder.kt | Build kotlinc command for test compilation (pure function) |
-| build | TestRunner.kt | Build java command for test execution via JUnit Platform (pure function) |
-| build | TestDeps.kt | Auto-injected test dependencies based on target platform (pure function) |
-| build | Formatter.kt | Build ktfmt command args for code formatting (pure function) |
-| build | Workspace.kt | Generate workspace.json / kls-classpath for IDE support |
-| resolve | Dependency.kt | Maven coordinate parsing, JAR/POM URL/cache path construction (pure function) |
-| resolve | Resolution.kt | Pure BFS dependency graph resolution (pure function, no I/O) |
-| resolve | Resolver.kt | Dependency resolution entry point, delegates to TransitiveResolver |
-| resolve | TransitiveResolver.kt | I/O orchestration: POM/JAR fetching, hashing, lockfile change detection |
-| resolve | PomParser.kt | POM XML parsing, property interpolation (pure function) |
-| resolve | GradleMetadata.kt | Gradle .module file parsing, KMP redirect detection |
-| resolve | VersionCompare.kt | Maven version comparison (pure function) |
-| resolve | Lockfile.kt | Parse/serialize kolt.lock v1/v2 (JSON) |
-| resolve | Metadata.kt | Maven metadata.xml parsing, latest version extraction |
-| resolve | AddDependency.kt | TOML string manipulation to add dependencies |
-| resolve | DepsTree.kt | Dependency tree ASCII rendering |
-| infra | FileSystem.kt | File I/O, directory creation, stderr output |
-| infra | Process.kt | Command execution via fork/execvp, output capture via popen |
-| infra | Downloader.kt | HTTP file download via libcurl cinterop |
-| infra | Sha256.kt | SHA256 hash computation |
-| infra | Inotify.kt | Linux inotify wrapper: InotifyWatcher (recursive directory watching, event polling, EXCLUDED_DIRS filtering) |
-| infra | Format.kt | Duration formatting utility |
-| infra.net | UnixSocket.kt | AF_UNIX stream socket client (`connect` / `sendAll` / `recvExact` / `shutdownWrite` / `close`). Raw cinterop types stay confined to this file; all entry points return `Result<_, UnixSocketError>`. Used by the warm daemon native client (ADR 0016) |
-| tool | ToolManager.kt | External tool download and caching (ktfmt, JUnit Console Launcher) |
-| tool | ToolchainManager.kt | Kotlinc/JDK toolchain download, verification, auto-install, and path resolution |
+Rows are per-package. Files are only called out when the nuance is load-bearing; leaf additions within a package should not require touching this table.
+
+### Native client — `src/nativeMain/kotlin/kolt/`
+
+| Package | Role |
+|---|---|
+| `cli` | Command dispatch (`Main.kt`), per-command handlers (`BuildCommands`, `DependencyCommands`, `DaemonCommands`, `ToolchainCommands`, `FormatCommands`), watch-mode loop (`WatchLoop`), orphan-socket reaper (`DaemonReaper`), exit-code constants. `BuildCommands` is the pipeline spine — holds `resolveCompilerBackend` / `resolveNativeCompilerBackend` and the `applyPluginsFingerprintToFile` JVM-socket naming (#138). |
+| `config` | `kolt.toml` parsing (`Config`), `~/.kolt/` path resolution including both daemon sockets (`KoltPaths`), project init templates (`Init`), `main` FQN validation + JVM facade derivation (`Main`, ADR 0015). |
+| `build` | Pure command-arg builders (`Builder` for kotlinc / konanc — konanc is a library → link two-stage split, ADR 0014/0015; `Runner`, `TestBuilder`, `TestRunner`, `TestDeps`, `Formatter`), build cache via mtime (`BuildCache`), workspace / classpath emission (`Workspace`), and the two compiler-backend seams: `CompilerBackend` + `SubprocessCompilerBackend` + `FallbackCompilerBackend` + `FallbackReporter` for JVM (ADR 0016), and the native-side siblings `NativeCompilerBackend` + `NativeSubprocessBackend` + `FallbackNativeCompilerBackend` + `NativeFallbackReporter` (ADR 0024 §7). |
+| `build.daemon` | JVM daemon client: `DaemonCompilerBackend` (spawn-or-connect + exponential backoff), `DaemonJarResolver`, `DaemonPreconditions`, `BtaImplFetcher`, `BtaImplJarResolver`, bootstrap JDK provisioning (`BootstrapJdk`), IC state cleanup (`IcStateCleanup`), `ProjectHash`. ADR 0016 / 0019. |
+| `build.nativedaemon` | Native daemon client: `NativeDaemonBackend` (peer of `DaemonCompilerBackend`; asymmetric constructor — `konancJar` + `konanHome`, no BTA / plugin jars), `NativeDaemonJarResolver`, `NativeDaemonPreconditions`. ADR 0024. |
+| `daemon.wire` | JVM daemon wire codec and `Message` types — 4-byte length prefix + JSON frames. |
+| `nativedaemon.wire` | Native daemon wire codec and `Message` types. Structurally mirrors `daemon.wire` but distinct `Message` sealed interface; `NativeCompile` carries flat konanc args, not structured fields (ADR 0024 §4). |
+| `resolve` | Maven coordinate parsing + path construction (`Dependency`), pure BFS resolution (`Resolution`, ADR 0004), transitive I/O orchestration (`Resolver` → `TransitiveResolver`), POM parsing (`PomParser`), Gradle module metadata (`GradleMetadata` — KMP redirect detection), Maven version comparison (`VersionCompare`), `kolt.lock` v1/v2 (`Lockfile`), `maven-metadata.xml` (`Metadata`), TOML mutation for `deps add` (`AddDependency`), dep-tree rendering (`DepsTree`). |
+| `infra` | POSIX-facing I/O: filesystem (`FileSystem` — includes `listFiles` / `listSubdirectories`), process exec via fork/execvp + double-fork `spawnDetached` for daemons (`Process`), HTTP via libcurl cinterop (`Downloader`), SHA-256 (`Sha256`), inotify recursive watch (`Inotify`), duration formatting (`Format`), self-exe path lookup (`SelfExe`). Raw cinterop types stay confined to this package; all entry points return `Result<_, …>`. |
+| `infra.net` | AF_UNIX stream socket client (`UnixSocket` — `connect` / `sendAll` / `recvExact` / `shutdownWrite` / `close`; all entry points return `Result<_, UnixSocketError>`). Shared by both daemon clients. |
+| `tool` | External tool download + caching (`ToolManager` — ktfmt, JUnit Console Launcher), kotlinc / konanc / JDK toolchain management under `~/.kolt/toolchains/` (`ToolchainManager`). |
+
+### JVM compiler daemon — `kolt-compiler-daemon/src/main/kotlin/kolt/`
+
+| Package | Role |
+|---|---|
+| `daemon` | Daemon entry point (`Main.kt`) — argv parsing, classloader construction, `DaemonServer` wire-up. |
+| `daemon.server` | Accept loop + lifecycle (`DaemonServer` — idle timeout, max compiles, heap watermark), config (`DaemonConfig`). |
+| `daemon.protocol` | Wire types mirroring the native side (`Message`, `FrameCodec`), kotlinc stderr diagnostic parser (`DiagnosticParser`). |
+| `daemon.reaper` | Background thread pruning stale BTA IC state for inactive projects (`IcReaper`). |
+
+BTA integration lives outside the daemon's own package tree (it's loaded via a separate classloader under `SharedApiClassesClassLoader`, ADR 0019). See `docs/architecture.md` for the classloader hierarchy.
+
+### Native compiler daemon — `kolt-native-daemon/src/main/kotlin/kolt/`
+
+| Package | Role |
+|---|---|
+| `nativedaemon` | Daemon entry point (`Main.kt`). |
+| `nativedaemon.server` | Accept loop + lifecycle (`DaemonServer` — idle 10 min / max 500 / 2 GB heap watermark per ADR 0024 §3), config (`DaemonConfig`). Single-threaded — `K2Native.exec` is not safe under concurrent calls. |
+| `nativedaemon.protocol` | Wire types and frame codec. Same 4-byte length + JSON framing as the JVM daemon; distinct `Message` sealed interface. |
+| `nativedaemon.compiler` | `NativeCompiler` interface + `ReflectiveK2NativeCompiler` — loads `kotlin-native-compiler-embeddable.jar` via `URLClassLoader(arrayOf(url), null)` (bootstrap parent, ADR 0024 §2) and invokes `K2Native.exec(PrintStream, String[])` reflectively. The instance is held for the daemon's lifetime. |
 
 ## Error Handling Policy
 
