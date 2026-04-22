@@ -76,7 +76,7 @@ internal fun stopProjectDaemons(
     for (versionDir in versionDirs) {
         // ADR 0024 §3: both daemons share <projectHash>/<version>/, keyed
         // by filename. #138 appended a plugin fingerprint to the JVM socket
-        // (`daemon-noplugins.sock` or `daemon-<8hex>.sock`), so enumeration
+        // (`jvm-compiler-daemon-noplugins.sock` or `jvm-compiler-daemon-<8hex>.sock`), so enumeration
         // — not a fixed-name probe — is required to hit every JVM daemon.
         val versionFullDir = "$projectDir/$versionDir"
         val entries = listFiles(versionFullDir).getOrElse { emptyList() }
@@ -95,18 +95,18 @@ internal fun stopProjectDaemons(
     return stopped
 }
 
-// JVM daemon socket = `daemon.sock` (unfingerprinted, possible on old disks)
-// or `daemon-<fingerprint>.sock` (#138). `native-daemon.sock` starts with
+// JVM daemon socket = `jvm-compiler-daemon.sock` (unfingerprinted, possible on old disks)
+// or `jvm-compiler-daemon-<fingerprint>.sock` (#138). `native-compiler-daemon.sock` starts with
 // `native-` and is explicitly excluded. The fingerprint segment must be
-// non-empty — `daemon-.sock` is not something `applyPluginsFingerprintToFile`
+// non-empty — `jvm-compiler-daemon-.sock` is not something `applyPluginsFingerprintToFile`
 // can emit today, but the length check keeps the predicate strict against
 // a future refactor.
 internal fun isJvmDaemonSocket(name: String): Boolean =
-    name == "daemon.sock" ||
-        (name.startsWith("daemon-") && name.endsWith(".sock") && name.length > "daemon-.sock".length)
+    name == "jvm-compiler-daemon.sock" ||
+        (name.startsWith("jvm-compiler-daemon-") && name.endsWith(".sock") && name.length > "jvm-compiler-daemon-.sock".length)
 
 internal fun isNativeDaemonSocket(name: String): Boolean =
-    name == "native-daemon.sock"
+    name == "native-compiler-daemon.sock"
 
 private fun stopAllDaemons(daemonBaseDir: String) {
     if (!infraFileExists(daemonBaseDir)) {

@@ -11,7 +11,7 @@ Self-hosting is partial as of v0.13.0: the native binary rebuilds itself from
 the v1.0 path.
 
 Top-level build layout uses Gradle `includeBuild()` to decouple three pieces: the root
-native project, `kolt-compiler-daemon/` (JVM daemon), and `kolt-native-daemon/`
+native project, `kolt-jvm-compiler-daemon/` (JVM daemon), and `kolt-native-compiler-daemon/`
 (proposed native-compiler sidecar).
 
 ## Core Technologies

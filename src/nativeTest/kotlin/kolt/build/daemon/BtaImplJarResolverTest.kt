@@ -49,14 +49,14 @@ class BtaImplJarResolverTest {
 
     @Test
     fun devFallbackResolvesFiveParentsUpFromTestBinary() {
-        val fakeJars = listOf("/repo/kolt-compiler-daemon/build/bta-impl-jars/a.jar")
+        val fakeJars = listOf("/repo/kolt-jvm-compiler-daemon/build/bta-impl-jars/a.jar")
         val result = resolveBtaImplJarsPure(
             envDirValue = null,
             selfExePath = "/repo/build/bin/linuxX64/debugTest/test.kexe",
             listJarFiles = { dir ->
                 when (dir) {
                     "/repo/build/bin/linuxX64/debugTest/libexec/kolt-bta-impl" -> null
-                    "/repo/kolt-compiler-daemon/build/bta-impl-jars" -> fakeJars
+                    "/repo/kolt-jvm-compiler-daemon/build/bta-impl-jars" -> fakeJars
                     else -> null
                 }
             },
@@ -74,7 +74,7 @@ class BtaImplJarResolverTest {
             listJarFiles = { null },
         )
         val notFound = assertIs<BtaImplJarsResolution.NotFound>(result)
-        assertEquals("/repo/kolt-compiler-daemon/build/bta-impl-jars", notFound.probedDir)
+        assertEquals("/repo/kolt-jvm-compiler-daemon/build/bta-impl-jars", notFound.probedDir)
     }
 
     @Test

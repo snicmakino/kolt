@@ -1,6 +1,6 @@
 // Hand-pinned sibling of `daemonKotlinVersion` (root build.gradle.kts) and
-// `KOLT_DAEMON_KOTLIN_VERSION` (kolt-compiler-daemon Main.kt). All three,
-// plus the four kotlinc/BTA artifact pins in kolt-compiler-daemon's build
+// `KOLT_DAEMON_KOTLIN_VERSION` (kolt-jvm-compiler-daemon Main.kt). All three,
+// plus the four kotlinc/BTA artifact pins in kolt-jvm-compiler-daemon's build
 // scripts, must move together per ADR 0019 §1. `verifyDaemonKotlinVersion`
 // asserts all seven at build time.
 //

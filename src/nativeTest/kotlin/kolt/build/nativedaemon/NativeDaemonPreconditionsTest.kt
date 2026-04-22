@@ -24,7 +24,7 @@ class NativeDaemonPreconditionsTest {
         kotlincVersion: String = kotlinVersion,
         ensureJavaBin: (KoltPaths) -> Result<String, BootstrapJdkError> = { Ok("/opt/jdk/bin/java") },
         resolveNativeJar: () -> NativeDaemonJarResolution =
-            { NativeDaemonJarResolution.Resolved("/opt/kolt/libexec/kolt-native-daemon-all.jar", NativeDaemonJarResolution.Source.Libexec) },
+            { NativeDaemonJarResolution.Resolved("/opt/kolt/libexec/kolt-native-compiler-daemon-all.jar", NativeDaemonJarResolution.Source.Libexec) },
         konancLayoutExists: (String) -> Boolean = { true },
         absProjectPath: String = project,
     ): Result<NativeDaemonSetup, NativeDaemonPreconditionError> =
@@ -42,7 +42,7 @@ class NativeDaemonPreconditionsTest {
         val setup = assertNotNull(run().get())
 
         assertEquals("/opt/jdk/bin/java", setup.javaBin)
-        assertEquals("/opt/kolt/libexec/kolt-native-daemon-all.jar", setup.daemonJarPath)
+        assertEquals("/opt/kolt/libexec/kolt-native-compiler-daemon-all.jar", setup.daemonJarPath)
         // konanHome is the managed toolchain root for the Kotlin version.
         assertEquals("/home/test/.kolt/toolchains/konanc/2.3.20", setup.konanHome)
         // konancJar is the single embeddable under `konan/lib/` — the same
@@ -51,8 +51,8 @@ class NativeDaemonPreconditionsTest {
             "/home/test/.kolt/toolchains/konanc/2.3.20/konan/lib/kotlin-native-compiler-embeddable.jar",
             setup.konancJar,
         )
-        assertTrue(setup.socketPath.endsWith("/native-daemon.sock"))
-        assertTrue(setup.logPath.endsWith("/native-daemon.log"))
+        assertTrue(setup.socketPath.endsWith("/native-compiler-daemon.sock"))
+        assertTrue(setup.logPath.endsWith("/native-compiler-daemon.log"))
     }
 
     @Test

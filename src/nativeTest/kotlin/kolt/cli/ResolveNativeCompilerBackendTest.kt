@@ -30,12 +30,12 @@ class ResolveNativeCompilerBackendTest {
 
     private val okSetup = NativeDaemonSetup(
         javaBin = "/fake/java",
-        daemonJarPath = "/fake/kolt-native-daemon-all.jar",
+        daemonJarPath = "/fake/kolt-native-compiler-daemon-all.jar",
         konancJar = "/fake/konanc/konan/lib/kotlin-native-compiler-embeddable.jar",
         konanHome = "/fake/konanc",
         daemonDir = "/fake/daemon/dir",
-        socketPath = "/fake/daemon/dir/native-daemon.sock",
-        logPath = "/fake/daemon/dir/native-daemon.log",
+        socketPath = "/fake/daemon/dir/native-compiler-daemon.sock",
+        logPath = "/fake/daemon/dir/native-compiler-daemon.log",
     )
 
     private val absProject = "/fake/project"
@@ -105,7 +105,7 @@ class ResolveNativeCompilerBackendTest {
         )
 
         assertSame(subprocess, backend)
-        assertTrue(warnings.single().contains("kolt-native-daemon"))
+        assertTrue(warnings.single().contains("kolt-native-compiler-daemon"))
     }
 
     @Test

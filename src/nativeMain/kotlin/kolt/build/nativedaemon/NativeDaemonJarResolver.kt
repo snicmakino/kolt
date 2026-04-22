@@ -16,7 +16,7 @@ sealed interface NativeDaemonJarResolution {
     enum class Source { Env, Libexec, DevFallback }
 }
 
-internal const val NATIVE_DAEMON_JAR_FILENAME = "kolt-native-daemon-all.jar"
+internal const val NATIVE_DAEMON_JAR_FILENAME = "kolt-native-compiler-daemon-all.jar"
 internal const val KOLT_NATIVE_DAEMON_JAR_ENV = "KOLT_NATIVE_DAEMON_JAR"
 
 fun resolveNativeDaemonJarPure(
@@ -40,7 +40,7 @@ fun resolveNativeDaemonJarPure(
     var repoRoot: String? = selfExePath
     repeat(5) { repoRoot = repoRoot?.let { parentDir(it) } }
     if (repoRoot != null) {
-        val devJar = "$repoRoot/kolt-native-daemon/build/libs/$NATIVE_DAEMON_JAR_FILENAME"
+        val devJar = "$repoRoot/kolt-native-compiler-daemon/build/libs/$NATIVE_DAEMON_JAR_FILENAME"
         if (fileExists(devJar)) {
             return NativeDaemonJarResolution.Resolved(devJar, NativeDaemonJarResolution.Source.DevFallback)
         }

@@ -19,7 +19,7 @@ kolt is a Kotlin build tool distributed as a single Kotlin/Native binary. It rea
 └───┬─────────────────────────────────────┬───┘
     │ Unix socket (length-prefixed JSON)  │
 ┌───▼───────────────────┐   ┌─────────────▼─────────────┐
-│  kolt-compiler-daemon │   │   kolt-native-daemon       │
+│  kolt-jvm-compiler-daemon │   │   kolt-native-compiler-daemon       │
 │        (JVM)          │   │        (JVM)               │
 │                       │   │                            │
 │  server/   lifecycle  │   │  server/    lifecycle      │
@@ -44,7 +44,7 @@ kolt is a Kotlin build tool distributed as a single Kotlin/Native binary. It rea
 | `tool` | Download and manage kotlinc, konanc, and JDK under `~/.kolt/toolchains/`. |
 | `infra` | `fork`/`execvp` process execution, `spawnDetached` (double-fork for daemon), Unix socket client, inotify, SHA-256, HTTP downloads (libcurl cinterop). |
 
-### Compiler daemon (`kolt-compiler-daemon/`)
+### Compiler daemon (`kolt-jvm-compiler-daemon/`)
 
 A JVM process that stays warm across builds for JVM-target compilation. Launched by the native client via double-fork, communicates over a Unix domain socket.
 
@@ -63,7 +63,7 @@ daemon classloader
       └─ URLClassLoader (kotlin-build-tools-impl + plugin JARs)
 ```
 
-### Native compiler daemon (`kolt-native-daemon/`)
+### Native compiler daemon (`kolt-native-compiler-daemon/`)
 
 A peer JVM process for native-target compilation (ADR 0024). Same spawn / wire pattern as the JVM daemon, but loads `kotlin-native-compiler-embeddable.jar` and invokes `K2Native.exec(PrintStream, String[])` reflectively — there is no Build Tools API for native.
 
@@ -78,7 +78,7 @@ ClassLoader topology for the native daemon:
 ```
 bootstrap classloader (JDK only)
   └─ URLClassLoader(arrayOf(konancUrl), null)   // konanc + its bundled stdlib
-daemon classloader (separate, holds kolt-native-daemon code + kotlin-result)
+daemon classloader (separate, holds kolt-native-compiler-daemon code + kotlin-result)
 ```
 
 The konanc classloader has a **null parent** — the daemon's own classpath (kotlin-result, kotlinx-serialization-json, daemon-core) is not visible to konanc, and konanc's bundled Kotlin stdlib / kotlinx-serialization don't leak back. This differs from the JVM daemon's shared-API hierarchy, which deliberately shares a stable API surface (`org.jetbrains.kotlin.buildtools.api.*`) with impl JARs. There is no equivalent API for native, so isolation is strict.
@@ -100,7 +100,7 @@ For native targets, steps 4–6 follow the same shape but go through `NativeComp
 
 Both daemons share the spawn and connect pattern; they differ in tuning.
 
-- **Sockets**: `~/.kolt/daemon/<projectHash>/<kotlinVersion>/daemon.sock` (JVM) and `.../native-daemon.sock` (native). Co-locating them under the same version dir keeps `kolt daemon stop` to a single enumeration pass (ADR 0020 §2, ADR 0024).
+- **Sockets**: `~/.kolt/daemon/<projectHash>/<kotlinVersion>/jvm-compiler-daemon.sock` (JVM) and `.../native-compiler-daemon.sock` (native). Co-locating them under the same version dir keeps `kolt daemon stop` to a single enumeration pass (ADR 0020 §2, ADR 0024, ADR 0026 §3).
 - **Spawn**: Native client calls `spawnDetached()` (double-fork + setsid) from the matching backend.
 - **Connect**: Client retries with exponential backoff (10–200 ms, 3 s budget).
 - **Shutdown**: Idle timeout, max compile count reached, heap watermark exceeded, or explicit `kolt daemon stop`. Native daemon defaults are tighter (10 min idle vs 30 min; 2 GB heap watermark) because native builds are less frequent.

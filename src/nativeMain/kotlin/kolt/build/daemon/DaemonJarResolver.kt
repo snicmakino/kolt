@@ -13,7 +13,7 @@ sealed interface DaemonJarResolution {
     enum class Source { Env, Libexec, DevFallback }
 }
 
-internal const val DAEMON_JAR_FILENAME = "kolt-compiler-daemon-all.jar"
+internal const val DAEMON_JAR_FILENAME = "kolt-jvm-compiler-daemon-all.jar"
 internal const val KOLT_DAEMON_JAR_ENV = "KOLT_DAEMON_JAR"
 
 // Probe order: env override -> libexec -> dev fallback.
@@ -38,7 +38,7 @@ fun resolveDaemonJarPure(
     var repoRoot: String? = selfExePath
     repeat(5) { repoRoot = repoRoot?.let { parentDir(it) } }
     if (repoRoot != null) {
-        val devJar = "$repoRoot/kolt-compiler-daemon/build/libs/$DAEMON_JAR_FILENAME"
+        val devJar = "$repoRoot/kolt-jvm-compiler-daemon/build/libs/$DAEMON_JAR_FILENAME"
         if (fileExists(devJar)) {
             return DaemonJarResolution.Resolved(devJar, DaemonJarResolution.Source.DevFallback)
         }

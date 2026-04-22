@@ -64,7 +64,7 @@ jobs:
       - name: Run linuxX64Test
         run: ./gradlew --no-daemon linuxX64Test
 
-      # Regression guard for the root `build` → `:kolt-compiler-daemon:build`
+      # Regression guard for the root `build` → `:kolt-jvm-compiler-daemon:build`
       # wiring added in #99 (ADR 0018). If a future edit drops the `dependsOn`
       # in build.gradle.kts, the dev-fallback path in DaemonJarResolver.kt
       # would silently pick up a stale jar — the failure mode is invisible to
@@ -76,4 +76,4 @@ jobs:
       - name: Verify root build produces daemon fat jar
         run: |
           ./gradlew --no-daemon build
-          test -f kolt-compiler-daemon/build/libs/kolt-compiler-daemon-all.jar
+          test -f kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon-all.jar

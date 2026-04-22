@@ -49,8 +49,8 @@ class DaemonPreconditionsTest {
         assertEquals(fakeBtaJars, setup.btaImplJars)
         val expectedHash = projectHashOf(absProject)
         assertEquals("/fake/home/.kolt/daemon/$expectedHash/$bundledVersion", setup.daemonDir)
-        assertEquals("/fake/home/.kolt/daemon/$expectedHash/$bundledVersion/daemon.sock", setup.socketPath)
-        assertEquals("/fake/home/.kolt/daemon/$expectedHash/$bundledVersion/daemon.log", setup.logPath)
+        assertEquals("/fake/home/.kolt/daemon/$expectedHash/$bundledVersion/jvm-compiler-daemon.sock", setup.socketPath)
+        assertEquals("/fake/home/.kolt/daemon/$expectedHash/$bundledVersion/jvm-compiler-daemon.log", setup.logPath)
     }
 
     @Test
@@ -317,7 +317,7 @@ class DaemonPreconditionsTest {
             ),
         )
         assertEquals(
-            "warning: kolt-compiler-daemon jar not found — falling back to subprocess compile",
+            "warning: kolt-jvm-compiler-daemon jar not found — falling back to subprocess compile",
             formatDaemonPreconditionWarning(DaemonPreconditionError.DaemonJarMissing),
         )
         assertEquals(
@@ -371,14 +371,14 @@ class DaemonPreconditionsTest {
         )
         val tooLong = formatDaemonPreconditionWarning(
             DaemonPreconditionError.SocketPathTooLong(
-                socketPath = "/very/long/path/to/daemon.sock",
+                socketPath = "/very/long/path/to/jvm-compiler-daemon.sock",
                 projectedBytes = 120,
                 maxBytes = 108,
             ),
         )
         assertTrue(
             tooLong.contains("108") &&
-                tooLong.contains("/very/long/path/to/daemon.sock") &&
+                tooLong.contains("/very/long/path/to/jvm-compiler-daemon.sock") &&
                 tooLong.contains("falling back to subprocess compile") &&
                 tooLong.contains("--no-daemon"),
             "unexpected socket-path-too-long warning: $tooLong",

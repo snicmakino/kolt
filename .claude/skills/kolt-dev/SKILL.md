@@ -45,7 +45,7 @@ Rows are per-package. Files are only called out when the nuance is load-bearing;
 | `infra.net` | AF_UNIX stream socket client (`UnixSocket` — `connect` / `sendAll` / `recvExact` / `shutdownWrite` / `close`; all entry points return `Result<_, UnixSocketError>`). Shared by both daemon clients. |
 | `tool` | External tool download + caching (`ToolManager` — ktfmt, JUnit Console Launcher), kotlinc / konanc / JDK toolchain management under `~/.kolt/toolchains/` (`ToolchainManager`). |
 
-### JVM compiler daemon — `kolt-compiler-daemon/src/main/kotlin/kolt/`
+### JVM compiler daemon — `kolt-jvm-compiler-daemon/src/main/kotlin/kolt/`
 
 | Package | Role |
 |---|---|
@@ -56,7 +56,7 @@ Rows are per-package. Files are only called out when the nuance is load-bearing;
 
 BTA integration lives outside the daemon's own package tree (it's loaded via a separate classloader under `SharedApiClassesClassLoader`, ADR 0019). See `docs/architecture.md` for the classloader hierarchy.
 
-### Native compiler daemon — `kolt-native-daemon/src/main/kotlin/kolt/`
+### Native compiler daemon — `kolt-native-compiler-daemon/src/main/kotlin/kolt/`
 
 | Package | Role |
 |---|---|

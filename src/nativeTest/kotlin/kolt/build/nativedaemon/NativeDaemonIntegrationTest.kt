@@ -37,7 +37,7 @@ import kotlin.test.assertTrue
 //                               from a Kotlin/Native distribution.
 // The daemon jar itself is resolved via the usual env → libexec →
 // dev-fallback chain (`NativeDaemonJarResolver`), so a
-// `./gradlew :kolt-native-daemon:shadowJar` is enough when developing
+// `./gradlew :kolt-native-compiler-daemon:shadowJar` is enough when developing
 // locally.
 @OptIn(ExperimentalForeignApi::class)
 class NativeDaemonIntegrationTest {
@@ -69,8 +69,8 @@ class NativeDaemonIntegrationTest {
                 daemonJarPath = env.daemonJarPath,
                 konancJar = env.konancJar,
                 konanHome = env.konanHome,
-                socketPath = "$stateDir/native-daemon.sock",
-                logPath = "$stateDir/native-daemon.log",
+                socketPath = "$stateDir/native-compiler-daemon.sock",
+                logPath = "$stateDir/native-compiler-daemon.log",
             )
 
             // Stage 1 (library): source → klib. Arg shape mirrors
@@ -88,7 +88,7 @@ class NativeDaemonIntegrationTest {
             )
             assertNotNull(
                 stage1.get(),
-                "stage 1 (library) failed: ${stage1.getError()} (daemon log: $stateDir/native-daemon.log)",
+                "stage 1 (library) failed: ${stage1.getError()} (daemon log: $stateDir/native-compiler-daemon.log)",
             )
 
             // Stage 2 (link): klib → kexe. Re-runs through the same daemon
@@ -106,12 +106,12 @@ class NativeDaemonIntegrationTest {
             )
             assertNotNull(
                 stage2.get(),
-                "stage 2 (link) failed: ${stage2.getError()} (daemon log: $stateDir/native-daemon.log)",
+                "stage 2 (link) failed: ${stage2.getError()} (daemon log: $stateDir/native-compiler-daemon.log)",
             )
 
             assertTrue(
                 fileExists(exePath),
-                "expected $exePath to be produced by stage 2 (daemon log: $stateDir/native-daemon.log)",
+                "expected $exePath to be produced by stage 2 (daemon log: $stateDir/native-compiler-daemon.log)",
             )
 
             // Execute the kexe through `sh -c` so we can capture stdout via
@@ -141,7 +141,7 @@ class NativeDaemonIntegrationTest {
             // Shutdown wire path in the suite. Wrapped in runCatching
             // because cleanup must never fail a passing test.
             runCatching {
-                val socket = UnixSocket.connect("$stateDir/native-daemon.sock")
+                val socket = UnixSocket.connect("$stateDir/native-compiler-daemon.sock")
                     .getOrElse { return@runCatching }
                 FrameCodec.writeFrame(socket, Message.Shutdown)
                 socket.close()
@@ -170,7 +170,7 @@ class NativeDaemonIntegrationTest {
         val daemonJar = when (val r = resolveNativeDaemonJar()) {
             is NativeDaemonJarResolution.Resolved -> r.path
             NativeDaemonJarResolution.NotFound ->
-                error("$IT_FLAG=1 but kolt-native-daemon jar not found — run './gradlew :kolt-native-daemon:shadowJar' first")
+                error("$IT_FLAG=1 but kolt-native-compiler-daemon jar not found — run './gradlew :kolt-native-compiler-daemon:shadowJar' first")
         }
 
         val konanHome = getenv("KOLT_IT_KONAN_HOME")?.toKString()
