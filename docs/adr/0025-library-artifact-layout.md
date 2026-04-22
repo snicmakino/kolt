@@ -21,9 +21,10 @@ Implemented (2026-04-22).
   need to locate the artifact use `outputNativeKlibPath(config)` /
   `outputJarPath(config)` rather than reconstructing the path (§4).
 - The directory-not-file choice for native is the load-bearing one for
-  downstream specs. `kolt publish` (#21), `kolt new --lib` (#28), and the
-  ADR 0018 self-host migration of `kolt-compiler-daemon/` all consume this
-  contract; changing it later would fan out into each of them (§5).
+  downstream specs that actually build libraries: `kolt publish` (#21)
+  and `kolt new --lib` (#28). The daemon self-host gap (#97, ADR 0018)
+  is **not** a consumer — both daemons have `fun main` and ship as
+  `shadowJar` fat jars, so they are applications, not libraries (§5).
 
 ## Context and Problem Statement
 
@@ -44,11 +45,11 @@ forced into the open:
   potential future `fat_jar = false` axis for apps (currently out of scope)
   would not disturb libraries.
 
-`kolt publish` (#21), `kolt new --lib` (#28), and the ADR 0018 self-host
-migration of `kolt-compiler-daemon/` into a kolt-built library all need a
-definitive answer for the artifact shape and path layout they are
-consuming. Writing this ADR closes the gap so those downstream specs don't
-each re-derive the contract.
+`kolt publish` (#21) and `kolt new --lib` (#28) both need a definitive
+answer for the artifact shape and path layout they are consuming. Writing
+this ADR closes the gap so those downstream specs don't each re-derive
+the contract. (The daemon self-host gap #97 / ADR 0018 appears
+unrelated: see §5.)
 
 ## Decision Drivers
 
@@ -162,10 +163,14 @@ Three specs consume this layout today:
 - **`kolt new --lib` (#28)** — scaffolds a library project. The generated
   `kolt.toml` only needs `kind = "lib"` and no `[build] main`; nothing
   about the artifact layout needs templating into the scaffold.
-- **ADR 0018 self-host migration** — `kolt-compiler-daemon/` becoming a
-  kolt-built library consumes the JVM `.jar` contract (§3). The existing
-  Gradle subproject publishes a plain class jar; the kolt-built form
-  matches byte-wise modulo the `jvmTarget` and `kotlinc` version.
+- **ADR 0018 self-host migration is NOT a consumer of this ADR.**
+  Both `kolt-compiler-daemon/` and `kolt-native-daemon/` have `fun main`
+  entry points and are packaged as `shadowJar` fat jars for `java -jar`
+  launch — they are applications (`kind = "app"`), not libraries. Self-
+  host of the daemons is tracked by #97, which requires JVM target
+  support (partly already present), multi-module layout, and a **fat-jar
+  output mode** for `kind = "app"` — none of which this ADR or spec #30
+  delivers. Listing the daemons here would be misleading.
 
 ### Consequences
 
@@ -217,11 +222,15 @@ Three specs consume this layout today:
 - #30 — tracking issue ("Implement `kind = \"lib\"` build pipeline").
 - ADR 0014 — native two-stage library+link flow (this ADR relies on stage
   1 being unchanged).
-- ADR 0018 — distribution / self-host endgame (this ADR's JVM §3 is the
-  contract `kolt-compiler-daemon/` migrates onto).
 - ADR 0023 §1 — target/kind schema (this ADR extends the "reserved lib"
   slot with a concrete artifact definition).
 - #21 — `kolt publish` (downstream consumer of §1 and §5).
 - #28 — `kolt new --lib` (downstream consumer of §5).
+- #97 — "kolt cannot build its own compiler daemon jar (self-host gap)".
+  Orthogonal to this ADR: the daemons are `kind = "app"` fat jars, not
+  libraries. See §5.
+- ADR 0018 — distribution / self-host endgame. Orthogonal to this ADR
+  for the same reason as #97; listed here only because early drafts of
+  §5 incorrectly coupled them.
 - `.kiro/specs/lib-build-pipeline/` — spec artifacts, design, tasks.
 - `spike/lib-dogfood/README.md` — replayable on-disk evidence for §1.
