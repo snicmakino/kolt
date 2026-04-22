@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#
+# Git pre-commit hook: block the commit if any tracked Kotlin file is
+# unformatted. Installed as a symlink via scripts/install-hooks.sh.
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/scripts/fmt.sh" --check
