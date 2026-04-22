@@ -31,7 +31,7 @@
   - _Requirements: 2.8_
   - _Boundary: kolt.cli.BuildCommands tests_
 
-- [ ] 1.5 (P) ADR 0027 §1 の helper 参照先を訂正
+- [x] 1.5 (P) ADR 0027 §1 の helper 参照先を訂正
   - `docs/adr/0027-runtime-classpath-manifest.md` §1 末尾の「Helper `outputRuntimeClasspathPath(config): String` in `kolt/config/Config.kt`」を `kolt/build/Builder.kt` に 1 行修正。
   - ADR テキストと実装配置が一致し、diff を読めば修正意図が明確な状態。
   - _Requirements: 2.1_

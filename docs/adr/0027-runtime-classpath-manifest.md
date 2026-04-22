@@ -117,7 +117,7 @@ Rules:
   algorithm shipped in v0.3.0).
 
 Helper `outputRuntimeClasspathPath(config): String` in
-`kolt/config/Config.kt` parallels `outputJarPath(config)` /
+`kolt/build/Builder.kt` parallels `outputJarPath(config)` /
 `outputNativeKlibPath(config)`. Callers do not hand-build the path.
 
 ### §2 Why not in `.kolt.lock`
@@ -215,7 +215,7 @@ add a read-write round trip to `kolt run` for no benefit.
 
 ### Confirmation
 
-- `outputRuntimeClasspathPath(config)` exists in `Config.kt`
+- `outputRuntimeClasspathPath(config)` exists in `Builder.kt`
   alongside the existing artifact-path helpers. Callers compute
   paths through it.
 - A new test file (`JvmAppBuildTest` or similar) pins: JVM `kind =
