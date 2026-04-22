@@ -48,7 +48,7 @@
   - _Boundary: kolt-jvm-compiler-daemon config_
   - _Depends: 1.3_
 
-- [ ] 2.2 (P) `kolt-native-compiler-daemon/kolt.toml` を追加
+- [x] 2.2 (P) `kolt-native-compiler-daemon/kolt.toml` を追加
   - `target = "jvm"`, `kind = "app"`, `main = "kolt.nativedaemon.main"`, `jvm_target = "21"`, `jdk = "21"`, `sources = ["src/main/kotlin"]`。
   - 依存は `kotlinx-serialization-json:1.7.3` / `kotlin-result:2.3.1` のみ。`kotlin-native-compiler-embeddable` は含めない (ADR 0024 §8)。
   - `[kotlin.plugins] serialization = true` を付与。

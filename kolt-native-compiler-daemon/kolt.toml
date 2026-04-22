@@ -1,0 +1,21 @@
+name = "kolt-native-compiler-daemon"
+version = "0.13.0"
+kind = "app"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
+target = "jvm"
+jvm_target = "21"
+jdk = "21"
+main = "kolt.nativedaemon.main"
+sources = ["src/main/kotlin"]
+test_sources = []
+
+[dependencies]
+"org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
+"com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
