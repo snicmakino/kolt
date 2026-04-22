@@ -31,6 +31,26 @@ internal data class BuildResult(
     val javaPath: String? = null,
 )
 
+// ADR 0027 §4 kind/target matrix: JVM `kind = "app"` emits
+// `build/<name>-runtime.classpath`; every other combination (JVM lib,
+// native app, native lib) must not. A residual manifest from a previous
+// kind=app build is deleted so `assemble-dist.sh` never picks up a stale
+// classpath after a kind flip (design.md §Components → JVM app tail
+// branch, "stale manifest 削除"). File deletion is best-effort: a failure
+// here is diagnostic noise, not a build breaker, so the helper swallows it.
+internal fun handleRuntimeClasspathManifest(
+    config: KoltConfig,
+    resolvedJars: List<ResolvedJar>,
+): Result<Unit, ManifestWriteError> {
+    val shouldEmit = config.build.target == "jvm" && !config.isLibrary()
+    if (shouldEmit) {
+        return writeRuntimeClasspathManifest(config, resolvedJars)
+    }
+    val manifestPath = outputRuntimeClasspathPath(config)
+    if (fileExists(manifestPath)) deleteFile(manifestPath)
+    return Ok(Unit)
+}
+
 // Kind-gated plan for a native build (ADR 0014 two-stage × ADR 0023 §1).
 // `linkMain == null` ⇒ skip stage 2 (library), stage 1 klib is the artifact.
 // `linkMain != null` ⇒ run stage 2 (app link) with that entry-point FQN.
@@ -170,7 +190,8 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     // below leaves cached=null for the next run (#50).
     if (fileExists(BUILD_STATE_FILE)) deleteFile(BUILD_STATE_FILE)
     val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
-    val classpath = resolveDependencies(config).getOrElse { return Err(it) }.classpath
+    val resolutionOutcome = resolveDependencies(config).getOrElse { return Err(it) }
+    val classpath = resolutionOutcome.classpath
     val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
     val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
@@ -236,6 +257,18 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     val jarCmd = jarCommand(config, jarPath = managedJarBin)
     executeCommand(jarCmd.args).getOrElse { error ->
         eprintln("error: " + formatProcessError(error, "jar packaging"))
+        return Err(EXIT_BUILD_ERROR)
+    }
+
+    // ADR 0027 §1 / §4: JVM kind=app emits the runtime classpath manifest
+    // right after the jar step; every other kind/target combination
+    // (handled by the same helper) scrubs any stale manifest left by a
+    // previous kind=app build. Manifest write failure is treated as a
+    // build failure (ADR 0001: Err propagates, jar artifact is left on
+    // disk mirroring the existing jarCmd failure semantics).
+    handleRuntimeClasspathManifest(config, resolutionOutcome.resolvedJars).getOrElse { err ->
+        val failure = err as ManifestWriteError.WriteFailed
+        eprintln("error: could not write runtime classpath manifest at ${failure.path}: ${failure.reason}")
         return Err(EXIT_BUILD_ERROR)
     }
 
@@ -345,6 +378,14 @@ private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildR
         eprintln("error: $artifactPath not produced by konanc")
         return Err(EXIT_BUILD_ERROR)
     }
+
+    // ADR 0027 §4 stale cleanup: native builds never emit the manifest,
+    // but a prior `kind = "app" target = "jvm"` build in the same project
+    // directory would have left one behind. Drop it so `assemble-dist.sh`
+    // cannot pick up a mismatched artifact after a retarget. The helper
+    // takes the "cleanup" arm for every non-jvm-app config and only ever
+    // returns Ok, so discarding the Result here is safe by construction.
+    handleRuntimeClasspathManifest(config, emptyList())
 
     val newState = currentState.copy(classesDirMtime = fileMtime(artifactPath))
     writeFileAsString(BUILD_STATE_FILE, serializeBuildState(newState)).getOrElse {

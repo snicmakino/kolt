@@ -16,7 +16,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - _Boundary: kolt.build.Builder_
 
-- [ ] 1.3 JVM `kind = "app"` 経路に manifest emit 呼び出しと stale cleanup を組み込む
+- [x] 1.3 JVM `kind = "app"` 経路に manifest emit 呼び出しと stale cleanup を組み込む
   - `BuildCommands.kt` の JVM 経路で jar 生成直後に `kind == "app" && target == "jvm"` の分岐を追加し、`writeRuntimeClasspathManifest` を呼び出す。
   - 同分岐の else 側 (lib / native) で、`outputRuntimeClasspathPath(config)` に対応する既存ファイルがあれば削除する (kind 変更による stale manifest 防止)。
   - `JvmAppBuildTest.kt` で emit マトリクス (jvm+app → 出る / jvm+lib → 出ない / native → 出ない / kind を app→lib に変えて rebuild → 削除される) をフィクスチャベースで pin。
