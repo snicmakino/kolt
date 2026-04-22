@@ -39,7 +39,7 @@
   - _Depends: 1.2_
 
 - [ ] 2. Daemon `kolt.toml` 導入
-- [ ] 2.1 (P) `kolt-jvm-compiler-daemon/kolt.toml` を追加
+- [x] 2.1 (P) `kolt-jvm-compiler-daemon/kolt.toml` を追加
   - `target = "jvm"`, `kind = "app"`, `main = "kolt.daemon.main"`, `jvm_target = "21"`, `jdk = "21"` を設定し、`sources = ["src/main/kotlin", "ic/src/main/kotlin"]` で `:ic` ソースを merge する。
   - 依存は `kotlin-build-tools-api:2.3.20` / `kotlinx-serialization-json:1.7.3` / `kotlin-result:2.3.1` / `ktoml-core:0.7.1` の 4 本のみ (Req 5.3 により `-impl` / fixture classpath は入れない)。
   - `[kotlin.plugins] serialization = true` を付与。

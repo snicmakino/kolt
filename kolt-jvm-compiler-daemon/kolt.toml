@@ -1,0 +1,23 @@
+name = "kolt-jvm-compiler-daemon"
+version = "0.13.0"
+kind = "app"
+
+[kotlin]
+version = "2.3.20"
+
+[kotlin.plugins]
+serialization = true
+
+[build]
+target = "jvm"
+jvm_target = "21"
+jdk = "21"
+main = "kolt.daemon.main"
+sources = ["src/main/kotlin", "ic/src/main/kotlin"]
+test_sources = []
+
+[dependencies]
+"org.jetbrains.kotlin:kotlin-build-tools-api" = "2.3.20"
+"org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
+"com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
+"com.akuleshov7:ktoml-core" = "0.7.1"
