@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "kotlin": "2.3.20",
+  "jvm_target": "21",
+  "dependencies": {
+    "org.apiguardian:apiguardian-api": {
+      "version": "1.1.2",
+      "sha256": "b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38",
+      "transitive": true
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib": {
+      "version": "2.3.20",
+      "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e",
+      "transitive": true
+    },
+    "org.jetbrains.kotlin:kotlin-test": {
+      "version": "2.3.20",
+      "sha256": "d6c9ccf82f67e6cf7fdaf9e0cea419dac4dfa58620a1653d3dba45f544a289ac",
+      "transitive": true
+    },
+    "org.jetbrains.kotlin:kotlin-test-junit5": {
+      "version": "2.3.20",
+      "sha256": "90c554e254623cc49de7ae4c7c932a86287795e45875c47e1937c29c297eff02"
+    },
+    "org.jetbrains:annotations": {
+      "version": "13.0",
+      "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+      "transitive": true
+    },
+    "org.junit.jupiter:junit-jupiter-api": {
+      "version": "5.10.1",
+      "sha256": "60d5c398c32dc7039b99282514ad6064061d8417cf959a1f6bd2038cc907c913",
+      "transitive": true
+    },
+    "org.junit.jupiter:junit-jupiter-engine": {
+      "version": "5.10.1",
+      "sha256": "02930dfe495f93fe70b26550ace3a28f7e1b900c84426c2e4626ce020c7282d6",
+      "transitive": true
+    },
+    "org.junit.platform:junit-platform-commons": {
+      "version": "1.10.1",
+      "sha256": "7d9855ee3f3f71f015eb1479559bf923783243c24fbfbd8b29bed8e8099b5672",
+      "transitive": true
+    },
+    "org.junit.platform:junit-platform-engine": {
+      "version": "1.10.1",
+      "sha256": "baa48e470d6dee7369a0a8820c51da89c1463279eda6e13a304d11f45922c760",
+      "transitive": true
+    },
+    "org.junit.platform:junit-platform-launcher": {
+      "version": "1.10.1",
+      "sha256": "ded414c504e88d02270331071969084e1b2fd9bcf8443f35d44da2c6e3301bc2",
+      "transitive": true
+    },
+    "org.opentest4j:opentest4j": {
+      "version": "1.3.0",
+      "sha256": "48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b",
+      "transitive": true
+    }
+  }
+}

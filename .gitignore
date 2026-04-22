@@ -4,6 +4,9 @@
 **/build/
 !gradle/wrapper/gradle-wrapper.jar
 
+# assemble-dist.sh release staging
+/dist/
+
 # IDE
 .idea/
 *.iml

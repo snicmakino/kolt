@@ -1,8 +1,13 @@
 package kolt.build
 
+import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getOrElse
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import kolt.config.CinteropConfig
 import kolt.config.KoltConfig
 import kolt.config.konanTargetGradleName
+import kolt.infra.writeFileAsString
 
 internal const val BUILD_DIR = "build"
 internal const val CLASSES_DIR = "$BUILD_DIR/classes"
@@ -13,6 +18,46 @@ internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 internal const val NATIVE_IC_CACHE_DIR = "$BUILD_DIR/.ic-cache"
 
 internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
+
+internal fun outputRuntimeClasspathPath(config: KoltConfig): String =
+    "$BUILD_DIR/${config.name}-runtime.classpath"
+
+// A resolved JVM dependency jar, kept as a pair of (a) absolute cache path and
+// (b) full GAV coordinate for the tiebreak rule in ADR 0027 §1 ("alphabetical
+// by file name, tiebreak by group:artifact:version").
+internal data class ResolvedJar(
+    val cachePath: String,
+    val groupArtifactVersion: String
+)
+
+internal sealed class ManifestWriteError {
+    data class WriteFailed(val path: String, val reason: String) : ManifestWriteError()
+}
+
+// Emits the JVM `kind = "app"` runtime classpath manifest (ADR 0027 §1):
+// UTF-8, LF, no trailing newline; alphabetical by file name, tiebreak by
+// `group:artifact:version`; self jar excluded as a defence-in-depth guard
+// (the resolver's return value already omits it).
+internal fun writeRuntimeClasspathManifest(
+    config: KoltConfig,
+    resolvedJars: List<ResolvedJar>
+): Result<Unit, ManifestWriteError> {
+    val selfJarPath = outputJarPath(config)
+    val sorted = resolvedJars
+        .filter { it.cachePath != selfJarPath }
+        .sortedWith(compareBy({ fileName(it.cachePath) }, { it.groupArtifactVersion }))
+    val content = sorted.joinToString("\n") { it.cachePath }
+    val path = outputRuntimeClasspathPath(config)
+    writeFileAsString(path, content).getOrElse { error ->
+        return Err(ManifestWriteError.WriteFailed(path = error.path, reason = "write failed"))
+    }
+    return Ok(Unit)
+}
+
+private fun fileName(path: String): String {
+    val slash = path.lastIndexOf('/')
+    return if (slash < 0) path else path.substring(slash + 1)
+}
 
 internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.kexe"
 

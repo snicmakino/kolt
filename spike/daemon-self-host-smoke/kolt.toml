@@ -1,0 +1,14 @@
+name = "smoke"
+version = "0.1.0"
+kind = "app"
+
+[kotlin]
+version = "2.3.20"
+
+[build]
+target = "jvm"
+jvm_target = "21"
+jdk = "21"
+main = "smoke.main"
+sources = ["src/main/kotlin"]
+test_sources = []
