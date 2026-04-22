@@ -96,7 +96,7 @@ internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
     val paths = resolveKoltPaths().getOrElse { eprintln("error: $it"); return Err(EXIT_BUILD_ERROR) }
     val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
 
-    val classpath = resolveDependencies(config).getOrElse { return Err(it) }
+    val classpath = resolveDependencies(config).getOrElse { return Err(it) }.classpath
     val pArgs = resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
@@ -170,7 +170,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     // below leaves cached=null for the next run (#50).
     if (fileExists(BUILD_STATE_FILE)) deleteFile(BUILD_STATE_FILE)
     val managedKotlincBin = ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse { eprintln("error: ${it.message}"); return Err(EXIT_BUILD_ERROR) }
-    val classpath = resolveDependencies(config).getOrElse { return Err(it) }
+    val classpath = resolveDependencies(config).getOrElse { return Err(it) }.classpath
     val pluginJarPathsByAlias = resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse { eprintln("error: ${it.message}"); return Err(it.exitCode) }
     val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
     val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }

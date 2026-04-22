@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. Manifest emit pipeline
-- [ ] 1.1 `JvmResolutionOutcome` data class 導入と `resolveDependencies` の戻り値型移行
+- [x] 1.1 `JvmResolutionOutcome` data class 導入と `resolveDependencies` の戻り値型移行
   - `resolveDependencies` の戻り値を `Result<String?, Int>` から `Result<JvmResolutionOutcome, Int>` に変更し、`classpath` と `resolvedJars` を同時に保持する。
   - 既存 callers (`BuildCommands.kt` の JVM 経路および関連する test harness) を `.classpath` 参照に追従させる。`resolveNativeDependencies` は変更しない。
   - `resolveDependencies` のユニットテストを JvmResolutionOutcome 形で更新し、既存 callers がコンパイル可能な状態でテストスイートが全緑。

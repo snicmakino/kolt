@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
+import kolt.build.ResolvedJar
 import kolt.build.generateKlsClasspath
 import kolt.build.generateWorkspaceJson
 import kolt.build.mergeAllDeps
@@ -16,6 +17,15 @@ private const val WORKSPACE_JSON = "workspace.json"
 private const val KLS_CLASSPATH = "kls-classpath"
 
 internal fun createResolverDeps(): ResolverDeps = defaultResolverDeps()
+
+// Carries both the joined classpath string (null = no deps, existing
+// semantics) and the underlying resolved jar list, so the JVM kind=app tail
+// in BuildCommands can emit the runtime classpath manifest (ADR 0027 §1)
+// without re-walking the resolver graph.
+internal data class JvmResolutionOutcome(
+    val classpath: String?,
+    val resolvedJars: List<ResolvedJar>
+)
 
 internal data class OverlappingDep(
     val groupArtifact: String,
@@ -33,7 +43,7 @@ internal fun findOverlappingDependencies(
         .map { OverlappingDep(it, mainDeps[it], testDeps[it]) }
 }
 
-internal fun resolveDependencies(config: KoltConfig): Result<String?, Int> {
+internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcome, Int> {
     for (dep in findOverlappingDependencies(config.dependencies, config.testDependencies)) {
         eprintln("warning: '${dep.groupArtifact}' is in both [dependencies] (${dep.mainVersion}) and [test-dependencies] (${dep.testVersion}); using ${dep.mainVersion}")
     }
@@ -43,7 +53,7 @@ internal fun resolveDependencies(config: KoltConfig): Result<String?, Int> {
         if (fileExists(LOCK_FILE)) {
             deleteFile(LOCK_FILE)
         }
-        return Ok(null)
+        return Ok(JvmResolutionOutcome(classpath = null, resolvedJars = emptyList()))
     }
 
     val resolveConfig = config.copy(dependencies = allDeps)
@@ -88,8 +98,13 @@ internal fun resolveDependencies(config: KoltConfig): Result<String?, Int> {
         writeWorkspaceFiles(config, resolveResult.deps)
     }
 
-    val jarPaths = resolveResult.deps.map { it.cachePath }
-    return Ok(buildClasspath(jarPaths).ifEmpty { null })
+    val resolvedJars = resolveResult.deps.map { dep ->
+        ResolvedJar(cachePath = dep.cachePath, groupArtifactVersion = "${dep.groupArtifact}:${dep.version}")
+    }
+    return Ok(JvmResolutionOutcome(
+        classpath = buildClasspath(resolvedJars.map { it.cachePath }).ifEmpty { null },
+        resolvedJars = resolvedJars
+    ))
 }
 
 internal fun resolveNativeDependencies(config: KoltConfig, paths: KoltPaths): Result<List<String>, Int> {

@@ -14,6 +14,14 @@ internal const val NATIVE_IC_CACHE_DIR = "$BUILD_DIR/.ic-cache"
 
 internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
 
+// A resolved JVM dependency jar, kept as a pair of (a) absolute cache path and
+// (b) full GAV coordinate for the tiebreak rule in ADR 0027 §1 ("alphabetical
+// by file name, tiebreak by group:artifact:version").
+internal data class ResolvedJar(
+    val cachePath: String,
+    val groupArtifactVersion: String
+)
+
 internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.kexe"
 
 internal fun outputNativeTestKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-test.kexe"
