@@ -19,10 +19,10 @@ date: 2026-04-22
   this ADR (§3).
 - Assemble tarballs with `scripts/assemble-dist.sh`; install with a
   published `install.sh`. Both land with the first release (§4).
-- Self-host of the daemons reduces to two kolt features: JVM
-  `kind = "app"` emitting a runtime classpath manifest, and a
-  multi-module `kolt.toml` schema. Fat-jar support is **not** on the
-  path to self-host (§5).
+- Self-host reduces to one kolt feature — JVM `kind = "app"` emitting
+  a runtime classpath manifest — plus an `assemble-dist.sh` stitcher
+  that invokes three independent kolt builds. Multi-module `kolt.toml`
+  and fat-jar support are **not** on the path to self-host (§5).
 - Bundle daemon jars inside the tarball rather than auto-provisioning
   them; separate provisioning would force a `protocolVersion`
   handshake into the wire protocol (§6).
@@ -206,13 +206,27 @@ explicit `dependsOn`. Moving to two repositories remains deferred
 Two scripts, both outside kolt's build graph. They are small in
 spirit but not trivial in scope:
 
-- `scripts/assemble-dist.sh` **consumes** pre-built Gradle outputs;
-  it does not invoke Gradle itself (CI runs `./gradlew build` first).
-  Inputs: native kexe path, each daemon's thin class jar, and each
-  daemon's resolved `runtimeClasspath` as a text manifest emitted by
-  a small Gradle task. Outputs: the tarball in §1. Post-self-host
-  the input manifests come from kolt's lockfile rather than Gradle,
-  with no change to the tarball shape.
+- `scripts/assemble-dist.sh` is a **stitcher**: it invokes the three
+  project builds and packs the resulting outputs into the §1 tarball.
+  - **Pre-self-host**: runs `./gradlew build` once at the repo root,
+    which rebuilds all three via `includeBuild` (§3). Reads the native
+    kexe, each daemon's thin jar, and each daemon's runtime classpath
+    manifest (the last emitted by a small Gradle task per daemon).
+  - **Post-self-host**: runs `kolt build` in each of the three project
+    directories (`./`, `./kolt-compiler-daemon/`, `./kolt-native-daemon/`
+    — hard-coded in the script; this is repo-internal, not a general
+    tool). Reads the same artifact types from each project's own
+    `build/` directory.
+  - **Error handling**: `set -e`; fail-fast if any build fails.
+  - **Native vs JVM outputs**: the native project emits only the
+    kexe (no runtime classpath manifest — §5 scopes the manifest to
+    JVM `kind = "app"`). Each daemon emits both the thin jar and the
+    manifest. The tarball shape (§1) is identical across the
+    transition.
+
+  Owns cross-project assembly so each `kolt.toml` (or
+  `build.gradle.kts`) stays fully standalone — no workspace schema
+  in `kolt.toml` itself is required (§5).
 - `install.sh` detects platform (`uname -s`/`uname -m` whitelist;
   unsupported host fails loudly), downloads the matching tarball
   from the latest GitHub Release, extracts to
@@ -229,28 +243,28 @@ Neither script exists today. Both land with the first real release.
 
 ### §5 Daemon self-host requirements
 
-Under classpath launch, self-hosting the daemons requires two kolt
-features, both with independent justifications outside the daemon:
+Under classpath launch + independent-build assembly, self-hosting
+reduces to a single kolt feature:
 
 1. **JVM `kind = "app"` build path with a runtime classpath manifest.**
    ADR 0025 pinned `kind = "lib"` on JVM as a thin class jar; the app
-   form is the same jar plus a declared runtime classpath. kolt
-   already resolves the classpath during dependency resolution
-   (`DependencyResolution.kt` builds the list fed into
-   `--compiler-jars` today), so the new work is emitting it into a
+   form is the same jar plus a declared runtime classpath.
+   `DependencyResolution.kt` already builds the list fed into
+   `--compiler-jars` today, so the new work is emitting it into a
    consumable manifest. Schema — lockfile key vs separate file,
    exact shape — is deferred to a follow-up ADR; §4's
    `assemble-dist.sh` reads whatever that ADR pins.
-2. **Multi-module `kolt.toml`.** The repo layout is a top-level
-   native project plus two JVM app subprojects. kolt.toml today is
-   strictly single-project. The needed schema covers workspace root
-   discovery, per-module configs, cross-module dependency declaration,
-   and a shared lockfile — **comparable in scope to #30 / ADR 0025**,
-   not a small extension. Any monorepo user-facing project needs the
-   same feature; the daemon just pulls its timeline forward.
 
-Fat-jar packaging is **not** on this list. Issue #97 will be
-rewritten to remove it.
+The daemons have **no source-level dependency** on `kolt.kexe` or on
+each other — communication is IPC only (ADR 0016, ADR 0024). Each
+project's `kolt.toml` is therefore fully standalone, and
+`assemble-dist.sh` (§4) handles cross-project assembly. No workspace
+schema in `kolt.toml` itself is needed to reach self-host.
+
+Multi-module `kolt.toml` (#4) stays on the roadmap as a DX feature
+for user-facing monorepo projects but is **not** on the path to
+self-host. Fat-jar packaging is also not on this list. Issue #97
+will be updated to reflect both removals.
 
 ### §6 Bundle vs auto-provision
 
@@ -280,6 +294,10 @@ pipeline but does **not** re-introduce fat-jar packaging.
 - Daemon runtime classpath is described by kolt's own lockfile once
   self-host lands. Protocol-version coupling stays at the native-binary
   level; the tarball remains the only release-engineering pipeline.
+- The three projects in this repo have no source-level dependency on
+  each other (§5), so Option E's retreat path (two repos) stays as
+  cheap as a `git subtree split`; no untangling of a workspace schema
+  is ever needed.
 
 **Negative**
 
@@ -289,9 +307,6 @@ pipeline but does **not** re-introduce fat-jar packaging.
 - A kolt install is multi-file on disk (`bin/kolt` plus a
   `libexec/` tree). Users expecting a Go-style single-file binary
   will be mildly surprised; the tarball README covers this.
-- Multi-module `kolt.toml` becomes the critical path for daemon
-  self-host. It was on the roadmap anyway for monorepo projects,
-  but the daemon pulls its timeline forward.
 - `./gradlew build` still relies on an explicit `dependsOn` wiring
   to rebuild the `includeBuild`-included daemons; `unit-tests.yml`'s
   jar-existence assertion catches regressions (from #99 review).
@@ -398,8 +413,11 @@ preserved. Trigger conditions that would force this:
 ## Related
 
 - #14 — parent issue for compiler-daemon work.
-- #97 — self-host gap; §5 above redefines its scope (fat-jar
-  removed, multi-module + JVM app target remain).
+- #97 — self-host gap; §5 above redefines its scope down to a
+  single kolt feature (JVM `kind = "app"` runtime classpath
+  manifest). Fat-jar and multi-module are both off the path.
+- #4 — Multi-module project support. On the roadmap as a user-facing
+  DX feature (monorepo projects); **not** a self-host blocker.
 - #3 — incremental compilation (Phase B); its cross-cutting
   protocol changes benefit from the monorepo layout (§3).
 - #15 — `kolt watch` (Phase C); same rationale as #3.
