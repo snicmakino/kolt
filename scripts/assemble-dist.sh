@@ -4,13 +4,15 @@
 #
 # Runs `kolt build` serially in three projects (root, kolt-jvm-compiler-daemon,
 # kolt-native-compiler-daemon), fetches the `kotlin-build-tools-impl`
-# classpath from Maven Central with sha256 pins, and prepares
-# `dist/<tarball-root>/`. Writing the final tarball layout (Task 3.3) is
-# handled by a subsequent task.
+# classpath from Maven Central with sha256 pins, populates the ADR 0018 §1
+# tarball layout under `dist/kolt-<version>-linux-x64/`, and packs it into
+# `dist/kolt-<version>-linux-x64.tar.gz`.
 #
-# Fail-fast: any non-zero build or sha mismatch aborts the remaining steps.
+# Fail-fast: any non-zero build, sha mismatch, or copy failure aborts the
+# remaining steps (`set -euo pipefail`).
 #
-# References: ADR 0018 §1, §4; ADR 0019 §3; daemon-self-host design §Flow 2.
+# References: ADR 0018 §1, §2, §4; ADR 0019 §3; ADR 0027 §1;
+# daemon-self-host design §Flow 2.
 set -euo pipefail
 
 # kotlin-build-tools-impl classpath pin.
@@ -123,6 +125,130 @@ done
 # touch the network.
 fetch_bta_impl
 
-# Task 3.3 will populate $DIST_ROOT/{bin,libexec} and emit the tarball.
+# Daemon metadata: name -> main class FQN. The two daemons share the same
+# JVM kind=app build shape (thin jar + runtime classpath manifest), and
+# differ only in their main class (per `kolt.toml` [build].main) and their
+# resolved deps. Main class FQNs follow Kotlin's file-class convention
+# (`kolt.daemon.main` in kolt.toml -> `kolt.daemon.MainKt` on the JVM).
+DAEMONS=(
+  "kolt-jvm-compiler-daemon:kolt.daemon.MainKt"
+  "kolt-native-compiler-daemon:kolt.nativedaemon.MainKt"
+)
 
-echo "assemble-dist: skeleton ready at $DIST_ROOT"
+# `@KOLT_LIBEXEC@` is a placeholder that `install.sh` (or the CI companion in
+# Task 4.3) rewrites to the absolute `libexec/` path at install time. Writing
+# a placeholder rather than an absolute path keeps the tarball install-location
+# agnostic (ADR 0018 §1 note that the tarball is the unit of relocation);
+# emitting absolute paths here would hard-code `~/.local/share/kolt/<version>/`
+# or equivalent into the release artifact. Post-install substitution is a
+# `sed -i 's|@KOLT_LIBEXEC@|<abs libexec>|g'` pass over each argfile.
+LIBEXEC_PLACEHOLDER="@KOLT_LIBEXEC@"
+
+# copy_manifest_deps — copy every jar listed in the given runtime classpath
+# manifest into `<target_dir>/` preserving its file name. Manifest entries
+# are absolute paths (one per line, ADR 0027 §1); duplicates are flagged as
+# a bug in the resolver rather than silently overwriting.
+copy_manifest_deps() {
+  local manifest="$1"
+  local target_dir="$2"
+  mkdir -p "$target_dir"
+  local jar base
+  while IFS= read -r jar; do
+    [[ -z "$jar" ]] && continue
+    base="$(basename "$jar")"
+    if [[ -e "$target_dir/$base" ]]; then
+      echo "assemble-dist: duplicate dep file name '$base' in $manifest" >&2
+      exit 1
+    fi
+    cp "$jar" "$target_dir/$base"
+  done < "$manifest"
+}
+
+# write_argfile — emit `<libexec>/classpath/<daemon>.argfile` in the
+# `java @argfile` format (ADR 0018 §2): one switch per line, absolute paths,
+# main class on the final line. Classpath ordering is: self jar, then
+# manifest-order deps (alphabetical by file name, ADR 0027 §1), then the
+# kolt-bta-impl jars (alphabetical by file name) via `@KOLT_LIBEXEC@`
+# placeholders resolved at install time.
+write_argfile() {
+  local daemon="$1"
+  local main_class="$2"
+  local manifest="$3"
+  local argfile="$DIST_ROOT/libexec/classpath/${daemon}.argfile"
+
+  local cp_entries=()
+  cp_entries+=("${LIBEXEC_PLACEHOLDER}/${daemon}/${daemon}.jar")
+  local jar base
+  while IFS= read -r jar; do
+    [[ -z "$jar" ]] && continue
+    base="$(basename "$jar")"
+    cp_entries+=("${LIBEXEC_PLACEHOLDER}/${daemon}/deps/${base}")
+  done < "$manifest"
+  # kolt-bta-impl jars in alphabetical order for determinism.
+  local impl_jar
+  while IFS= read -r impl_jar; do
+    base="$(basename "$impl_jar")"
+    cp_entries+=("${LIBEXEC_PLACEHOLDER}/kolt-bta-impl/${base}")
+  done < <(find "$DIST_ROOT/libexec/kolt-bta-impl" -maxdepth 1 -name '*.jar' | sort)
+
+  local cpath
+  # `:` separator is hard-coded; linuxX64 is the only supported target
+  # today. Windows would need `;` and a per-platform branch here.
+  local IFS=':'
+  cpath="${cp_entries[*]}"
+  unset IFS
+
+  {
+    printf '%s\n' '-cp'
+    printf '%s\n' "$cpath"
+    printf '%s\n' "$main_class"
+  } > "$argfile"
+}
+
+# Populate the tarball layout (Task 3.3). Subdirectories are created just
+# in time so a partial rerun after a failure leaves the previous tree in
+# place for debugging (`rm -rf dist` at the top of the script provides the
+# clean-slate idempotency).
+mkdir -p "$DIST_ROOT/bin" "$DIST_ROOT/libexec/classpath"
+
+# `bin/kolt` is the kolt.kexe produced by the root `kolt build` above
+# (self-hosted). `KOLT` (used to drive the three builds) may point at the
+# Gradle-built binary; `./build/kolt.kexe` is always the self-host output.
+ROOT_KEXE="$ROOT_DIR/build/kolt.kexe"
+if [[ ! -x "$ROOT_KEXE" ]]; then
+  echo "assemble-dist: root kolt.kexe not found at $ROOT_KEXE" >&2
+  exit 1
+fi
+cp "$ROOT_KEXE" "$DIST_ROOT/bin/kolt"
+chmod +x "$DIST_ROOT/bin/kolt"
+
+for entry in "${DAEMONS[@]}"; do
+  IFS=':' read -r daemon main_class <<< "$entry"
+  daemon_jar="$ROOT_DIR/$daemon/build/${daemon}.jar"
+  manifest="$ROOT_DIR/$daemon/build/${daemon}-runtime.classpath"
+  if [[ ! -f "$daemon_jar" ]]; then
+    echo "assemble-dist: missing daemon jar: $daemon_jar" >&2
+    exit 1
+  fi
+  if [[ ! -f "$manifest" ]]; then
+    echo "assemble-dist: missing runtime classpath manifest: $manifest" >&2
+    exit 1
+  fi
+  mkdir -p "$DIST_ROOT/libexec/$daemon"
+  cp "$daemon_jar" "$DIST_ROOT/libexec/$daemon/${daemon}.jar"
+  copy_manifest_deps "$manifest" "$DIST_ROOT/libexec/$daemon/deps"
+  write_argfile "$daemon" "$main_class" "$manifest"
+  echo "assemble-dist: populated libexec/$daemon"
+done
+
+# `VERSION` is the bare semver (no newline besides the trailing one `printf`
+# emits; matches ADR 0018 §1 "bare semver, matches git tag").
+printf '%s\n' "$VERSION" > "$DIST_ROOT/VERSION"
+
+# Pack the tarball. `-C dist` cd's into dist/ first so the archive's top
+# level is the versioned directory name (ADR 0018 §1: "extracts to a
+# versioned top-level directory").
+TARBALL="dist/kolt-${VERSION}-linux-x64.tar.gz"
+tar czf "$TARBALL" -C dist "kolt-${VERSION}-linux-x64"
+
+echo "assemble-dist: wrote $TARBALL"

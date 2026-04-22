@@ -76,7 +76,7 @@
   - _Requirements: 3.2, 3.3_
   - _Boundary: scripts/assemble-dist.sh_
 
-- [ ] 3.3 Tarball layout 組立て、argfile 生成、tar czf パッケージング
+- [x] 3.3 Tarball layout 組立て、argfile 生成、tar czf パッケージング
   - `dist/kolt-<version>-linux-x64/` 配下に `bin/` と `libexec/<daemon>/`、`libexec/<daemon>/deps/`、`libexec/classpath/` を作成。
   - ルート `kolt.kexe` を `bin/kolt` にコピー (ADR 0018 §1 naming)。
   - 各 daemon について、self jar を `libexec/<daemon>/<daemon>.jar`、manifest 記載の jar 列を `libexec/<daemon>/deps/` にファイル名保持でコピー。
