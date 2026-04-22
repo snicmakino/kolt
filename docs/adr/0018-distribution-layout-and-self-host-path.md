@@ -251,9 +251,10 @@ reduces to a single kolt feature:
    form is the same jar plus a declared runtime classpath.
    `DependencyResolution.kt` already builds the list fed into
    `--compiler-jars` today, so the new work is emitting it into a
-   consumable manifest. Schema — lockfile key vs separate file,
-   exact shape — is deferred to a follow-up ADR; §4's
-   `assemble-dist.sh` reads whatever that ADR pins.
+   consumable manifest. Schema pinned by ADR 0027:
+   `build/<name>-runtime.classpath`, plain text, one absolute jar
+   path per line, dependencies only, alphabetical by file name.
+   §4's `assemble-dist.sh` reads that file.
 
 The daemons have **no source-level dependency** on `kolt.kexe` or on
 each other — communication is IPC only (ADR 0016, ADR 0024). Each
@@ -433,6 +434,8 @@ preserved. Trigger conditions that would force this:
   layout).
 - ADR 0025 — library artifact layout (the JVM `kind = "lib"` this
   ADR's §2 consumes directly).
+- ADR 0027 — runtime classpath manifest (pins the §5 schema this
+  ADR deferred).
 - `self-host-smoke.yml` — existing CI workflow for native-side
   self-host; a companion will be needed once daemon self-host
   lands.
