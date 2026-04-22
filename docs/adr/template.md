@@ -14,6 +14,23 @@ date: YYYY-MM-DD
   - Drop any section below that doesn't earn its keep. Keep `## Summary` and `## Decision Outcome`.
   - For single-option ADRs (policy / rollout), collapse `## Considered Options` and
     `## Pros and Cons of the Options` into a tail `## Alternatives considered` section.
+
+  Review checklist (run before moving `status` from `proposed` to `accepted`):
+  - **No redundancy.** Every sentence earns its place. Cut restatement, rhetorical hedging,
+    paraphrased policy references, and "it's worth noting that" phrasing. Imperative voice,
+    one load-bearing point per sentence. If Context re-states Summary, or Alternatives
+    re-argue what Decision already established, point one at the other instead of duplicating.
+  - **Future-decision sufficiency.** List the next foreseeable cases that will touch this
+    decision (the third daemon, the fourth target, the next schema bump) and verify each
+    is answerable from this ADR alone. If a contributor would have to ask or read git
+    history to proceed, the ADR is under-specified — close the gap before accepting.
+    Watch for open vocabularies (e.g. `<role>`) without a rule for admitting new members.
+  - **No ambiguity.** Read each sentence and ask whether a new reader could take it two
+    ways. Flag undefined terms, dangling cross-references ("see §3" with no §3), shorthand
+    used without expansion, and set-membership notation (`∈`) used with open-ended sets.
+  - **Cross-ADR consistency.** Claims about "prior ADRs are edited / not edited" must match
+    what the landing PR actually does. If this ADR supersedes, renames, or narrows an
+    earlier one, say so explicitly in both places (or in `Related`).
 -->
 
 ## Summary
