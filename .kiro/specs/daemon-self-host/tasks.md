@@ -101,7 +101,7 @@
   - _Requirements: 4.6, 5.2_
   - _Boundary: .github/workflows/self-host-smoke.yml (native job)_
 
-- [ ] 4.3 Companion job (`self-host-post`) を追加し self-host path 全体を検証
+- [x] 4.3 Companion job (`self-host-post`) を追加し self-host path 全体を検証
   - `.github/workflows/self-host-smoke.yml` に `self-host-post` job を追加 (`needs: self-host`、ubuntu-latest)。
   - Steps: checkout → `actions/download-artifact@v4` で `kolt-kexe` 取得 → `chmod +x` → ルート + 2 daemon で `kolt build` 順次実行 → `scripts/assemble-dist.sh` を実行 → 生成 tarball を `/tmp/kolt-install/` 配下に展開 → fixture project (4.1) の dir で展開後の `bin/kolt build` を実行。
   - いずれの step も `set -euo pipefail` 相当で fail-fast。

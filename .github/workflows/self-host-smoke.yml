@@ -93,3 +93,109 @@ jobs:
           path: ./build/bin/linuxX64/debugExecutable/kolt.kexe
           if-no-files-found: error
           retention-days: 1
+
+  # Companion job — exercises the full self-host path end to end on top of the
+  # kolt.kexe that the `self-host` job just uploaded: 3 × `kolt build` + the
+  # assemble-dist stitcher + a tarball install + a fixture smoke build via the
+  # installed `bin/kolt`. A failure in any step fails the job (and therefore
+  # the workflow) by GHA default + `set -euo pipefail` in each shell block.
+  self-host-post:
+    name: Self-host post-migration path
+    needs: self-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # libcurl headers are required by the libcurl cinterop binding; kolt.kexe
+      # links against the runner's libcurl at load time.
+      - name: Install libcurl dev headers
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+
+      # kolt downloads its own kotlinc / konanc / JDK into ~/.kolt on first
+      # run. Share the cache key with the native self-host job so warm runs
+      # skip the ~minute of first-boot toolchain fetches.
+      - name: Cache kolt toolchains
+        uses: actions/cache@v4
+        with:
+          path: ~/.kolt
+          key: kolt-${{ runner.os }}-${{ hashFiles('kolt.toml') }}
+          restore-keys: |
+            kolt-${{ runner.os }}-
+
+      - name: Download kolt.kexe artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kolt-kexe
+          path: ./bootstrap-kexe
+
+      - name: Prepare kolt.kexe
+        run: |
+          set -euo pipefail
+          chmod +x ./bootstrap-kexe/kolt.kexe
+          ./bootstrap-kexe/kolt.kexe --version
+
+      - name: kolt build at root
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+
+      - name: kolt build at kolt-jvm-compiler-daemon
+        run: |
+          set -euo pipefail
+          cd kolt-jvm-compiler-daemon
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+
+      - name: kolt build at kolt-native-compiler-daemon
+        run: |
+          set -euo pipefail
+          cd kolt-native-compiler-daemon
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+
+      - name: Assemble tarball
+        run: |
+          set -euo pipefail
+          KOLT="$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" ./scripts/assemble-dist.sh
+
+      - name: Extract tarball to install dir
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kolt-install
+          tar xzf dist/kolt-*-linux-x64.tar.gz -C /tmp/kolt-install
+          ls -la /tmp/kolt-install/
+
+      # Resolve the `@KOLT_LIBEXEC@` placeholder the stitcher wrote into each
+      # argfile (ADR 0018 §1: tarball is install-location agnostic). In a real
+      # install this is `install.sh`'s job; here we inline the equivalent
+      # `sed -i` pass so the argfiles are directly usable from the install dir.
+      - name: Substitute KOLT_LIBEXEC placeholder in argfiles
+        run: |
+          set -euo pipefail
+          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
+          LIBEXEC="${INSTALL_DIR}/libexec"
+          for argfile in "${LIBEXEC}/classpath/"*.argfile; do
+            sed -i "s|@KOLT_LIBEXEC@|${LIBEXEC}|g" "${argfile}"
+          done
+
+      # Fixture smoke (Task 4.1): drive `<install>/bin/kolt build` on a
+      # minimal JVM app. Success here is the end-to-end signal that the 3 ×
+      # kolt build → assemble-dist → tarball → extract chain produced a
+      # working install.
+      - name: Smoke-build fixture with installed kolt
+        run: |
+          set -euo pipefail
+          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
+          cd spike/daemon-self-host-smoke
+          rm -rf build
+          "${INSTALL_DIR}/bin/kolt" build
+          test -f build/smoke.jar
