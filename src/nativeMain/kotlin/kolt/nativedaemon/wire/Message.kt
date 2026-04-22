@@ -3,7 +3,7 @@ package kolt.nativedaemon.wire
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// Native-side mirror of kolt-native-daemon's kolt.nativedaemon.protocol.Message.
+// Native-side mirror of kolt-native-compiler-daemon's kolt.nativedaemon.protocol.Message.
 // Field names and @SerialName values are load-bearing wire contract (ADR 0024
 // §4) — drift breaks the daemon. Kept independent from `kolt.daemon.wire.Message`
 // (the JVM daemon's mirror) per ADR 0024 §1: two daemons, two protocols, one

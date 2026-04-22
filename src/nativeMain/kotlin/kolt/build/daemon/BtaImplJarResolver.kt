@@ -49,7 +49,7 @@ fun resolveBtaImplJarsPure(
         var repoRoot: String? = selfExePath
         repeat(5) { repoRoot = repoRoot?.let { parentDir(it) } }
         if (repoRoot != null) {
-            val devDir = "$repoRoot/kolt-compiler-daemon/build/bta-impl-jars"
+            val devDir = "$repoRoot/kolt-jvm-compiler-daemon/build/bta-impl-jars"
             lastProbed = devDir
             val jars = listJarFiles(devDir)
             if (!jars.isNullOrEmpty()) {

@@ -9,8 +9,8 @@ import kotlin.test.assertEquals
 
 // Pins the `stopProjectDaemons` enumeration shape. Each version directory
 // under `<daemonBaseDir>/<projectHash>/` can contain both a JVM daemon
-// socket (`daemon.sock` / `daemon-<fp>.sock`, ADR 0016 + #138 plugin
-// fingerprint) AND a native daemon socket (`native-daemon.sock`,
+// socket (`jvm-compiler-daemon.sock` / `daemon-<fp>.sock`, ADR 0016 + #138 plugin
+// fingerprint) AND a native daemon socket (`native-compiler-daemon.sock`,
 // ADR 0024 §3). `daemon stop` must signal all of them.
 class DaemonStopEnumerationTest {
 
@@ -32,7 +32,7 @@ class DaemonStopEnumerationTest {
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("daemon.sock", "native-daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("jvm-compiler-daemon.sock", "native-compiler-daemon.sock")),
         )
         val jvmSockets = mutableListOf<String>()
         val nativeSockets = mutableListOf<String>()
@@ -47,20 +47,20 @@ class DaemonStopEnumerationTest {
         )
 
         assertEquals(2, stopped, "both sockets should be counted")
-        assertEquals(listOf("$projectDir/2.3.20/daemon.sock"), jvmSockets)
-        assertEquals(listOf("$projectDir/2.3.20/native-daemon.sock"), nativeSockets)
+        assertEquals(listOf("$projectDir/2.3.20/jvm-compiler-daemon.sock"), jvmSockets)
+        assertEquals(listOf("$projectDir/2.3.20/native-compiler-daemon.sock"), nativeSockets)
     }
 
     @Test
     fun enumeratesFingerprintedJvmSocket() {
         // #138 plugin fingerprint: `applyPluginsFingerprintToFile` rewrites
-        // `daemon.sock` → `daemon-noplugins.sock` (no plugins) or
-        // `daemon-<8hex>.sock`. Before #181 these were invisible to `stop`.
+        // `jvm-compiler-daemon.sock` → `jvm-compiler-daemon-noplugins.sock` (no plugins) or
+        // `jvm-compiler-daemon-<8hex>.sock`. Before #181 these were invisible to `stop`.
         val projectDir = "/home/u/.kolt/daemon/hash"
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("daemon-noplugins.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("jvm-compiler-daemon-noplugins.sock")),
         )
         val jvmSockets = mutableListOf<String>()
 
@@ -74,7 +74,7 @@ class DaemonStopEnumerationTest {
         )
 
         assertEquals(1, stopped)
-        assertEquals(listOf("$projectDir/2.3.20/daemon-noplugins.sock"), jvmSockets)
+        assertEquals(listOf("$projectDir/2.3.20/jvm-compiler-daemon-noplugins.sock"), jvmSockets)
     }
 
     @Test
@@ -88,8 +88,8 @@ class DaemonStopEnumerationTest {
             subdirs = mapOf(projectDir to listOf("2.3.20")),
             files = mapOf(
                 "$projectDir/2.3.20" to listOf(
-                    "daemon-abcd1234.sock",
-                    "daemon-noplugins.sock",
+                    "jvm-compiler-daemon-abcd1234.sock",
+                    "jvm-compiler-daemon-noplugins.sock",
                 ),
             ),
         )
@@ -107,8 +107,8 @@ class DaemonStopEnumerationTest {
         assertEquals(2, stopped)
         assertEquals(
             listOf(
-                "$projectDir/2.3.20/daemon-abcd1234.sock",
-                "$projectDir/2.3.20/daemon-noplugins.sock",
+                "$projectDir/2.3.20/jvm-compiler-daemon-abcd1234.sock",
+                "$projectDir/2.3.20/jvm-compiler-daemon-noplugins.sock",
             ),
             jvmSockets,
         )
@@ -116,14 +116,14 @@ class DaemonStopEnumerationTest {
 
     @Test
     fun nativeDaemonSockIsNotMatchedByJvmEnumeration() {
-        // `native-daemon.sock` starts with `native-`, not `daemon-`, so the
+        // `native-compiler-daemon.sock` starts with `native-`, not `daemon-`, so the
         // JVM fingerprint pattern must not pick it up. A native-only
         // version dir counts as one native shutdown, zero JVM.
         val projectDir = "/home/u/.kolt/daemon/hash"
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("native-daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("native-compiler-daemon.sock")),
         )
         val nativeSockets = mutableListOf<String>()
 
@@ -132,12 +132,12 @@ class DaemonStopEnumerationTest {
             fileExists = fs::exists,
             listSubdirectories = fs::list,
             listFiles = fs::listFiles,
-            sendJvmShutdown = { error("must not send — `native-daemon.sock` is not a JVM daemon") },
+            sendJvmShutdown = { error("must not send — `native-compiler-daemon.sock` is not a JVM daemon") },
             sendNativeShutdown = { nativeSockets += it; true },
         )
 
         assertEquals(1, stopped)
-        assertEquals(listOf("$projectDir/2.3.20/native-daemon.sock"), nativeSockets)
+        assertEquals(listOf("$projectDir/2.3.20/native-compiler-daemon.sock"), nativeSockets)
     }
 
     @Test
@@ -146,7 +146,7 @@ class DaemonStopEnumerationTest {
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("jvm-compiler-daemon.sock")),
         )
 
         val stopped = stopProjectDaemons(
@@ -167,7 +167,7 @@ class DaemonStopEnumerationTest {
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("native-daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("native-compiler-daemon.sock")),
         )
 
         val stopped = stopProjectDaemons(
@@ -189,8 +189,8 @@ class DaemonStopEnumerationTest {
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20", "2.4.0")),
             files = mapOf(
-                "$projectDir/2.3.20" to listOf("daemon.sock", "native-daemon.sock"),
-                "$projectDir/2.4.0" to listOf("daemon-noplugins.sock"),
+                "$projectDir/2.3.20" to listOf("jvm-compiler-daemon.sock", "native-compiler-daemon.sock"),
+                "$projectDir/2.4.0" to listOf("jvm-compiler-daemon-noplugins.sock"),
             ),
         )
 
@@ -212,7 +212,7 @@ class DaemonStopEnumerationTest {
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("daemon.sock", "native-daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("jvm-compiler-daemon.sock", "native-compiler-daemon.sock")),
         )
 
         val stopped = stopProjectDaemons(
@@ -233,7 +233,7 @@ class DaemonStopEnumerationTest {
         val fs = FakeFs(
             existing = setOf(projectDir),
             subdirs = mapOf(projectDir to listOf("2.3.20")),
-            files = mapOf("$projectDir/2.3.20" to listOf("daemon.sock", "native-daemon.sock")),
+            files = mapOf("$projectDir/2.3.20" to listOf("jvm-compiler-daemon.sock", "native-compiler-daemon.sock")),
         )
         val jvmSockets = mutableListOf<String>()
         val nativeSockets = mutableListOf<String>()
@@ -248,24 +248,24 @@ class DaemonStopEnumerationTest {
         )
 
         assertEquals(1, stopped)
-        assertEquals(listOf("$projectDir/2.3.20/daemon.sock"), jvmSockets)
-        assertEquals(listOf("$projectDir/2.3.20/native-daemon.sock"), nativeSockets)
+        assertEquals(listOf("$projectDir/2.3.20/jvm-compiler-daemon.sock"), jvmSockets)
+        assertEquals(listOf("$projectDir/2.3.20/native-compiler-daemon.sock"), nativeSockets)
     }
 
     @Test
     fun isJvmDaemonSocketPredicateShape() {
         // `applyPluginsFingerprintToFile` never emits an empty fingerprint
         // (`pluginsFingerprint` returns "noplugins" or 8 hex chars), so
-        // `daemon-.sock` is not a real on-disk name — but the predicate
+        // `jvm-compiler-daemon-.sock` is not a real on-disk name — but the predicate
         // stays strict to survive a future refactor of the fingerprint
         // source.
-        assertEquals(true, isJvmDaemonSocket("daemon.sock"))
-        assertEquals(true, isJvmDaemonSocket("daemon-noplugins.sock"))
-        assertEquals(true, isJvmDaemonSocket("daemon-abcd1234.sock"))
-        assertEquals(false, isJvmDaemonSocket("daemon-.sock"))
-        assertEquals(false, isJvmDaemonSocket("daemon.log"))
-        assertEquals(false, isJvmDaemonSocket("daemon-noplugins.log"))
-        assertEquals(false, isJvmDaemonSocket("native-daemon.sock"))
+        assertEquals(true, isJvmDaemonSocket("jvm-compiler-daemon.sock"))
+        assertEquals(true, isJvmDaemonSocket("jvm-compiler-daemon-noplugins.sock"))
+        assertEquals(true, isJvmDaemonSocket("jvm-compiler-daemon-abcd1234.sock"))
+        assertEquals(false, isJvmDaemonSocket("jvm-compiler-daemon-.sock"))
+        assertEquals(false, isJvmDaemonSocket("jvm-compiler-daemon.log"))
+        assertEquals(false, isJvmDaemonSocket("jvm-compiler-daemon-noplugins.log"))
+        assertEquals(false, isJvmDaemonSocket("native-compiler-daemon.sock"))
         assertEquals(false, isJvmDaemonSocket("Daemon.sock"))
     }
 

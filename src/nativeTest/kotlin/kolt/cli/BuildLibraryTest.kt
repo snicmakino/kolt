@@ -109,7 +109,7 @@ class JvmLibraryInvariantsTest {
     // shape; `doBuild` constructs the same `-jvm-target` + plugin args
     // set via `CompileRequest.extraArgs` (BuildCommands.kt:211-215). No
     // code path in the repo adds `-include-runtime` (grep: 0 matches in
-    // src/ and kolt-compiler-daemon/), so this test locks that invariant.
+    // src/ and kolt-jvm-compiler-daemon/), so this test locks that invariant.
     @Test
     fun libraryJvmCompileCommandDoesNotIncludeRuntime() {
         val base = testConfig(name = "mylib", target = "jvm")

@@ -173,7 +173,7 @@ internal fun formatDaemonPreconditionWarning(err: DaemonPreconditionError): Stri
     is DaemonPreconditionError.BootstrapJdkInstallFailed ->
         "warning: could not install bootstrap JDK at ${err.jdkInstallDir} (${err.cause}) — falling back to subprocess compile"
     DaemonPreconditionError.DaemonJarMissing ->
-        "warning: kolt-compiler-daemon jar not found — falling back to subprocess compile"
+        "warning: kolt-jvm-compiler-daemon jar not found — falling back to subprocess compile"
     is DaemonPreconditionError.CompilerJarsMissing ->
         "warning: no compiler jars found in ${err.kotlincLibDir} — falling back to subprocess compile"
     is DaemonPreconditionError.BtaImplJarsMissing ->

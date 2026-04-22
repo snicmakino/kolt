@@ -87,7 +87,7 @@ class DaemonIntegrationTest {
         val daemonJar = when (val r = resolveDaemonJar()) {
             is DaemonJarResolution.Resolved -> r.path
             DaemonJarResolution.NotFound ->
-                error("KOLT_DAEMON_IT=1 but kolt-compiler-daemon jar not found — run './gradlew :kolt-compiler-daemon:shadowJar' first")
+                error("KOLT_DAEMON_IT=1 but kolt-jvm-compiler-daemon jar not found — run './gradlew :kolt-jvm-compiler-daemon:shadowJar' first")
         }
 
         val libDir = getenv("KOLT_IT_COMPILER_JARS_DIR")?.toKString()
@@ -106,7 +106,7 @@ class DaemonIntegrationTest {
             is BtaImplJarsResolution.NotFound ->
                 error(
                     "KOLT_DAEMON_IT=1 but kotlin-build-tools-impl jars not found at ${res.probedDir} — " +
-                        "run './gradlew :kolt-compiler-daemon:stageBtaImplJars' first, " +
+                        "run './gradlew :kolt-jvm-compiler-daemon:stageBtaImplJars' first, " +
                         "or set $KOLT_BTA_IMPL_JARS_DIR_ENV",
                 )
         }

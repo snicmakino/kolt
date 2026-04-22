@@ -14,7 +14,7 @@ import kolt.resolve.compareVersions
 // Parallel to `kolt.build.daemon.DaemonSetup` but tailored for ADR 0024:
 // no compilerJars list (one jar is passed to the daemon via `--konanc-jar`),
 // no btaImplJars (BTA has no native equivalent per §6), a distinct socket
-// filename (`native-daemon.sock`) co-located under the same project/version
+// filename (`native-compiler-daemon.sock`) co-located under the same project/version
 // directory as the JVM daemon so `daemon stop` enumerates both in one pass.
 internal data class NativeDaemonSetup(
     val javaBin: String,
@@ -142,7 +142,7 @@ internal fun formatNativeDaemonPreconditionWarning(err: NativeDaemonPrecondition
     is NativeDaemonPreconditionError.BootstrapJdkInstallFailed ->
         "warning: could not install bootstrap JDK at ${err.jdkInstallDir} (${err.cause}) — falling back to subprocess compile"
     NativeDaemonPreconditionError.NativeDaemonJarMissing ->
-        "warning: kolt-native-daemon jar not found — falling back to subprocess compile"
+        "warning: kolt-native-compiler-daemon jar not found — falling back to subprocess compile"
     is NativeDaemonPreconditionError.KonancJarMissing ->
         "warning: konanc embeddable jar not found at ${err.path} — falling back to subprocess compile"
     is NativeDaemonPreconditionError.KotlinVersionBelowFloor ->

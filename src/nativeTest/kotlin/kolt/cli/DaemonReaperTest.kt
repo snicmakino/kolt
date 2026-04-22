@@ -39,7 +39,7 @@ class DaemonReaperTest {
         val projectDir = "$base/abc123"
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
-        writeFileAsString("$versionDir/daemon.log", "some log").getOrElse { error("write failed") }
+        writeFileAsString("$versionDir/jvm-compiler-daemon.log", "some log").getOrElse { error("write failed") }
 
         val result = reapStaleDaemons(base)
         assertEquals(1, result.reaped)
@@ -53,8 +53,8 @@ class DaemonReaperTest {
         val projectDir = "$base/def456"
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
-        // A regular file named daemon.sock — connect will fail (not a real socket)
-        writeFileAsString("$versionDir/daemon.sock", "").getOrElse { error("write failed") }
+        // A regular file named jvm-compiler-daemon.sock — connect will fail (not a real socket)
+        writeFileAsString("$versionDir/jvm-compiler-daemon.sock", "").getOrElse { error("write failed") }
 
         val result = reapStaleDaemons(base)
         assertEquals(1, result.reaped)
@@ -70,7 +70,7 @@ class DaemonReaperTest {
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
 
-        val socketPath = "$versionDir/daemon.sock"
+        val socketPath = "$versionDir/jvm-compiler-daemon.sock"
         val listenFd = bindAndListen(socketPath)
         try {
             val result = reapStaleDaemons(base)
@@ -92,12 +92,12 @@ class DaemonReaperTest {
         val staleProjectDir = "$base/stale111"
         val staleVersionDir = "$staleProjectDir/2.3.0"
         ensureDirectoryRecursive(staleVersionDir).getOrElse { error("mkdir failed") }
-        writeFileAsString("$staleVersionDir/daemon.sock", "").getOrElse { error("write failed") }
+        writeFileAsString("$staleVersionDir/jvm-compiler-daemon.sock", "").getOrElse { error("write failed") }
 
         val aliveProjectDir = "$base/alive222"
         val aliveVersionDir = "$aliveProjectDir/2.3.20"
         ensureDirectoryRecursive(aliveVersionDir).getOrElse { error("mkdir failed") }
-        val socketPath = "$aliveVersionDir/daemon.sock"
+        val socketPath = "$aliveVersionDir/jvm-compiler-daemon.sock"
         val listenFd = bindAndListen(socketPath)
         try {
             val result = reapStaleDaemons(base)
@@ -132,8 +132,8 @@ class DaemonReaperTest {
     }
 
     // #181: `createDaemonBackend` fingerprints the socket filename
-    // (`daemon-noplugins.sock` or `daemon-<8hex>.sock`). The reaper probed
-    // only the bare `daemon.sock`, so fingerprinted orphans never got
+    // (`jvm-compiler-daemon-noplugins.sock` or `jvm-compiler-daemon-<8hex>.sock`). The reaper probed
+    // only the bare `jvm-compiler-daemon.sock`, so fingerprinted orphans never got
     // swept. Post-fix, enumeration matches any `daemon*.sock` under a
     // version dir.
     @Test
@@ -142,7 +142,7 @@ class DaemonReaperTest {
         val projectDir = "$base/fp111"
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
-        writeFileAsString("$versionDir/daemon-noplugins.sock", "").getOrElse { error("write failed") }
+        writeFileAsString("$versionDir/jvm-compiler-daemon-noplugins.sock", "").getOrElse { error("write failed") }
 
         val result = reapStaleDaemons(base)
 
@@ -159,7 +159,7 @@ class DaemonReaperTest {
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
 
-        val socketPath = "$versionDir/daemon-abcd1234.sock"
+        val socketPath = "$versionDir/jvm-compiler-daemon-abcd1234.sock"
         val listenFd = bindAndListen(socketPath)
         try {
             val result = reapStaleDaemons(base)
@@ -184,8 +184,8 @@ class DaemonReaperTest {
         val versionDir = "$projectDir/2.3.20"
         ensureDirectoryRecursive(versionDir).getOrElse { error("mkdir failed") }
 
-        writeFileAsString("$versionDir/daemon-noplugins.sock", "").getOrElse { error("write failed") }
-        val liveSocket = "$versionDir/daemon-abcd1234.sock"
+        writeFileAsString("$versionDir/jvm-compiler-daemon-noplugins.sock", "").getOrElse { error("write failed") }
+        val liveSocket = "$versionDir/jvm-compiler-daemon-abcd1234.sock"
         val listenFd = bindAndListen(liveSocket)
         try {
             val result = reapStaleDaemons(base)

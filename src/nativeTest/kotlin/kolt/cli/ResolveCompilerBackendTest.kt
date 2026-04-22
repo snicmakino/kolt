@@ -35,8 +35,8 @@ class ResolveCompilerBackendTest {
         compilerJars = listOf("/fake/kotlinc/lib/a.jar"),
         btaImplJars = listOf("/fake/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
         daemonDir = "/fake/daemon/dir",
-        socketPath = "/fake/daemon/dir/daemon.sock",
-        logPath = "/fake/daemon/dir/daemon.log",
+        socketPath = "/fake/daemon/dir/jvm-compiler-daemon.sock",
+        logPath = "/fake/daemon/dir/jvm-compiler-daemon.log",
     )
 
     private val absProject = "/fake/project"
@@ -142,7 +142,7 @@ class ResolveCompilerBackendTest {
         assertSame(subprocess, backend)
         assertEquals(1, warnings.size)
         assertTrue(
-            warnings.single().contains("kolt-compiler-daemon jar not found"),
+            warnings.single().contains("kolt-jvm-compiler-daemon jar not found"),
             "unexpected warning: ${warnings.single()}",
         )
     }
@@ -296,12 +296,12 @@ class ResolveCompilerBackendTest {
     @Test
     fun applyPluginsFingerprintInsertsBeforeExtension() {
         assertEquals(
-            "/fake/daemon/dir/daemon-abcd1234.sock",
-            applyPluginsFingerprintToFile("/fake/daemon/dir/daemon.sock", "abcd1234"),
+            "/fake/daemon/dir/jvm-compiler-daemon-abcd1234.sock",
+            applyPluginsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.sock", "abcd1234"),
         )
         assertEquals(
-            "/fake/daemon/dir/daemon-abcd1234.log",
-            applyPluginsFingerprintToFile("/fake/daemon/dir/daemon.log", "abcd1234"),
+            "/fake/daemon/dir/jvm-compiler-daemon-abcd1234.log",
+            applyPluginsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.log", "abcd1234"),
         )
     }
 

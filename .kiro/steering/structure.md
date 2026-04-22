@@ -4,7 +4,7 @@
 
 **Native-first multiplatform with JVM sidecars as separate builds.** The root project
 only has `nativeMain` / `nativeTest` source sets; JVM daemon code lives in two
-included Gradle builds (`kolt-compiler-daemon/`, `kolt-native-daemon/`) with their
+included Gradle builds (`kolt-jvm-compiler-daemon/`, `kolt-native-compiler-daemon/`) with their
 own build files. Packages inside the native source are split **by responsibility**,
 not by layer.
 
@@ -13,8 +13,8 @@ not by layer.
 - `src/nativeMain/kotlin/` — production code (native linuxX64).
 - `src/nativeTest/kotlin/` — tests, mirroring the production package tree.
 - `src/nativeInterop/cinterop/` — C FFI (e.g. `libcurl.def`).
-- `kolt-compiler-daemon/` — JVM daemon, independent Gradle build.
-- `kolt-native-daemon/` — native-compiler daemon sidecar, independent Gradle build.
+- `kolt-jvm-compiler-daemon/` — JVM daemon, independent Gradle build.
+- `kolt-native-compiler-daemon/` — native-compiler daemon sidecar, independent Gradle build.
 - `docs/` — prose docs and ADRs (`docs/adr/`).
 - `spike/` — experimental probes and benchmark harnesses. May be deleted freely;
   should never be imported from production code.

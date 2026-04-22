@@ -169,7 +169,7 @@ class KoltPathsTest {
     fun daemonSocketPathSegmentedByKotlinVersion() {
         val paths = KoltPaths("/home/user")
         assertEquals(
-            "/home/user/.kolt/daemon/abc123/2.3.10/daemon.sock",
+            "/home/user/.kolt/daemon/abc123/2.3.10/jvm-compiler-daemon.sock",
             paths.daemonSocketPath("abc123", "2.3.10"),
         )
     }
@@ -178,7 +178,7 @@ class KoltPathsTest {
     fun daemonLogPathSegmentedByKotlinVersion() {
         val paths = KoltPaths("/home/user")
         assertEquals(
-            "/home/user/.kolt/daemon/abc123/2.3.0/daemon.log",
+            "/home/user/.kolt/daemon/abc123/2.3.0/jvm-compiler-daemon.log",
             paths.daemonLogPath("abc123", "2.3.0"),
         )
     }

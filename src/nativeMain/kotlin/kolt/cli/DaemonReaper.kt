@@ -14,8 +14,8 @@ data class ReapResult(val reaped: Int, val alive: Int, val failed: Int)
 private const val IC_STATE_DIR_NAME = "ic"
 
 // Probe-based reaper for orphaned daemon sockets. Layout per ADR 0022:
-// `<base>/<projectHash>/<kotlinVersion>/daemon.sock`. A version dir is
-// reaped when: (a) no `daemon.sock` exists, or (b) connect fails. A
+// `<base>/<projectHash>/<kotlinVersion>/jvm-compiler-daemon.sock`. A version dir is
+// reaped when: (a) no `jvm-compiler-daemon.sock` exists, or (b) connect fails. A
 // project dir is removed only after all of its version subdirs are reaped.
 // Invariant: a live daemon is never touched.
 internal fun reapStaleDaemons(daemonBaseDir: String): ReapResult {
@@ -34,8 +34,8 @@ internal fun reapStaleDaemons(daemonBaseDir: String): ReapResult {
         for (versionDir in versionDirs) {
             val versionFullDir = "$projectFullDir/$versionDir"
             // #181: enumerate all JVM daemon sockets in the version dir
-            // (`daemon.sock`, `daemon-noplugins.sock`, `daemon-<8hex>.sock`),
-            // not just the bare `daemon.sock`. If any fingerprint is alive,
+            // (`jvm-compiler-daemon.sock`, `jvm-compiler-daemon-noplugins.sock`, `jvm-compiler-daemon-<8hex>.sock`),
+            // not just the bare `jvm-compiler-daemon.sock`. If any fingerprint is alive,
             // the whole version dir stays — reaping would unlink the live
             // socket file. Stale siblings ride along until they're the only
             // ones left.

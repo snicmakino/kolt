@@ -25,7 +25,7 @@ class DaemonJarResolverTest {
 
     @Test
     fun emptyEnvFallsThroughToNextCandidate() {
-        val libexec = "/opt/kolt/libexec/kolt-compiler-daemon-all.jar"
+        val libexec = "/opt/kolt/libexec/kolt-jvm-compiler-daemon-all.jar"
         val result = resolveDaemonJarPure(
             envValue = "",
             selfExePath = "/opt/kolt/bin/kolt",
@@ -38,7 +38,7 @@ class DaemonJarResolverTest {
 
     @Test
     fun libexecLayoutIsPickedFromInstalledPrefix() {
-        val libexec = "/usr/local/libexec/kolt-compiler-daemon-all.jar"
+        val libexec = "/usr/local/libexec/kolt-jvm-compiler-daemon-all.jar"
         val result = resolveDaemonJarPure(
             envValue = null,
             selfExePath = "/usr/local/bin/kolt",
@@ -52,7 +52,7 @@ class DaemonJarResolverTest {
     @Test
     fun devFallbackResolvesFromBinaryInsideBuildBinLinuxX64() {
         val kolt = "/home/alice/src/kolt/build/bin/linuxX64/debugExecutable/kolt.kexe"
-        val devJar = "/home/alice/src/kolt/kolt-compiler-daemon/build/libs/kolt-compiler-daemon-all.jar"
+        val devJar = "/home/alice/src/kolt/kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon-all.jar"
         val result = resolveDaemonJarPure(
             envValue = null,
             selfExePath = kolt,
@@ -65,8 +65,8 @@ class DaemonJarResolverTest {
 
     @Test
     fun libexecWinsOverDevFallbackWhenBothExist() {
-        val libexec = "/opt/kolt/libexec/kolt-compiler-daemon-all.jar"
-        val devJar = "/kolt-compiler-daemon/build/libs/kolt-compiler-daemon-all.jar"
+        val libexec = "/opt/kolt/libexec/kolt-jvm-compiler-daemon-all.jar"
+        val devJar = "/kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon-all.jar"
         val result = resolveDaemonJarPure(
             envValue = null,
             selfExePath = "/opt/kolt/bin/kolt",

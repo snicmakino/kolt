@@ -58,9 +58,9 @@ if [[ ! -x "$KOLT_BIN" ]]; then
   exit 1
 fi
 
-# Pattern used to find kolt-compiler-daemon JVM processes (avoid matching
+# Pattern used to find kolt-jvm-compiler-daemon JVM processes (avoid matching
 # our own shell invocations that merely mention the daemon in their cmdline).
-DAEMON_PATTERN='java.*kolt-compiler-daemon-all\.jar'
+DAEMON_PATTERN='java.*kolt-jvm-compiler-daemon-all\.jar'
 
 # Relative path (from the fixture root) of the source file to touch in the
 # daemon-warm-touch scenario. Picks a mid-graph file so the downstream chain
