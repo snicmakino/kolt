@@ -94,7 +94,7 @@
   - _Requirements: 4.4_
   - _Boundary: spike/daemon-self-host-smoke_
 
-- [ ] 4.2 既存 native self-host job に `kolt.kexe` の upload-artifact step を追加
+- [x] 4.2 既存 native self-host job に `kolt.kexe` の upload-artifact step を追加
   - `.github/workflows/self-host-smoke.yml` の `self-host` job 末尾 (`--version` 検証の後) に `actions/upload-artifact@v4` step を追加し、`./build/bin/linuxX64/debugExecutable/kolt.kexe` を artifact 名 `kolt-kexe` で export する。
   - 既存の `--version` 検証 step は変更せず合格状態を維持する。
   - PR CI で native self-host job の完了時に `kolt-kexe` artifact がリストされる。既存の緑判定は崩れない。

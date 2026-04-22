@@ -85,3 +85,11 @@ jobs:
           version=$(./build/kolt.kexe --version)
           echo "$version"
           echo "$version" | grep -Eq '^kolt [0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
+
+      - name: Upload kolt kexe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kolt-kexe
+          path: ./build/bin/linuxX64/debugExecutable/kolt.kexe
+          if-no-files-found: error
+          retention-days: 1
