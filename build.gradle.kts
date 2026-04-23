@@ -124,6 +124,115 @@ val verifyDaemonKotlinVersion = tasks.register("verifyDaemonKotlinVersion") {
     }
 }
 
+// Per #233: daemon main-class FQN is pinned in three uncoordinated places
+// (resolver constant, `scripts/assemble-dist.sh` DAEMONS map, daemon
+// `kolt.toml` `[build].main` under the Kotlin file-class convention). Pre-#231
+// shadowJar's Main-Class manifest attribute surfaced drift at build time;
+// post-#231 a drift silently produces `ClassNotFoundException` at daemon
+// spawn, which ADR 0016 §5 then hides behind the subprocess fallback. This
+// task fails the build when the three pins disagree.
+val verifyDaemonMainClass = tasks.register("verifyDaemonMainClass") {
+    group = "verification"
+    description = "Fails the build if the daemon main-class FQN drifts across resolver constant, assemble-dist.sh, or kolt.toml."
+    val daemonResolver = layout.projectDirectory.file(
+        "src/nativeMain/kotlin/kolt/build/daemon/DaemonJarResolver.kt",
+    )
+    val nativeDaemonResolver = layout.projectDirectory.file(
+        "src/nativeMain/kotlin/kolt/build/nativedaemon/NativeDaemonJarResolver.kt",
+    )
+    val daemonToml = layout.projectDirectory.file("kolt-jvm-compiler-daemon/kolt.toml")
+    val nativeDaemonToml = layout.projectDirectory.file("kolt-native-compiler-daemon/kolt.toml")
+    val distScript = layout.projectDirectory.file("scripts/assemble-dist.sh")
+    inputs.file(daemonResolver)
+    inputs.file(nativeDaemonResolver)
+    inputs.file(daemonToml)
+    inputs.file(nativeDaemonToml)
+    inputs.file(distScript)
+    doLast {
+        data class DaemonPins(
+            val daemonName: String,
+            val resolverFile: java.io.File,
+            val resolverConst: String,
+            val tomlFile: java.io.File,
+        )
+
+        // Mirror of kolt.config.jvmMainClass — keep in sync with that helper.
+        // Both here and there assume the Kotlin file is `Main.kt`; this is also
+        // what `scripts/assemble-dist.sh`'s DAEMONS comment documents.
+        fun jvmMainClass(main: String): String {
+            val prefix = main.substringBeforeLast("main")
+            return "${prefix}MainKt"
+        }
+
+        fun requireMatch(regex: Regex, text: String, where: String): String =
+            regex.find(text)?.groupValues?.get(1)
+                ?: throw GradleException("Could not locate $where. Drift guard cannot verify.")
+
+        val pins = listOf(
+            DaemonPins(
+                daemonName = "kolt-jvm-compiler-daemon",
+                resolverFile = daemonResolver.asFile,
+                resolverConst = "DAEMON_MAIN_CLASS",
+                tomlFile = daemonToml.asFile,
+            ),
+            DaemonPins(
+                daemonName = "kolt-native-compiler-daemon",
+                resolverFile = nativeDaemonResolver.asFile,
+                resolverConst = "NATIVE_DAEMON_MAIN_CLASS",
+                tomlFile = nativeDaemonToml.asFile,
+            ),
+        )
+
+        val distText = distScript.asFile.readText()
+        val drift = mutableListOf<String>()
+        for (pin in pins) {
+            val resolverRegex = Regex(
+                """const\s+val\s+${pin.resolverConst}\s*=\s*"([^"]+)"""",
+            )
+            val resolverFqn = requireMatch(
+                resolverRegex,
+                pin.resolverFile.readText(),
+                "${pin.resolverFile.name} `${pin.resolverConst}`",
+            )
+
+            val tomlText = pin.tomlFile.readText()
+            val tomlMain = requireMatch(
+                Regex("""(?m)^main\s*=\s*"([^"]+)""""),
+                tomlText,
+                "${pin.tomlFile.parentFile.name}/kolt.toml `[build].main`",
+            )
+            val tomlFqn = jvmMainClass(tomlMain)
+
+            val distRegex = Regex(""""${Regex.escape(pin.daemonName)}:([^"]+)"""")
+            val distFqn = requireMatch(
+                distRegex,
+                distText,
+                "scripts/assemble-dist.sh DAEMONS entry for ${pin.daemonName}",
+            )
+
+            val pairs = mapOf(
+                "${pin.resolverFile.name} `${pin.resolverConst}`" to resolverFqn,
+                "${pin.tomlFile.parentFile.name}/kolt.toml `[build].main` -> $tomlFqn" to tomlFqn,
+                "scripts/assemble-dist.sh DAEMONS[${pin.daemonName}]" to distFqn,
+            )
+            val distinct = pairs.values.toSet()
+            if (distinct.size > 1) {
+                drift += "  ${pin.daemonName}:"
+                pairs.forEach { (label, value) -> drift += "    - $label: \"$value\"" }
+            }
+        }
+
+        if (drift.isNotEmpty()) {
+            throw GradleException(
+                "daemon main-class FQN drift across pinned sources:\n" +
+                    drift.joinToString("\n") +
+                    "\nUpdate all three sources together (resolver constant, kolt.toml `[build].main`, " +
+                    "assemble-dist.sh DAEMONS entry).",
+            )
+        }
+    }
+}
+
 kotlin {
     linuxX64 {
         compilations.getByName("main") {
@@ -172,6 +281,7 @@ tasks.named("check") {
     dependsOn(gradle.includedBuild("kolt-jvm-compiler-daemon").task(":check"))
     dependsOn(gradle.includedBuild("kolt-native-compiler-daemon").task(":check"))
     dependsOn(verifyDaemonKotlinVersion)
+    dependsOn(verifyDaemonMainClass)
 }
 
 tasks.named("clean") {
