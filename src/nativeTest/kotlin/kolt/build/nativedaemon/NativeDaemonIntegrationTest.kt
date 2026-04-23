@@ -35,10 +35,9 @@ import platform.posix.getpid
 //                               after a first kolt native build, or
 //                               `$HOME/.konan/kotlin-native-prebuilt-linux-x86_64-<version>`
 //                               from a Kotlin/Native distribution.
-// The daemon jar itself is resolved via the usual env → libexec →
-// dev-fallback chain (`NativeDaemonJarResolver`), so a
-// `./gradlew :kolt-native-compiler-daemon:shadowJar` is enough when developing
-// locally.
+// The daemon launch args are resolved via the usual env → libexec →
+// dev-fallback chain (`NativeDaemonJarResolver`); a `kolt build` in
+// kolt-native-compiler-daemon/ is enough when developing locally.
 @OptIn(ExperimentalForeignApi::class)
 class NativeDaemonIntegrationTest {
 
@@ -64,7 +63,7 @@ class NativeDaemonIntegrationTest {
       val backend =
         NativeDaemonBackend(
           javaBin = env.javaBin,
-          daemonJarPath = env.daemonJarPath,
+          daemonLaunchArgs = env.daemonLaunchArgs,
           konancJar = env.konancJar,
           konanHome = env.konanHome,
           socketPath = "$stateDir/native-compiler-daemon.sock",
@@ -144,7 +143,7 @@ class NativeDaemonIntegrationTest {
 
   private data class ItEnv(
     val javaBin: String,
-    val daemonJarPath: String,
+    val daemonLaunchArgs: List<String>,
     val konancJar: String,
     val konanHome: String,
   )
@@ -159,12 +158,13 @@ class NativeDaemonIntegrationTest {
       error("$IT_FLAG=1 but $javaBin does not exist")
     }
 
-    val daemonJar =
+    val launchArgs =
       when (val r = resolveNativeDaemonJar()) {
-        is NativeDaemonJarResolution.Resolved -> r.path
+        is NativeDaemonJarResolution.Resolved -> r.launchArgs
         NativeDaemonJarResolution.NotFound ->
           error(
-            "$IT_FLAG=1 but kolt-native-compiler-daemon jar not found — run './gradlew :kolt-native-compiler-daemon:shadowJar' first"
+            "$IT_FLAG=1 but kolt-native-compiler-daemon launch args could not be resolved — " +
+              "run a `kolt build` in kolt-native-compiler-daemon/ first or set $KOLT_NATIVE_DAEMON_JAR_ENV"
           )
       }
 
@@ -177,7 +177,7 @@ class NativeDaemonIntegrationTest {
       error("$IT_FLAG=1 but $konancJar does not exist under KOLT_IT_KONAN_HOME=$konanHome")
     }
 
-    return ItEnv(javaBin, daemonJar, konancJar, konanHome)
+    return ItEnv(javaBin, launchArgs, konancJar, konanHome)
   }
 
   private fun integrationTestsEnabled(): Boolean = getenv(IT_FLAG)?.toKString() == "1"

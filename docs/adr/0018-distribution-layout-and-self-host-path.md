@@ -177,13 +177,15 @@ tarball rather than a kolt recompile.
 
 Consequences:
 
-- No fat-jar packaging step anywhere in kolt's pipeline.
-- `shadowJar` stays in the daemon Gradle builds through the first
-  release that ships `assemble-dist.sh`, then comes out once
-  repo-wide callers (§Confirmation) are migrated.
-- `DaemonJarResolver` (and its native-daemon peer) becomes a
-  classpath resolver: given `libexec/<daemon>/`, return the argfile
-  path. No `-all.jar` slot exists under `libexec/`.
+- No fat-jar packaging step anywhere in kolt's pipeline. `shadowJar`
+  was removed from the daemon Gradle builds in #231 once
+  `assemble-dist.sh` and the Kotlin-side launch-args resolver had
+  landed — each daemon Gradle build now emits only its thin jar
+  (same shape kolt itself emits).
+- `DaemonJarResolver` (and its native-daemon peer) is a launch-args
+  resolver: Libexec → `@<argfile>`, DevFallback → `-cp <thin>:<deps>
+  <MainClass>` computed from the daemon's `build/<name>-runtime.classpath`
+  manifest. No `-all.jar` slot exists under `libexec/`.
 - `META-INF/services` files stay in their own jars and the JVM's
   `ServiceLoader` aggregates them normally.
 - Java `@argfile` exists to bypass OS `ARG_MAX`, so classpath length
@@ -321,11 +323,11 @@ pipeline but does **not** re-introduce fat-jar packaging.
   succeed.
 - `install.sh` is exercised by a `curl | sh` CI job at least once
   per release.
-- `shadowJar` removal is gated on a repo-wide grep for `-all.jar`
-  and `shadowJar` references; each caller (CI workflow, dev
-  fallback resolver, docs) is updated before the Gradle task is
-  deleted. `unit-tests.yml`'s current assertion on
-  `kolt-compiler-daemon-all.jar` is the most visible caller.
+- `shadowJar` removal (#231) is complete: both daemon Gradle builds
+  emit only thin jars, `DaemonJarResolver` / `NativeDaemonJarResolver`
+  produce launch args instead of a jar path, and `unit-tests.yml`
+  asserts the thin jar (`<daemon>/build/libs/<daemon>.jar`) rather
+  than the old `-all.jar`.
 - Self-host follow-up issues (including the rewritten #97) cite
   this ADR as the authority for "no fat-jar".
 

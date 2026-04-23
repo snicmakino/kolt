@@ -31,7 +31,8 @@ class ResolveNativeCompilerBackendTest {
   private val okSetup =
     NativeDaemonSetup(
       javaBin = "/fake/java",
-      daemonJarPath = "/fake/kolt-native-compiler-daemon-all.jar",
+      daemonLaunchArgs =
+        listOf("-cp", "/fake/kolt-native-compiler-daemon.jar", "kolt.nativedaemon.MainKt"),
       konancJar = "/fake/konanc/konan/lib/kotlin-native-compiler-embeddable.jar",
       konanHome = "/fake/konanc",
       daemonDir = "/fake/daemon/dir",

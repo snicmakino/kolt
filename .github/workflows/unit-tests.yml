@@ -69,11 +69,9 @@ jobs:
       # in build.gradle.kts, the dev-fallback path in DaemonJarResolver.kt
       # would silently pick up a stale jar — the failure mode is invisible to
       # self-host-smoke because the daemon falls back to subprocess compile on
-      # any error. Asserting the jar exists after `./gradlew build` keeps the
-      # wiring honest. linuxX64 tasks above have already populated the Kotlin
-      # Native and Gradle caches, so the only real work here is the daemon's
-      # shadowJar (a few seconds).
-      - name: Verify root build produces daemon fat jar
+      # any error. Asserting the thin jar exists after `./gradlew build` keeps
+      # the wiring honest.
+      - name: Verify root build produces daemon thin jar
         run: |
           ./gradlew --no-daemon build
-          test -f kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon-all.jar
+          test -f kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon.jar

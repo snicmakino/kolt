@@ -79,12 +79,6 @@ val verifyDaemonKotlinVersion = tasks.register("verifyDaemonKotlinVersion") {
                 fixHint = "pin `org.jetbrains.kotlin:kotlin-compiler-embeddable:<version>` with a literal version",
             ),
             Pin(
-                label = "kolt-jvm-compiler-daemon/build.gradle.kts `kotlin-build-tools-impl`",
-                file = daemonBuildScript.asFile,
-                regex = Regex("kotlin-build-tools-impl:([^\"\\s]+)\""),
-                fixHint = "pin `org.jetbrains.kotlin:kotlin-build-tools-impl:<version>` with a literal version",
-            ),
-            Pin(
                 label = "kolt-jvm-compiler-daemon/ic/build.gradle.kts `kotlin-build-tools-api`",
                 file = icBuildScript.asFile,
                 regex = Regex("kotlin-build-tools-api:([^\"\\s]+)\""),
@@ -166,43 +160,21 @@ tasks.withType<Wrapper> {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-// Keep the existing "./gradlew build rebuilds the daemon fat jars too" DX
-// after the kolt-jvm-compiler-daemon and kolt-native-compiler-daemon splits into
-// independent Gradle builds. Without this wiring, the dev-fallback paths in
-// DaemonJarResolver.kt (and the forthcoming native counterpart per ADR
-// 0024) could pick up stale jars produced before a local protocol change.
+// Keep `./gradlew build` rebuilding the two daemons via their own `includeBuild`
+// `:build`. Without this wiring, a root build could ship against a stale daemon
+// thin jar across a local protocol change.
 tasks.named("build") {
     dependsOn(gradle.includedBuild("kolt-jvm-compiler-daemon").task(":build"))
     dependsOn(gradle.includedBuild("kolt-native-compiler-daemon").task(":build"))
 }
 
-// Propagate `check` to both included builds as well, so that ADR 0016's and
-// ADR 0024's `verifyShadowJar` regression guards (which reject
-// kotlin-compiler-embeddable and kotlin-native-compiler-embeddable from
-// being baked into their respective fat jars) stay on the root
-// `./gradlew check` path.
 tasks.named("check") {
     dependsOn(gradle.includedBuild("kolt-jvm-compiler-daemon").task(":check"))
     dependsOn(gradle.includedBuild("kolt-native-compiler-daemon").task(":check"))
     dependsOn(verifyDaemonKotlinVersion)
 }
 
-// Same rationale for `clean`: without this wiring, `./gradlew clean` at the
-// root leaves the daemon fat jars behind, and the dev-fallback resolvers can
-// keep reading them across local protocol changes until someone manually
-// wipes the daemon build dirs.
 tasks.named("clean") {
     dependsOn(gradle.includedBuild("kolt-jvm-compiler-daemon").task(":clean"))
     dependsOn(gradle.includedBuild("kolt-native-compiler-daemon").task(":clean"))
-}
-
-// Force `stageBtaImplJars` before any `linuxX64Test` run. Without this
-// wiring, `./gradlew linuxX64Test` in isolation leaves
-// `kolt-jvm-compiler-daemon/build/bta-impl-jars/` un-populated, which means
-// `BtaImplJarResolver`'s dev-fallback path silently warns `BtaImplJarsMissing`
-// on the first dogfood `kolt build --daemon`. `./gradlew build` covers it
-// via the daemon `:build` dependency above, but test-only runs do not. This
-// closes B-2a review carryover #7.
-tasks.named("linuxX64Test") {
-    dependsOn(gradle.includedBuild("kolt-jvm-compiler-daemon").task(":stageBtaImplJars"))
 }

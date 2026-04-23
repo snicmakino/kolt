@@ -953,7 +953,7 @@ internal fun resolveNativeCompilerBackend(
 internal fun createNativeDaemonBackend(setup: NativeDaemonSetup): NativeCompilerBackend =
   NativeDaemonBackend(
     javaBin = setup.javaBin,
-    daemonJarPath = setup.daemonJarPath,
+    daemonLaunchArgs = setup.daemonLaunchArgs,
     konancJar = setup.konancJar,
     konanHome = setup.konanHome,
     socketPath = setup.socketPath,
@@ -972,7 +972,7 @@ internal fun createDaemonBackend(
   val logPath = applyPluginsFingerprintToFile(setup.logPath, fp)
   return DaemonCompilerBackend(
     javaBin = setup.javaBin,
-    daemonJarPath = setup.daemonJarPath,
+    daemonLaunchArgs = setup.daemonLaunchArgs,
     compilerJars = setup.compilerJars,
     btaImplJars = setup.btaImplJars,
     socketPath = socketPath,

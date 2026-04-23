@@ -25,7 +25,9 @@ date: 2026-04-22
   downstream specs that actually build libraries: `kolt publish` (#21)
   and `kolt new --lib` (#28). The daemon self-host gap (#97, ADR 0018)
   is **not** a consumer — both daemons have `fun main` and ship as
-  `shadowJar` fat jars, so they are applications, not libraries (§5).
+  thin jars with a runtime classpath manifest (ADR 0027 §1) driving a
+  `@argfile` / `-cp` launch (ADR 0018 §2). Either way they are
+  applications, not libraries (§5).
 
 ## Context and Problem Statement
 
@@ -165,13 +167,11 @@ Three specs consume this layout today:
   `kolt.toml` only needs `kind = "lib"` and no `[build] main`; nothing
   about the artifact layout needs templating into the scaffold.
 - **ADR 0018 self-host migration is NOT a consumer of this ADR.**
-  Both `kolt-compiler-daemon/` and `kolt-native-daemon/` have `fun main`
-  entry points and are packaged as `shadowJar` fat jars for `java -jar`
-  launch — they are applications (`kind = "app"`), not libraries. Self-
-  host of the daemons is tracked by #97, which requires JVM target
-  support (partly already present), multi-module layout, and a **fat-jar
-  output mode** for `kind = "app"` — none of which this ADR or spec #30
-  delivers. Listing the daemons here would be misleading.
+  Both `kolt-jvm-compiler-daemon/` and `kolt-native-compiler-daemon/`
+  have `fun main` entry points and are applications (`kind = "app"`),
+  not libraries. They are launched via `java @<argfile>` for installed
+  layouts or `java -cp <thin>:<deps> <MainClass>` for dev binaries
+  (ADR 0018 §2). Listing the daemons here would be misleading.
 
 ### Consequences
 

@@ -41,7 +41,7 @@ import platform.posix.usleep
 class NativeDaemonBackend
 internal constructor(
   private val javaBin: String,
-  private val daemonJarPath: String,
+  private val daemonLaunchArgs: List<String>,
   private val konancJar: String,
   private val konanHome: String,
   private val socketPath: String,
@@ -55,7 +55,7 @@ internal constructor(
 
   constructor(
     javaBin: String,
-    daemonJarPath: String,
+    daemonLaunchArgs: List<String>,
     konancJar: String,
     konanHome: String,
     socketPath: String,
@@ -63,7 +63,7 @@ internal constructor(
     onSpawn: () -> Unit = {},
   ) : this(
     javaBin = javaBin,
-    daemonJarPath = daemonJarPath,
+    daemonLaunchArgs = daemonLaunchArgs,
     konancJar = konancJar,
     konanHome = konanHome,
     socketPath = socketPath,
@@ -138,8 +138,7 @@ internal constructor(
   private fun spawnArgv(): List<String> = buildList {
     add(javaBin)
     add(HEAP_CEILING_XMX)
-    add("-jar")
-    add(daemonJarPath)
+    addAll(daemonLaunchArgs)
     add("--socket")
     add(socketPath)
     add("--konanc-jar")

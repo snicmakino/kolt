@@ -32,7 +32,7 @@ class ResolveCompilerBackendTest {
   private val okSetup =
     DaemonSetup(
       javaBin = "/fake/java",
-      daemonJarPath = "/fake/daemon.jar",
+      daemonLaunchArgs = listOf("-cp", "/fake/daemon.jar", "kolt.daemon.MainKt"),
       compilerJars = listOf("/fake/kotlinc/lib/a.jar"),
       btaImplJars = listOf("/fake/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar"),
       daemonDir = "/fake/daemon/dir",

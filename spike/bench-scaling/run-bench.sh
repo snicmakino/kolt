@@ -58,9 +58,11 @@ if [[ ! -x "$KOLT_BIN" ]]; then
   exit 1
 fi
 
-# Pattern used to find kolt-jvm-compiler-daemon JVM processes (avoid matching
-# our own shell invocations that merely mention the daemon in their cmdline).
-DAEMON_PATTERN='java.*kolt-jvm-compiler-daemon-all\.jar'
+# Pattern used to find kolt-jvm-compiler-daemon JVM processes. Post-#231 the
+# daemon is launched via `java -cp <cp> kolt.daemon.MainKt` (dev) or
+# `java @<argfile>` (installed) — the main-class FQN is the only invariant
+# across both forms, so we anchor on it.
+DAEMON_PATTERN='java.*kolt\.daemon\.MainKt'
 
 # Relative path (from the fixture root) of the source file to touch in the
 # daemon-warm-touch scenario. Picks a mid-graph file so the downstream chain

@@ -20,8 +20,9 @@ class DaemonPreconditionsTest {
   private val paths = KoltPaths(home = "/fake/home")
   private val bundledVersion = "2.3.20"
   private val absProject = "/fake/project"
+  private val fakeLaunchArgs = listOf("-cp", "/fake/libexec/daemon.jar", DAEMON_MAIN_CLASS)
   private val okJar =
-    DaemonJarResolution.Resolved("/fake/libexec/daemon.jar", DaemonJarResolution.Source.Libexec)
+    DaemonJarResolution.Resolved(fakeLaunchArgs, DaemonJarResolution.Source.Libexec)
   private val fakeJars = listOf("/fake/home/.kolt/toolchains/kotlinc/$bundledVersion/lib/a.jar")
   private val fakeBtaJars = listOf("/fake/libexec/kolt-bta-impl/kotlin-build-tools-impl.jar")
   private val okBtaImpl =
@@ -47,7 +48,7 @@ class DaemonPreconditionsTest {
 
     val setup = assertNotNull(result.get())
     assertEquals("/fake/home/.kolt/toolchains/jdk/21/bin/java", setup.javaBin)
-    assertEquals("/fake/libexec/daemon.jar", setup.daemonJarPath)
+    assertEquals(fakeLaunchArgs, setup.daemonLaunchArgs)
     assertEquals(fakeJars, setup.compilerJars)
     assertEquals(fakeBtaJars, setup.btaImplJars)
     val expectedHash = projectHashOf(absProject)
@@ -329,7 +330,13 @@ class DaemonPreconditionsTest {
   }
 
   @Test
-  fun bundledBtaImplJarsMissingShortCircuitsAfterCompilerJarsPass() {
+  fun bundledBtaImplLibexecMissFallsThroughToFetcher() {
+    // Without a DevFallback in BtaImplJarResolver (dev binaries have no
+    // libexec), the bundled-version path must fetch from Maven Central on
+    // a libexec miss — otherwise every daemon run from `./build/kolt.kexe`
+    // would degrade to subprocess.
+    val fetched = listOf("/cache/impl-bundled.jar")
+    var fetchedVersion: String? = null
     val result =
       resolveDaemonPreconditions(
         paths = paths,
@@ -342,11 +349,15 @@ class DaemonPreconditionsTest {
         resolveBundledBtaImplJars = {
           BtaImplJarsResolution.NotFound("/fake/libexec/kolt-bta-impl")
         },
-        fetchBtaImplJars = mustNotFetch,
+        fetchBtaImplJars = { v, _ ->
+          fetchedVersion = v
+          Ok(fetched)
+        },
       )
 
-    val err = assertIs<DaemonPreconditionError.BtaImplJarsMissing>(result.getError())
-    assertEquals("/fake/libexec/kolt-bta-impl", err.probedDir)
+    val setup = assertNotNull(result.get())
+    assertEquals(fetched, setup.btaImplJars)
+    assertEquals(bundledVersion, fetchedVersion)
   }
 
   @Test
@@ -364,12 +375,6 @@ class DaemonPreconditionsTest {
     assertEquals(
       "warning: no compiler jars found in /x/lib — falling back to subprocess compile",
       formatDaemonPreconditionWarning(DaemonPreconditionError.CompilerJarsMissing("/x/lib")),
-    )
-    assertEquals(
-      "warning: kotlin-build-tools-impl jars not found in /x/libexec/kolt-bta-impl — falling back to subprocess compile",
-      formatDaemonPreconditionWarning(
-        DaemonPreconditionError.BtaImplJarsMissing("/x/libexec/kolt-bta-impl")
-      ),
     )
     val belowFloor =
       formatDaemonPreconditionWarning(

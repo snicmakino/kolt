@@ -37,7 +37,7 @@ class DaemonIntegrationTest {
       val backend =
         DaemonCompilerBackend(
           javaBin = env.javaBin,
-          daemonJarPath = env.daemonJarPath,
+          daemonLaunchArgs = env.daemonLaunchArgs,
           compilerJars = env.compilerJars,
           btaImplJars = env.btaImplJars,
           socketPath = "$stateDir/daemon.sock",
@@ -71,7 +71,7 @@ class DaemonIntegrationTest {
 
   private data class ItEnv(
     val javaBin: String,
-    val daemonJarPath: String,
+    val daemonLaunchArgs: List<String>,
     val compilerJars: List<String>,
     val btaImplJars: List<String>,
   )
@@ -86,12 +86,13 @@ class DaemonIntegrationTest {
       error("KOLT_DAEMON_IT=1 but $javaBin does not exist")
     }
 
-    val daemonJar =
+    val launchArgs =
       when (val r = resolveDaemonJar()) {
-        is DaemonJarResolution.Resolved -> r.path
+        is DaemonJarResolution.Resolved -> r.launchArgs
         DaemonJarResolution.NotFound ->
           error(
-            "KOLT_DAEMON_IT=1 but kolt-jvm-compiler-daemon jar not found — run './gradlew :kolt-jvm-compiler-daemon:shadowJar' first"
+            "KOLT_DAEMON_IT=1 but kolt-jvm-compiler-daemon launch args could not be resolved — " +
+              "run a `kolt build` in kolt-jvm-compiler-daemon/ first or set $KOLT_DAEMON_JAR_ENV"
           )
       }
 
@@ -113,12 +114,11 @@ class DaemonIntegrationTest {
         is BtaImplJarsResolution.NotFound ->
           error(
             "KOLT_DAEMON_IT=1 but kotlin-build-tools-impl jars not found at ${res.probedDir} — " +
-              "run './gradlew :kolt-jvm-compiler-daemon:stageBtaImplJars' first, " +
-              "or set $KOLT_BTA_IMPL_JARS_DIR_ENV"
+              "set $KOLT_BTA_IMPL_JARS_DIR_ENV to a directory containing the -impl closure"
           )
       }
 
-    return ItEnv(javaBin, daemonJar, jars, btaJars)
+    return ItEnv(javaBin, launchArgs, jars, btaJars)
   }
 
   private fun integrationTestsEnabled(): Boolean = getenv("KOLT_DAEMON_IT")?.toKString() == "1"

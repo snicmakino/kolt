@@ -49,7 +49,7 @@ private fun newBackend(
 ): NativeDaemonBackend =
   NativeDaemonBackend(
     javaBin = "/opt/jdk/bin/java",
-    daemonJarPath = "/opt/kolt/libexec/kolt-native-daemon-all.jar",
+    daemonLaunchArgs = listOf("@/opt/kolt/libexec/classpath/kolt-native-compiler-daemon.argfile"),
     konancJar = "/opt/konan/konan/lib/kotlin-native-compiler-embeddable.jar",
     konanHome = "/opt/konan",
     socketPath = "/tmp/kolt-native-daemon-test.sock",
@@ -433,7 +433,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
     val backend =
       NativeDaemonBackend(
         javaBin = "/java",
-        daemonJarPath = "/d.jar",
+        daemonLaunchArgs = listOf("-cp", "/d.jar", "kolt.nativedaemon.MainKt"),
         konancJar = "/k.jar",
         konanHome = "/k",
         socketPath = "/tmp/s",

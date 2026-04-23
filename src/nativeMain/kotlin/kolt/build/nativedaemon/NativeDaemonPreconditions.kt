@@ -18,7 +18,7 @@ import kolt.resolve.compareVersions
 // directory as the JVM daemon so `daemon stop` enumerates both in one pass.
 internal data class NativeDaemonSetup(
   val javaBin: String,
-  val daemonJarPath: String,
+  val daemonLaunchArgs: List<String>,
   val konancJar: String,
   val konanHome: String,
   val daemonDir: String,
@@ -109,9 +109,9 @@ internal fun resolveNativeDaemonPreconditions(
       )
     }
 
-  val daemonJar =
+  val daemonLaunchArgs =
     when (val res = resolveNativeDaemonJar()) {
-      is NativeDaemonJarResolution.Resolved -> res.path
+      is NativeDaemonJarResolution.Resolved -> res.launchArgs
       NativeDaemonJarResolution.NotFound ->
         return Err(NativeDaemonPreconditionError.NativeDaemonJarMissing)
     }
@@ -125,7 +125,7 @@ internal fun resolveNativeDaemonPreconditions(
   return Ok(
     NativeDaemonSetup(
       javaBin = javaBin,
-      daemonJarPath = daemonJar,
+      daemonLaunchArgs = daemonLaunchArgs,
       konancJar = konancJar,
       konanHome = konanHome,
       daemonDir = paths.daemonDir(projectHash, kotlincVersion),

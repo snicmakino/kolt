@@ -21,8 +21,9 @@ set -euo pipefail
 # SharedApiClassesClassLoader, so we ship its runtime closure on a separate
 # on-disk classpath (`libexec/kolt-bta-impl/`) rather than bundling into the
 # daemon fat jar or routing through the kolt resolver. The set and sha256s
-# below were observed from `./gradlew :kolt-jvm-compiler-daemon:stageBtaImplJars`
-# against the pinned `kotlin-build-tools-impl:2.3.20` dependency.
+# below were first observed against the pinned
+# `kotlin-build-tools-impl:2.3.20` transitive closure; update the sha256s in
+# lockstep when bumping the bundled Kotlin version.
 #
 # Exclusions vs the staged set: the daemon's `kolt.toml` [dependencies] declares
 # `org.jetbrains.kotlin:kotlin-build-tools-api = 2.3.20`, whose resolver closure

@@ -11,76 +11,111 @@ class NativeDaemonJarResolverTest {
     return { it in set }
   }
 
+  private fun manifests(vararg entries: Pair<String, List<String>>): (String) -> List<String>? {
+    val map = entries.toMap()
+    return { map[it] }
+  }
+
   @Test
-  fun envOverrideWinsWithoutExistenceCheck() {
+  fun envOverrideReadsSiblingManifestAndEmitsClasspathLaunch() {
+    val envJar = "/nowhere/custom-native.jar"
     val result =
       resolveNativeDaemonJarPure(
-        envValue = "/nowhere/custom-native.jar",
+        envValue = envJar,
         selfExePath = "/opt/kolt/bin/kolt",
         fileExists = { false },
+        readManifest =
+          manifests(
+            "/nowhere/custom-native-runtime.classpath" to listOf("/cache/a.jar", "/cache/b.jar")
+          ),
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals("/nowhere/custom-native.jar", resolved.path)
+    assertEquals(
+      listOf("-cp", "$envJar:/cache/a.jar:/cache/b.jar", NATIVE_DAEMON_MAIN_CLASS),
+      resolved.launchArgs,
+    )
     assertEquals(NativeDaemonJarResolution.Source.Env, resolved.source)
   }
 
   @Test
-  fun emptyEnvFallsThroughToLibexec() {
-    val libexec = "/opt/kolt/libexec/kolt-native-compiler-daemon-all.jar"
+  fun emptyEnvFallsThroughToLibexecArgfile() {
+    val argfile = "/opt/kolt/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
     val result =
       resolveNativeDaemonJarPure(
         envValue = "",
         selfExePath = "/opt/kolt/bin/kolt",
-        fileExists = exists(libexec),
+        fileExists = exists(argfile),
+        readManifest = { null },
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(libexec, resolved.path)
+    assertEquals(listOf("@$argfile"), resolved.launchArgs)
     assertEquals(NativeDaemonJarResolution.Source.Libexec, resolved.source)
   }
 
   @Test
-  fun libexecLayoutIsPickedFromInstalledPrefix() {
-    val libexec = "/usr/local/libexec/kolt-native-compiler-daemon-all.jar"
+  fun libexecArgfileIsPickedFromInstalledPrefix() {
+    val argfile = "/usr/local/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
     val result =
       resolveNativeDaemonJarPure(
         envValue = null,
         selfExePath = "/usr/local/bin/kolt",
-        fileExists = exists(libexec),
+        fileExists = exists(argfile),
+        readManifest = { null },
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(libexec, resolved.path)
+    assertEquals(listOf("@$argfile"), resolved.launchArgs)
   }
 
   @Test
-  fun devFallbackResolvesFromBuildBinLinuxX64() {
-    val kolt = "/home/alice/src/kolt/build/bin/linuxX64/debugExecutable/kolt.kexe"
-    val devJar =
-      "/home/alice/src/kolt/kolt-native-compiler-daemon/build/libs/kolt-native-compiler-daemon-all.jar"
+  fun devFallbackBuildsClasspathFromKoltBuildManifest() {
+    val repo = "/home/alice/src/kolt"
+    val kolt = "$repo/build/bin/linuxX64/debugExecutable/kolt.kexe"
+    val devJar = "$repo/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM.jar"
+    val manifestPath =
+      "$repo/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM-runtime.classpath"
     val result =
-      resolveNativeDaemonJarPure(envValue = null, selfExePath = kolt, fileExists = exists(devJar))
+      resolveNativeDaemonJarPure(
+        envValue = null,
+        selfExePath = kolt,
+        fileExists = exists(devJar),
+        readManifest = manifests(manifestPath to listOf("/cache/dep.jar")),
+      )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(devJar, resolved.path)
+    assertEquals(
+      listOf("-cp", "$devJar:/cache/dep.jar", NATIVE_DAEMON_MAIN_CLASS),
+      resolved.launchArgs,
+    )
     assertEquals(NativeDaemonJarResolution.Source.DevFallback, resolved.source)
   }
 
   @Test
   fun libexecWinsOverDevFallbackWhenBothExist() {
-    val libexec = "/opt/kolt/libexec/kolt-native-compiler-daemon-all.jar"
-    val devJar = "/kolt-native-compiler-daemon/build/libs/kolt-native-compiler-daemon-all.jar"
+    val argfile = "/opt/kolt/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val devJar = "/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM.jar"
     val result =
       resolveNativeDaemonJarPure(
         envValue = null,
         selfExePath = "/opt/kolt/bin/kolt",
-        fileExists = exists(libexec, devJar),
+        fileExists = exists(argfile, devJar),
+        readManifest =
+          manifests(
+            "/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM-runtime.classpath" to
+              emptyList()
+          ),
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(libexec, resolved.path)
+    assertEquals(listOf("@$argfile"), resolved.launchArgs)
   }
 
   @Test
   fun noSelfExeAndNoEnvReturnsNotFound() {
     val result =
-      resolveNativeDaemonJarPure(envValue = null, selfExePath = null, fileExists = { true })
+      resolveNativeDaemonJarPure(
+        envValue = null,
+        selfExePath = null,
+        fileExists = { true },
+        readManifest = { null },
+      )
     assertEquals(NativeDaemonJarResolution.NotFound, result)
   }
 
@@ -91,22 +126,24 @@ class NativeDaemonJarResolverTest {
         envValue = null,
         selfExePath = "/opt/kolt/bin/kolt",
         fileExists = { false },
+        readManifest = { null },
       )
     assertEquals(NativeDaemonJarResolution.NotFound, result)
   }
 
   @Test
-  fun jvmDaemonJarIsNotPickedUpAsNativeDaemonJar() {
-    // Both daemons ship their jars under `libexec/`. If the native
-    // resolver ever accidentally probed the JVM jar filename, it would
-    // spawn a JVM daemon over --konanc-jar/--konan-home and explode at
+  fun jvmDaemonArgfileIsNotPickedUpAsNativeDaemonLaunch() {
+    // Both daemons ship their argfiles under `libexec/classpath/`. If the
+    // native resolver ever probed the JVM daemon's argfile name, it would
+    // launch a JVM daemon over --konanc-jar/--konan-home and explode at
     // parse time. This test pins the filename strictness.
-    val jvmJar = "/opt/kolt/libexec/kolt-jvm-compiler-daemon-all.jar"
+    val jvmArgfile = "/opt/kolt/libexec/classpath/kolt-jvm-compiler-daemon.argfile"
     val result =
       resolveNativeDaemonJarPure(
         envValue = null,
         selfExePath = "/opt/kolt/bin/kolt",
-        fileExists = exists(jvmJar),
+        fileExists = exists(jvmArgfile),
+        readManifest = { null },
       )
     assertEquals(NativeDaemonJarResolution.NotFound, result)
   }

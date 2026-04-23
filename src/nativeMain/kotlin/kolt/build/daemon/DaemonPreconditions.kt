@@ -11,7 +11,7 @@ import kolt.resolve.defaultResolverDeps
 
 internal data class DaemonSetup(
   val javaBin: String,
-  val daemonJarPath: String,
+  val daemonLaunchArgs: List<String>,
   val compilerJars: List<String>,
   val btaImplJars: List<String>,
   val daemonDir: String,
@@ -49,8 +49,6 @@ internal sealed interface DaemonPreconditionError {
   data object DaemonJarMissing : DaemonPreconditionError
 
   data class CompilerJarsMissing(val kotlincLibDir: String) : DaemonPreconditionError
-
-  data class BtaImplJarsMissing(val probedDir: String) : DaemonPreconditionError
 
   // ADR 0022: the daemon adapter is compiled against BTA-API 2.3.x.
   // Below the floor, no fetch can rescue us — the impl jar's V1 compat
@@ -121,9 +119,9 @@ internal fun resolveDaemonPreconditions(
       )
     }
 
-  val daemonJar =
+  val daemonLaunchArgs =
     when (val res = resolveDaemonJar()) {
-      is DaemonJarResolution.Resolved -> res.path
+      is DaemonJarResolution.Resolved -> res.launchArgs
       DaemonJarResolution.NotFound -> return Err(DaemonPreconditionError.DaemonJarMissing)
     }
 
@@ -134,26 +132,29 @@ internal fun resolveDaemonPreconditions(
   }
 
   // Bundled-version fast path: a fresh kolt install ships the matching
-  // BTA-impl classpath under <prefix>/libexec/kolt-bta-impl/, so a
-  // first build at the bundled version pays no Maven Central round
-  // trip. Other 2.3.x patches resolve through the fetcher.
-  val btaImplJars =
+  // BTA-impl classpath under <prefix>/libexec/kolt-bta-impl/, so a first
+  // build at the bundled version pays no Maven Central round trip. On a
+  // miss (dev binary, or a broken install) fall through to the fetcher —
+  // same code path non-bundled versions always take. Other 2.3.x patches
+  // resolve through the fetcher.
+  val bundledLibexecJars =
     if (kotlincVersion == bundledKotlinVersion) {
       when (val res = resolveBundledBtaImplJars()) {
         is BtaImplJarsResolution.Resolved -> res.jars
-        is BtaImplJarsResolution.NotFound ->
-          return Err(DaemonPreconditionError.BtaImplJarsMissing(res.probedDir))
+        is BtaImplJarsResolution.NotFound -> null
       }
-    } else {
-      fetchBtaImplJars(kotlincVersion, paths.cacheBase).getOrElse {
+    } else null
+
+  val btaImplJars =
+    bundledLibexecJars
+      ?: fetchBtaImplJars(kotlincVersion, paths.cacheBase).getOrElse {
         return Err(DaemonPreconditionError.BtaImplFetchFailed(kotlincVersion, it))
       }
-    }
 
   return Ok(
     DaemonSetup(
       javaBin = javaBin,
-      daemonJarPath = daemonJar,
+      daemonLaunchArgs = daemonLaunchArgs,
       compilerJars = compilerJars,
       btaImplJars = btaImplJars,
       daemonDir = paths.daemonDir(projectHash, kotlincVersion),
@@ -171,8 +172,6 @@ internal fun formatDaemonPreconditionWarning(err: DaemonPreconditionError): Stri
       "warning: kolt-jvm-compiler-daemon jar not found — falling back to subprocess compile"
     is DaemonPreconditionError.CompilerJarsMissing ->
       "warning: no compiler jars found in ${err.kotlincLibDir} — falling back to subprocess compile"
-    is DaemonPreconditionError.BtaImplJarsMissing ->
-      "warning: kotlin-build-tools-impl jars not found in ${err.probedDir} — falling back to subprocess compile"
     is DaemonPreconditionError.KotlinVersionBelowFloor ->
       "warning: kolt daemon supports Kotlin >= ${err.floor}; your kolt.toml requests ${err.requested} — " +
         "falling back to subprocess compile. Pass --no-daemon to silence this warning."

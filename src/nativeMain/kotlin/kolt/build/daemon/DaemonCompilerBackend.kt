@@ -32,7 +32,7 @@ import platform.posix.usleep
 class DaemonCompilerBackend
 internal constructor(
   private val javaBin: String,
-  private val daemonJarPath: String,
+  private val daemonLaunchArgs: List<String>,
   private val compilerJars: List<String>,
   private val btaImplJars: List<String>,
   private val socketPath: String,
@@ -47,7 +47,7 @@ internal constructor(
 
   constructor(
     javaBin: String,
-    daemonJarPath: String,
+    daemonLaunchArgs: List<String>,
     compilerJars: List<String>,
     btaImplJars: List<String>,
     socketPath: String,
@@ -56,7 +56,7 @@ internal constructor(
     onSpawn: () -> Unit = {},
   ) : this(
     javaBin = javaBin,
-    daemonJarPath = daemonJarPath,
+    daemonLaunchArgs = daemonLaunchArgs,
     compilerJars = compilerJars,
     btaImplJars = btaImplJars,
     socketPath = socketPath,
@@ -128,8 +128,7 @@ internal constructor(
 
   private fun spawnArgv(): List<String> = buildList {
     add(javaBin)
-    add("-jar")
-    add(daemonJarPath)
+    addAll(daemonLaunchArgs)
     add("--socket")
     add(socketPath)
     add("--compiler-jars")

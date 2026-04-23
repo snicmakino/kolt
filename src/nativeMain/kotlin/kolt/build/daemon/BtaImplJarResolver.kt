@@ -14,7 +14,6 @@ sealed interface BtaImplJarsResolution {
   enum class Source {
     Env,
     Libexec,
-    DevFallback,
   }
 }
 
@@ -22,7 +21,12 @@ internal const val KOLT_BTA_IMPL_JARS_DIR_ENV = "KOLT_BTA_IMPL_JARS_DIR"
 
 internal const val BTA_IMPL_DIR_NAME = "kolt-bta-impl"
 
-// Probe order: env override -> libexec -> dev fallback (same as resolveDaemonJarPure).
+// Probe order: env override -> libexec. There is no dev fallback: the
+// `kolt-build-tools-impl` closure is not a kolt build output (daemon
+// kolt.toml declares the `-api` artifact, not `-impl`), so dev flows run
+// `scripts/assemble-dist.sh` once and point `KOLT_BTA_IMPL_JARS_DIR` at
+// the produced `dist/.../libexec/kolt-bta-impl/`, or let DaemonPreconditions
+// fall through to the Maven Central fetcher on NotFound for bundled versions.
 fun resolveBtaImplJarsPure(
   envDirValue: String?,
   selfExePath: String?,
@@ -37,33 +41,19 @@ fun resolveBtaImplJarsPure(
     }
   }
 
-  var lastProbed = "<no selfExe>"
+  if (selfExePath == null) return BtaImplJarsResolution.NotFound("<no selfExe>")
 
-  if (selfExePath != null) {
-    val binDir = parentDir(selfExePath)
-    val prefix = binDir?.let { parentDir(it) }
-    if (prefix != null) {
-      val libexec = "$prefix/libexec/$BTA_IMPL_DIR_NAME"
-      lastProbed = libexec
-      val jars = listJarFiles(libexec)
-      if (!jars.isNullOrEmpty()) {
-        return BtaImplJarsResolution.Resolved(jars, BtaImplJarsResolution.Source.Libexec)
-      }
+  val binDir = parentDir(selfExePath)
+  val prefix = binDir?.let { parentDir(it) }
+  if (prefix != null) {
+    val libexec = "$prefix/libexec/$BTA_IMPL_DIR_NAME"
+    val jars = listJarFiles(libexec)
+    if (!jars.isNullOrEmpty()) {
+      return BtaImplJarsResolution.Resolved(jars, BtaImplJarsResolution.Source.Libexec)
     }
-
-    var repoRoot: String? = selfExePath
-    repeat(5) { repoRoot = repoRoot?.let { parentDir(it) } }
-    if (repoRoot != null) {
-      val devDir = "$repoRoot/kolt-jvm-compiler-daemon/build/bta-impl-jars"
-      lastProbed = devDir
-      val jars = listJarFiles(devDir)
-      if (!jars.isNullOrEmpty()) {
-        return BtaImplJarsResolution.Resolved(jars, BtaImplJarsResolution.Source.DevFallback)
-      }
-    }
+    return BtaImplJarsResolution.NotFound(libexec)
   }
-
-  return BtaImplJarsResolution.NotFound(lastProbed)
+  return BtaImplJarsResolution.NotFound("<no prefix>")
 }
 
 @OptIn(ExperimentalForeignApi::class)
