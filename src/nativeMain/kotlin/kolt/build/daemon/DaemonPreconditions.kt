@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltPaths
+import kolt.infra.isDirectory
 import kolt.infra.listJarFiles
 import kolt.resolve.compareVersions
 import kolt.resolve.defaultResolverDeps
@@ -79,6 +80,8 @@ internal fun resolveDaemonPreconditions(
   fetchBtaImplJars: (String, String) -> Result<List<String>, BtaImplFetchError> = { v, base ->
     ensureBtaImplJars(v, base, defaultResolverDeps())
   },
+  isDirectory: (String) -> Boolean = ::isDirectory,
+  warningSink: (String) -> Unit = {},
 ): Result<DaemonSetup, DaemonPreconditionError> {
   // Floor check first: cheaper than any disk probe and short-circuits
   // every variant the daemon cannot serve. Equal to or above 2.3.0
@@ -141,7 +144,25 @@ internal fun resolveDaemonPreconditions(
     if (kotlincVersion == bundledKotlinVersion) {
       when (val res = resolveBundledBtaImplJars()) {
         is BtaImplJarsResolution.Resolved -> res.jars
-        is BtaImplJarsResolution.NotFound -> null
+        is BtaImplJarsResolution.NotFound -> {
+          // When the probed libexec kolt-bta-impl dir's parent is a
+          // directory, the selfExe is sitting in an installed layout
+          // (`<prefix>/bin/kolt` + `<prefix>/libexec/`) whose -impl
+          // subdir is empty or missing. That is an install integrity
+          // regression — warn before silently falling through to the
+          // Maven fetcher. Dev binaries (no libexec sibling) stay
+          // silent because the heuristic fails.
+          parentDir(res.probedDir)?.let { parent ->
+            if (isDirectory(parent)) {
+              warningSink(
+                "warning: installed kolt libexec is missing ${res.probedDir} " +
+                  "— fetching kotlin-build-tools-impl from Maven Central instead. " +
+                  "Reinstall kolt to restore the bundled fast path."
+              )
+            }
+          }
+          null
+        }
       }
     } else null
 

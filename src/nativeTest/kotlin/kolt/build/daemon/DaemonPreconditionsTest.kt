@@ -337,6 +337,7 @@ class DaemonPreconditionsTest {
     // would degrade to subprocess.
     val fetched = listOf("/cache/impl-bundled.jar")
     var fetchedVersion: String? = null
+    val warnings = mutableListOf<String>()
     val result =
       resolveDaemonPreconditions(
         paths = paths,
@@ -353,11 +354,56 @@ class DaemonPreconditionsTest {
           fetchedVersion = v
           Ok(fetched)
         },
+        isDirectory = { false },
+        warningSink = { warnings += it },
       )
 
     val setup = assertNotNull(result.get())
     assertEquals(fetched, setup.btaImplJars)
     assertEquals(bundledVersion, fetchedVersion)
+    assertEquals(
+      emptyList<String>(),
+      warnings,
+      "dev binary (no libexec sibling) should stay silent on bundled fall-through",
+    )
+  }
+
+  @Test
+  fun bundledBtaImplLibexecMissInInstalledLayoutWarnsBeforeFetching() {
+    // When the probed libexec/kolt-bta-impl's parent dir (the install
+    // layout's `libexec/`) exists, the miss points at a corrupted install
+    // rather than a dev binary. #234: emit a diagnostic so the silent
+    // Maven Central fetch does not mask the regression.
+    val fetched = listOf("/cache/impl-bundled.jar")
+    val warnings = mutableListOf<String>()
+    val result =
+      resolveDaemonPreconditions(
+        paths = paths,
+        kotlincVersion = bundledVersion,
+        absProjectPath = absProject,
+        bundledKotlinVersion = bundledVersion,
+        ensureJavaBin = { Ok("/fake/java") },
+        resolveDaemonJar = { okJar },
+        listCompilerJars = { fakeJars },
+        resolveBundledBtaImplJars = {
+          BtaImplJarsResolution.NotFound("/fake/libexec/kolt-bta-impl")
+        },
+        fetchBtaImplJars = { _, _ -> Ok(fetched) },
+        isDirectory = { path -> path == "/fake/libexec" },
+        warningSink = { warnings += it },
+      )
+
+    assertNotNull(result.get())
+    assertEquals(1, warnings.size, "expected one install-corruption warning: $warnings")
+    val warning = warnings.single()
+    assertTrue(
+      warning.contains("/fake/libexec/kolt-bta-impl"),
+      "warning should name the missing probed dir: $warning",
+    )
+    assertTrue(
+      warning.contains("Reinstall kolt") || warning.contains("Maven Central"),
+      "warning should guide the operator toward a fix: $warning",
+    )
   }
 
   @Test
