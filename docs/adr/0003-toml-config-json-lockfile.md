@@ -24,7 +24,7 @@ The lockfile is different — never edited by hand, so human ergonomics are irre
 
 - Users must be able to comment out a dependency or annotate a pinned version in `kolt.toml`.
 - Lockfile diffs must be stable across runs so a changed line signals a real dependency move.
-- Schema evolution (`v1 → v2`) must require no hand-written JSON walking.
+- Schema evolution (`v1 → v2 → v3`) must require no hand-written JSON walking.
 - No new Kotlin/Native-incompatible dependency.
 
 ## Decision Outcome
@@ -37,7 +37,14 @@ Chosen option: **TOML for `kolt.toml`, JSON for `kolt.lock`**, because each form
 
 ### §2 `kolt.lock` — kotlinx-serialization-json
 
-`Lockfile.kt` owns the v1 and v2 schemas. Writes go through `Json { prettyPrint = true; prettyPrintIndent = "  " }` for reviewable diffs. kotlinx-serialization orders fields by data class declaration (not by hash), so output is stable across runs. Schema evolution uses `@SerialName` plus nullable/default fields. Tests live in `LockfileTest.kt`.
+`Lockfile.kt` owns the schema. Writes go through `Json { prettyPrint = true; prettyPrintIndent = "  " }` for reviewable diffs. kotlinx-serialization orders fields by data class declaration (not by hash), so output is stable across runs. Schema evolution uses `@SerialName` plus nullable/default fields.
+
+Schema history:
+
+- **v1 → v2**: added `LockEntry.transitive: Boolean = false` so direct vs transitive origin is recoverable from the lockfile alone.
+- **v2 → v3**: added `LockEntry.test: Boolean = false` so main vs test closure is recoverable offline (spec `main-test-closure-separation`). Per the pre-v1 clean-break policy (CLAUDE.md), `parseLockfile` rejects v1 and v2 with `LockfileError.UnsupportedVersion`; users regenerate via `kolt deps install`. ADR 0027 §1 consumes this flag to keep test-origin deps out of the runtime classpath manifest.
+
+Tests live in `LockfileTest.kt`.
 
 ### §3 ktoml quoted-key workaround
 
@@ -52,7 +59,7 @@ Neither `kolt.toml` nor `kolt.lock` is binary. Both are diffable, grep-able, and
 **Positive**
 - Users can comment out a dependency or annotate a pinned version in `kolt.toml`.
 - Lockfile diffs are stable and reviewable; a changed line is a meaningful signal.
-- Schema evolution (v1 → v2 lockfile bump) required only `@SerialName` and a version-discriminated parser — no hand-written JSON walking.
+- Schema evolution (v1 → v2 → v3 lockfile bumps) required only `@SerialName` and a version-discriminated parser — no hand-written JSON walking.
 - TOML is familiar to anyone who has used Cargo, Poetry, or uv.
 
 **Negative**
@@ -75,5 +82,5 @@ Neither `kolt.toml` nor `kolt.lock` is binary. Both are diffable, grep-able, and
 ## Related
 
 - `src/nativeMain/kotlin/kolt/config/Config.kt` — `parseConfig` and the quoted-key workaround
-- `src/nativeMain/kotlin/kolt/resolve/Lockfile.kt` — v1/v2 schemas, JSON writer
+- `src/nativeMain/kotlin/kolt/resolve/Lockfile.kt` — v3 schema, JSON writer (v1/v2 rejected per pre-v1 clean-break)
 - Commit `3325d37` — migration from `kolt.json` to `kolt.toml`

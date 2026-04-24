@@ -9,8 +9,8 @@ date: 2026-04-22
 
 - Emit `build/<name>-runtime.classpath` alongside `build/<name>.jar` for
   JVM `kind = "app"` builds. Plain text, one absolute jar path per line,
-  dependencies only (self jar excluded), sorted alphabetically by file
-  name (§1).
+  main closure only (self jar and test-origin deps excluded), sorted
+  alphabetically by file name (§1).
 - Keep `.kolt.lock` as pure resolution state. Runtime jar paths depend
   on the local `~/.kolt/cache` layout and do not belong in a
   checked-in lockfile (§2).
@@ -111,10 +111,16 @@ Rules:
   a normal transitive dependency (ADR 0011's skip is native-only,
   since konanc bundles stdlib in its distribution). The daemon JVM
   has no ambient stdlib, so listing it is required for launch.
-- **Transitive closure, post-exclusion.** The manifest is the
-  effective runtime classpath: exactly what the resolver selected
-  after BFS, version intervals, and `exclusions` (the Phase 3
-  algorithm shipped in v0.3.0).
+- **Main closure, transitive, post-exclusion.** The manifest lists
+  the effective runtime classpath of the **main dependency closure
+  only** — what the resolver selected for `[dependencies]` after BFS,
+  version intervals, and `exclusions` (the Phase 3 algorithm shipped
+  in v0.3.0). Test-origin entries (`[test-dependencies]`, the
+  auto-injected `kotlin-test-junit5`, and their transitive closure)
+  are excluded so the manifest matches `kolt run`'s in-process
+  classpath (§5) and the daemon self-host tarball assembled by
+  `scripts/assemble-dist.sh` (§3). ADR 0003 §2 records the lockfile
+  `test: Boolean` flag that makes this split recoverable offline.
 
 Helper `outputRuntimeClasspathPath(config): String` in
 `kolt/build/Builder.kt` parallels `outputJarPath(config)` /
@@ -171,6 +177,11 @@ The "no" cases are active — kolt MUST NOT produce
 `build/<name>-runtime.classpath` for them. A regression test in
 `JvmLibraryInvariantsTest` / `NativeStagePlanTest` pins the
 non-emission for lib and native paths.
+
+Emit scope: for the sole emitter (JVM `kind = "app"`), the manifest
+always lists the **main closure only**. Test-origin deps are filtered
+out regardless of whether the project declares `[test-dependencies]`
+or carries test sources (spec `main-test-closure-separation`).
 
 ### §5 Relationship with `kolt run`
 

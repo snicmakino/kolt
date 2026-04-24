@@ -110,7 +110,7 @@
 
 ## 4. Validation: ADR / 成果物の更新とスモーク
 
-- [ ] 4.1 (P) ADR 0027 §1 と ADR 0003 §2 の文言を新契約に揃える
+- [x] 4.1 (P) ADR 0027 §1 と ADR 0003 §2 の文言を新契約に揃える
   - ADR 0027 §1 の "transitive closure, post-exclusion" を「main closure (非test closure) の transitive closure, post-exclusion」に限定する文言を追加
   - ADR 0027 §4 の kind マトリクス脚注に「emit 対象は main closure のみ」の補足
   - ADR 0003 §2 の schema evolution 節に v2 → v3 (`LockEntry.test: Boolean` 追加、v1/v2 は unsupported で reject) の行を追記
