@@ -47,47 +47,13 @@ class TestDepsTest {
 
   @Test
   fun userTestDepOverridesAutoInjected() {
+    // Test seeds are `autoInjectedTestDeps(config) + config.testDependencies`;
+    // explicit user test deps win over auto-inject for the same GA.
     val config =
       testConfig(testDependencies = mapOf("org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"))
-    val allDeps = mergeAllDeps(config)
+    val testSeeds = autoInjectedTestDeps(config) + config.testDependencies
 
-    assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
-  }
-
-  @Test
-  fun mainDepOverridesAutoInjected() {
-    val config =
-      testConfig(dependencies = mapOf("org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"))
-    val allDeps = mergeAllDeps(config)
-
-    assertEquals("2.0.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
-  }
-
-  @Test
-  fun testDepOverridesMainDep() {
-    val config =
-      testConfig(
-        dependencies = mapOf("org.jetbrains.kotlin:kotlin-test-junit5" to "2.0.0"),
-        testDependencies = mapOf("org.jetbrains.kotlin:kotlin-test-junit5" to "1.9.0"),
-      )
-    val allDeps = mergeAllDeps(config)
-
-    assertEquals("1.9.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
-  }
-
-  @Test
-  fun mergeAllDepsIncludesAutoInjectedAndUserDeps() {
-    val config =
-      testConfig(
-        dependencies = mapOf("com.example:lib" to "1.0.0"),
-        testDependencies = mapOf("io.kotest:kotest-runner-junit5" to "5.8.0"),
-      )
-    val allDeps = mergeAllDeps(config)
-
-    assertEquals(3, allDeps.size)
-    assertEquals("2.1.0", allDeps["org.jetbrains.kotlin:kotlin-test-junit5"])
-    assertEquals("1.0.0", allDeps["com.example:lib"])
-    assertEquals("5.8.0", allDeps["io.kotest:kotest-runner-junit5"])
+    assertEquals("2.0.0", testSeeds["org.jetbrains.kotlin:kotlin-test-junit5"])
   }
 
   @Test
@@ -119,7 +85,7 @@ class TestDepsTest {
   }
 
   @Test
-  fun mergeAllDepsNativeTargetHasNoAutoInjected() {
+  fun nativeTargetSkipsAutoInjectedTestDeps() {
     val config =
       KoltConfig(
         name = "my-app",
@@ -128,9 +94,8 @@ class TestDepsTest {
         build = BuildSection(target = "linuxX64", main = "main", sources = listOf("src")),
         dependencies = mapOf("com.example:lib" to "1.0.0"),
       )
-    val allDeps = mergeAllDeps(config)
+    val injected = autoInjectedTestDeps(config)
 
-    assertEquals(1, allDeps.size)
-    assertEquals("1.0.0", allDeps["com.example:lib"])
+    assertEquals(emptyMap(), injected)
   }
 }

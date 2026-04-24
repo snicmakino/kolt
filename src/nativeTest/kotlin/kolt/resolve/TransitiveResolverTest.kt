@@ -242,6 +242,98 @@ class TransitiveResolverTest {
   }
 
   @Test
+  fun testSeedsArriveAsOriginTestInResolvedDeps() {
+    val config = testConfig().copy(dependencies = mapOf("com.example:main-lib" to "1.0.0"))
+    val mainPom =
+      """
+            <project><groupId>com.example</groupId><artifactId>main-lib</artifactId><version>1.0.0</version></project>
+        """
+        .trimIndent()
+    val testPom =
+      """
+            <project>
+                <groupId>com.example</groupId>
+                <artifactId>test-lib</artifactId>
+                <version>1.0.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.example</groupId>
+                        <artifactId>test-child</artifactId>
+                        <version>1.0.0</version>
+                    </dependency>
+                </dependencies>
+            </project>
+        """
+        .trimIndent()
+    val testChildPom =
+      """
+            <project><groupId>com.example</groupId><artifactId>test-child</artifactId><version>1.0.0</version></project>
+        """
+        .trimIndent()
+
+    val deps =
+      fakeTransitiveDeps(
+        sha256Results =
+          mapOf(
+            "/cache/com/example/main-lib/1.0.0/main-lib-1.0.0.jar" to "hashMain",
+            "/cache/com/example/test-lib/1.0.0/test-lib-1.0.0.jar" to "hashTest",
+            "/cache/com/example/test-child/1.0.0/test-child-1.0.0.jar" to "hashTestChild",
+          ),
+        pomContents =
+          mapOf(
+            "/cache/com/example/main-lib/1.0.0/main-lib-1.0.0.pom" to mainPom,
+            "/cache/com/example/test-lib/1.0.0/test-lib-1.0.0.pom" to testPom,
+            "/cache/com/example/test-child/1.0.0/test-child-1.0.0.pom" to testChildPom,
+          ),
+      )
+    val result =
+      resolveTransitive(
+        config,
+        existingLock = null,
+        cacheBase = "/cache",
+        deps = deps,
+        testSeeds = mapOf("com.example:test-lib" to "1.0.0"),
+      )
+    val resolved = assertNotNull(result.get())
+    assertEquals(3, resolved.deps.size)
+    val mainLib = resolved.deps.first { it.groupArtifact == "com.example:main-lib" }
+    assertEquals(Origin.MAIN, mainLib.origin)
+    val testLib = resolved.deps.first { it.groupArtifact == "com.example:test-lib" }
+    assertEquals(Origin.TEST, testLib.origin)
+    val testChild = resolved.deps.first { it.groupArtifact == "com.example:test-child" }
+    assertEquals(Origin.TEST, testChild.origin)
+  }
+
+  @Test
+  fun testSeedOverlappingMainIsDroppedWithMainOriginPreserved() {
+    val config = testConfig().copy(dependencies = mapOf("com.example:shared" to "1.0.0"))
+    val sharedPom =
+      """
+            <project><groupId>com.example</groupId><artifactId>shared</artifactId><version>1.0.0</version></project>
+        """
+        .trimIndent()
+
+    val deps =
+      fakeTransitiveDeps(
+        sha256Results = mapOf("/cache/com/example/shared/1.0.0/shared-1.0.0.jar" to "hashShared"),
+        pomContents = mapOf("/cache/com/example/shared/1.0.0/shared-1.0.0.pom" to sharedPom),
+      )
+    val result =
+      resolveTransitive(
+        config,
+        existingLock = null,
+        cacheBase = "/cache",
+        deps = deps,
+        testSeeds = mapOf("com.example:shared" to "1.0.0"),
+      )
+    val resolved = assertNotNull(result.get())
+    assertEquals(1, resolved.deps.size)
+    val shared = resolved.deps[0]
+    assertEquals("com.example:shared", shared.groupArtifact)
+    assertEquals(Origin.MAIN, shared.origin)
+  }
+
+  @Test
   fun optionalDepsAreSkipped() {
     val config = testConfig().copy(dependencies = mapOf("com.example:lib" to "1.0.0"))
     val libPom =

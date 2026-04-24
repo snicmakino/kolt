@@ -1,5 +1,6 @@
 package kolt.resolve
 
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kotlin.test.Test
@@ -524,4 +525,197 @@ class ResolutionTest {
     { groupArtifact, version ->
       this["$groupArtifact:$version"]
     }
+
+  @Test
+  fun fixpointResolveTwoSeedsTagEachNodeWithOrigin() {
+    val poms =
+      mapOf(
+        "com.example:main-lib:1.0.0" to pomInfo("com.example", "main-lib", "1.0.0"),
+        "com.example:test-lib:1.0.0" to pomInfo("com.example", "test-lib", "1.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = mapOf("com.example:main-lib" to "1.0.0"),
+        testSeeds = mapOf("com.example:test-lib" to "1.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    assertEquals(2, nodes.size)
+    val mainNode = nodes.first { it.groupArtifact == "com.example:main-lib" }
+    assertEquals(Origin.MAIN, mainNode.origin)
+    val testNode = nodes.first { it.groupArtifact == "com.example:test-lib" }
+    assertEquals(Origin.TEST, testNode.origin)
+  }
+
+  @Test
+  fun fixpointResolveMainWinsWhenSameGaSeededByBoth() {
+    val poms =
+      mapOf(
+        "com.example:lib:1.0.0" to pomInfo("com.example", "lib", "1.0.0"),
+        "com.example:lib:2.0.0" to pomInfo("com.example", "lib", "2.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = mapOf("com.example:lib" to "1.0.0"),
+        testSeeds = mapOf("com.example:lib" to "2.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    assertEquals(1, nodes.size)
+    val lib = nodes[0]
+    assertEquals("com.example:lib", lib.groupArtifact)
+    assertEquals("1.0.0", lib.version)
+    assertEquals(Origin.MAIN, lib.origin)
+  }
+
+  @Test
+  fun fixpointResolveTestOnlyTransitiveInheritsTestOrigin() {
+    val poms =
+      mapOf(
+        "com.example:junit:1.0.0" to
+          pomInfo(
+            "com.example",
+            "junit",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "hamcrest", "1.0.0")),
+          ),
+        "com.example:hamcrest:1.0.0" to pomInfo("com.example", "hamcrest", "1.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = emptyMap(),
+        testSeeds = mapOf("com.example:junit" to "1.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    assertEquals(2, nodes.size)
+    assertTrue(nodes.all { it.origin == Origin.TEST })
+  }
+
+  @Test
+  fun fixpointResolveTransitiveReachedFromBothOriginsCollapsesToMain() {
+    val poms =
+      mapOf(
+        "com.example:main-root:1.0.0" to
+          pomInfo(
+            "com.example",
+            "main-root",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "shared", "1.0.0")),
+          ),
+        "com.example:test-root:1.0.0" to
+          pomInfo(
+            "com.example",
+            "test-root",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "shared", "1.0.0")),
+          ),
+        "com.example:shared:1.0.0" to pomInfo("com.example", "shared", "1.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = mapOf("com.example:main-root" to "1.0.0"),
+        testSeeds = mapOf("com.example:test-root" to "1.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    val shared = nodes.first { it.groupArtifact == "com.example:shared" }
+    assertEquals(Origin.MAIN, shared.origin)
+  }
+
+  @Test
+  fun fixpointResolveDeepTestTransitiveReachedByMainCollapsesToMain() {
+    // main -> mid -> shared
+    // test -> shared
+    // Even though shared is directly touched by a test seed (post-transitive from main),
+    // origin must collapse to MAIN.
+    val poms =
+      mapOf(
+        "com.example:main-root:1.0.0" to
+          pomInfo(
+            "com.example",
+            "main-root",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "mid", "1.0.0")),
+          ),
+        "com.example:mid:1.0.0" to
+          pomInfo(
+            "com.example",
+            "mid",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "shared", "1.0.0")),
+          ),
+        "com.example:shared:1.0.0" to pomInfo("com.example", "shared", "1.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = mapOf("com.example:main-root" to "1.0.0"),
+        testSeeds = mapOf("com.example:shared" to "1.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    val shared = nodes.first { it.groupArtifact == "com.example:shared" }
+    assertEquals(Origin.MAIN, shared.origin)
+  }
+
+  @Test
+  fun fixpointResolveDefaultTestSeedsPreservesMainOnlyBehavior() {
+    val poms =
+      mapOf(
+        "com.example:lib:1.0.0" to
+          pomInfo(
+            "com.example",
+            "lib",
+            "1.0.0",
+            deps = listOf(pomDep("com.example", "transitive", "2.0.0")),
+          ),
+        "com.example:transitive:2.0.0" to pomInfo("com.example", "transitive", "2.0.0"),
+      )
+    val result =
+      fixpointResolve(
+        mainSeeds = mapOf("com.example:lib" to "1.0.0"),
+        childLookup = pomChildLookupFor(poms),
+      )
+    val nodes = assertNotNull(result.get())
+    assertEquals(2, nodes.size)
+    assertTrue(nodes.all { it.origin == Origin.MAIN })
+  }
+
+  @Test
+  fun fixpointResolveInvalidTestSeedReturnsErr() {
+    val result =
+      fixpointResolve(mainSeeds = emptyMap(), testSeeds = mapOf("invalid-no-colon" to "1.0.0")) {
+        _,
+        _ ->
+        Ok(emptyList())
+      }
+    assertIs<ResolveError.InvalidDependency>(result.getError())
+  }
+
+  private fun pomChildLookupFor(
+    poms: Map<String, PomInfo>
+  ): (String, String) -> com.github.michaelbull.result.Result<List<Child>, ResolveError> {
+    return { groupArtifact, version ->
+      val pomInfo = poms["$groupArtifact:$version"]
+      if (pomInfo == null) {
+        Ok(emptyList())
+      } else {
+        Ok(
+          pomInfo.dependencies.mapNotNull { pomDep ->
+            if (pomDep.scope != null && pomDep.scope != "compile" && pomDep.scope != "runtime") {
+              return@mapNotNull null
+            }
+            if (pomDep.optional) return@mapNotNull null
+            val depGA = "${pomDep.groupId}:${pomDep.artifactId}"
+            val rawVersion = pomDep.version ?: return@mapNotNull null
+            Child(
+              groupArtifact = depGA,
+              version = selectVersion(rawVersion),
+              exclusions = pomDep.exclusions.toSet(),
+            )
+          }
+        )
+      }
+    }
+  }
 }

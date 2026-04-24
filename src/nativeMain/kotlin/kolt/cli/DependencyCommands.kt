@@ -251,8 +251,10 @@ internal fun doUpdate(): Result<Unit, Int> {
     loadProjectConfig().getOrElse {
       return Err(it)
     }
-  val allDeps = mergeAllDeps(config)
-  if (allDeps.isEmpty()) {
+  val mainSeeds = config.dependencies
+  val testSeeds = autoInjectedTestDeps(config) + config.testDependencies
+  val allSeeds = mainSeeds + testSeeds
+  if (allSeeds.isEmpty()) {
     println("no dependencies to update")
     return Ok(Unit)
   }
@@ -263,7 +265,7 @@ internal fun doUpdate(): Result<Unit, Int> {
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  for ((groupArtifact, version) in allDeps) {
+  for ((groupArtifact, version) in allSeeds) {
     val coord = parseCoordinate(groupArtifact, version).getOrElse { continue }
     val jarPath = "${paths.cacheBase}/${buildCachePath(coord)}"
     if (fileExists(jarPath)) {
@@ -271,15 +273,15 @@ internal fun doUpdate(): Result<Unit, Int> {
     }
   }
 
-  val resolveConfig = config.copy(dependencies = allDeps)
   println("updating dependencies...")
   val resolveResult =
-    resolve(resolveConfig, null, paths.cacheBase, createResolverDeps()).getOrElse { error ->
+    resolve(config, null, paths.cacheBase, createResolverDeps(), testSeeds = testSeeds).getOrElse {
+      error ->
       eprintln(formatResolveError(error))
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  val lockfile = buildLockfileFromResolved(resolveConfig, resolveResult.deps)
+  val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
   val lockJson = serializeLockfile(lockfile)
   writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
     eprintln("error: could not write ${error.path}")

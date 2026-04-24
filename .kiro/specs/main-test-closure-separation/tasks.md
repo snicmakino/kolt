@@ -30,7 +30,7 @@
 
 ## 2. Core: 2-seed resolver と caller orchestration
 
-- [ ] 2.1 `fixpointResolve` を 2-seed API に拡張し kernel で main wins on overlap を保証
+- [x] 2.1 `fixpointResolve` を 2-seed API に拡張し kernel で main wins on overlap を保証
   - signature を `fixpointResolve(mainSeeds, testSeeds = emptyMap(), childLookup)` に拡張
   - BFS queue entry と versions state に `OriginSet(fromMain, fromTest)` を保持し、child 展開時に親の origin を OR 継承
   - main / test 両方から到達した GA は materialize 時に `Origin.MAIN` に畳む (main wins)、test-only 到達は `Origin.TEST` で返す
@@ -45,7 +45,7 @@
   - _Boundary: kolt.resolve.Resolution_
   - _Depends: 1.2_
 
-- [ ] 2.2 `resolveTransitive` に test seeds を透過し materialize で origin を `ResolvedDep` に転写
+- [x] 2.2 `resolveTransitive` に test seeds を透過し materialize で origin を `ResolvedDep` に転写
   - `resolveTransitive(config, existingLock, cacheBase, deps, testSeeds = emptyMap())` に拡張
   - kernel から受けた `DependencyNode.origin` を `materialize` ループで `ResolvedDep.origin` に転写
   - `TransitiveResolverTest.kt` に test seeds 入力 → 返却 `ResolvedDep` の origin が MAIN / TEST で分かれることを確認するケースを追加
@@ -54,7 +54,7 @@
   - _Requirements: 1.1_
   - _Boundary: kolt.resolve.TransitiveResolver_
 
-- [ ] 2.3 `DependencyResolution.resolveDependencies` を 2-seed 呼び出し化し `JvmResolutionOutcome` を再設計
+- [x] 2.3 `DependencyResolution.resolveDependencies` を 2-seed 呼び出し化し `JvmResolutionOutcome` を再設計
   - `JvmResolutionOutcome` を `(mainClasspath: String?, mainJars: List<ResolvedJar>, allJars: List<ResolvedJar>)` に差し替え
   - `config.dependencies` を main seeds、`autoInjectedTestDeps(config) + config.testDependencies` を test seeds として `resolve()` を 1 回呼ぶ
   - 戻り `ResolvedDep` list を origin で分け、`mainJars` / `allJars` を計算 (`allJars = mainJars + testJars`、disjoint 保証済み)

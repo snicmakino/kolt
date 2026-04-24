@@ -3,11 +3,18 @@ package kolt.cli
 import com.github.michaelbull.result.getOrElse
 import kolt.infra.fileExists
 import kolt.infra.removeDirectoryRecursive
+import kolt.resolve.Origin
+import kolt.resolve.ResolvedDep
+import kolt.resolve.buildLockfileFromResolved
+import kolt.resolve.parseLockfile
+import kolt.resolve.serializeLockfile
 import kolt.testConfig
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.cinterop.ByteVar
@@ -112,8 +119,9 @@ class ResolveDependenciesNoDepsTest {
     val outcome =
       resolveDependencies(config).getOrElse { error("resolveDependencies failed: exit=$it") }
 
-    assertNull(outcome.classpath)
-    assertTrue(outcome.resolvedJars.isEmpty())
+    assertNull(outcome.mainClasspath)
+    assertTrue(outcome.mainJars.isEmpty())
+    assertTrue(outcome.allJars.isEmpty())
   }
 
   private fun createTempDir(prefix: String): String {
@@ -123,5 +131,165 @@ class ResolveDependenciesNoDepsTest {
       val result = mkdtemp(pinned.addressOf(0)) ?: error("mkdtemp failed")
       return result.toKString()
     }
+  }
+}
+
+class SplitJvmOutcomeTest {
+
+  @Test
+  fun emptyDepsProducesNullClasspathAndEmptyJarLists() {
+    val outcome = splitJvmOutcome(emptyList())
+    assertNull(outcome.mainClasspath)
+    assertTrue(outcome.mainJars.isEmpty())
+    assertTrue(outcome.allJars.isEmpty())
+  }
+
+  @Test
+  fun mixedOriginSplitsIntoMainAndAllJars() {
+    val mainDep =
+      ResolvedDep(
+        groupArtifact = "com.example:main-lib",
+        version = "1.0.0",
+        sha256 = "hashMain",
+        cachePath = "/cache/main-lib.jar",
+        origin = Origin.MAIN,
+      )
+    val mainTransitive =
+      ResolvedDep(
+        groupArtifact = "com.example:main-transitive",
+        version = "1.0.0",
+        sha256 = "hashMainT",
+        cachePath = "/cache/main-transitive.jar",
+        transitive = true,
+        origin = Origin.MAIN,
+      )
+    val testDep =
+      ResolvedDep(
+        groupArtifact = "org.junit.jupiter:junit-jupiter",
+        version = "5.10.0",
+        sha256 = "hashTest",
+        cachePath = "/cache/junit-jupiter.jar",
+        origin = Origin.TEST,
+      )
+
+    val outcome = splitJvmOutcome(listOf(mainDep, mainTransitive, testDep))
+
+    assertEquals(2, outcome.mainJars.size)
+    val mainPaths = outcome.mainJars.map { it.cachePath }.toSet()
+    assertTrue("/cache/main-lib.jar" in mainPaths)
+    assertTrue("/cache/main-transitive.jar" in mainPaths)
+    assertFalse("/cache/junit-jupiter.jar" in mainPaths)
+
+    assertEquals(3, outcome.allJars.size)
+    val allPaths = outcome.allJars.map { it.cachePath }.toSet()
+    assertTrue("/cache/main-lib.jar" in allPaths)
+    assertTrue("/cache/main-transitive.jar" in allPaths)
+    assertTrue("/cache/junit-jupiter.jar" in allPaths)
+
+    // allJars = mainJars + testJars in that order; main entries appear first.
+    assertEquals(outcome.mainJars, outcome.allJars.take(outcome.mainJars.size))
+
+    val mainClasspath = outcome.mainClasspath
+    assertNotNull(mainClasspath)
+    assertTrue(mainClasspath.split(":").toSet() == mainPaths)
+    assertFalse(mainClasspath.contains("/cache/junit-jupiter.jar"))
+  }
+
+  @Test
+  fun testOnlyDepsProduceNullMainClasspathButPopulatedAllJars() {
+    val testDep =
+      ResolvedDep(
+        groupArtifact = "org.junit.jupiter:junit-jupiter",
+        version = "5.10.0",
+        sha256 = "hashTest",
+        cachePath = "/cache/junit-jupiter.jar",
+        origin = Origin.TEST,
+      )
+
+    val outcome = splitJvmOutcome(listOf(testDep))
+
+    assertNull(outcome.mainClasspath)
+    assertTrue(outcome.mainJars.isEmpty())
+    assertEquals(1, outcome.allJars.size)
+    assertEquals("/cache/junit-jupiter.jar", outcome.allJars[0].cachePath)
+  }
+}
+
+class BuildLockfileFromResolvedTest {
+
+  @Test
+  fun mainOriginDepsAreLockedWithTestFalse() {
+    val config = testConfig()
+    val deps =
+      listOf(
+        ResolvedDep(
+          groupArtifact = "com.example:lib",
+          version = "1.0.0",
+          sha256 = "hashMain",
+          cachePath = "/cache/com/example/lib/1.0.0/lib-1.0.0.jar",
+          transitive = false,
+          origin = Origin.MAIN,
+        )
+      )
+
+    val lockfile = buildLockfileFromResolved(config, deps)
+
+    assertEquals(3, lockfile.version)
+    val entry = lockfile.dependencies["com.example:lib"]
+    assertNotNull(entry)
+    assertFalse(entry.test)
+  }
+
+  @Test
+  fun testOriginDepsAreLockedWithTestTrue() {
+    val config = testConfig()
+    val deps =
+      listOf(
+        ResolvedDep(
+          groupArtifact = "org.junit.jupiter:junit-jupiter",
+          version = "5.10.0",
+          sha256 = "hashTest",
+          cachePath = "/cache/org/junit/jupiter/junit-jupiter/5.10.0/junit-jupiter-5.10.0.jar",
+          transitive = false,
+          origin = Origin.TEST,
+        )
+      )
+
+    val lockfile = buildLockfileFromResolved(config, deps)
+
+    val entry = lockfile.dependencies["org.junit.jupiter:junit-jupiter"]
+    assertNotNull(entry)
+    assertTrue(entry.test)
+  }
+
+  @Test
+  fun serializedLockfileCarriesVersion3AndTestFlagForTestEntries() {
+    val config = testConfig()
+    val deps =
+      listOf(
+        ResolvedDep(
+          groupArtifact = "com.example:main-lib",
+          version = "1.0.0",
+          sha256 = "hashMain",
+          cachePath = "/cache/main-lib.jar",
+          origin = Origin.MAIN,
+        ),
+        ResolvedDep(
+          groupArtifact = "com.example:test-lib",
+          version = "1.0.0",
+          sha256 = "hashTest",
+          cachePath = "/cache/test-lib.jar",
+          origin = Origin.TEST,
+        ),
+      )
+
+    val lockfile = buildLockfileFromResolved(config, deps)
+    val serialized = serializeLockfile(lockfile)
+    assertTrue(serialized.contains("\"version\": 3"))
+    assertTrue(serialized.contains("\"test\": true"))
+
+    val parsed = parseLockfile(serialized).getOrElse { error("parseLockfile failed: $it") }
+    assertEquals(false, parsed.dependencies["com.example:main-lib"]?.test)
+    assertEquals(true, parsed.dependencies["com.example:test-lib"]?.test)
   }
 }

@@ -28,6 +28,20 @@ data class Child(
 )
 
 /**
+ * Per-GA resolved state tracked inside the BFS.
+ *
+ * `fromMain` / `fromTest` accumulate across every visit to this GA so origin collapses correctly at
+ * the end of the pass: main seed or any main-origin transitive edge sets fromMain; test-only
+ * reachability keeps fromMain = false. Materialization folds this into [Origin] with main winning.
+ */
+internal data class VersionEntry(
+  val version: String,
+  val direct: Boolean,
+  val fromMain: Boolean,
+  val fromTest: Boolean,
+)
+
+/**
  * Immutable snapshot of the resolution state between fixpoint passes.
  *
  * The kernel treats a pass as `Resolution -> Result<Resolution, ResolveError>`; the fixpoint loop
@@ -35,12 +49,14 @@ data class Child(
  * pins, visited, queue) stay mutable for readability and are rebuilt each pass from the same
  * contributors, so they don't need to be threaded across passes today.
  */
-data class Resolution(val versions: Map<String, Pair<String, Boolean>>)
+internal data class Resolution(val versions: Map<String, VersionEntry>)
 
 private data class QueueEntry(
   val groupArtifact: String,
   val version: String,
   val exclusions: Set<PomExclusion>,
+  val fromMain: Boolean,
+  val fromTest: Boolean,
 )
 
 /**
@@ -55,24 +71,57 @@ private data class QueueEntry(
  * reappearing and drop out of the result.
  */
 fun fixpointResolve(
-  directDeps: Map<String, String>,
+  mainSeeds: Map<String, String>,
+  testSeeds: Map<String, String> = emptyMap(),
   childLookup: (groupArtifact: String, version: String) -> Result<List<Child>, ResolveError>,
 ): Result<List<DependencyNode>, ResolveError> {
-  for ((groupArtifact, version) in directDeps) {
+  for ((groupArtifact, version) in mainSeeds) {
+    parseCoordinate(groupArtifact, version).getOrElse {
+      return Err(ResolveError.InvalidDependency(groupArtifact))
+    }
+  }
+  for ((groupArtifact, version) in testSeeds) {
     parseCoordinate(groupArtifact, version).getOrElse {
       return Err(ResolveError.InvalidDependency(groupArtifact))
     }
   }
 
-  var state = Resolution(versions = directDeps.mapValues { (_, v) -> Pair(v, true) })
+  // Main wins on overlap: if the same GA is seeded from both sides, main's
+  // version is used and test's version is dropped. `testSeeds + mainSeeds`
+  // makes main entries override test entries with the same key.
+  val effectiveDirectDeps = testSeeds + mainSeeds
+  val mainGAs = mainSeeds.keys
+  val testGAs = testSeeds.keys
+
+  var state =
+    Resolution(
+      versions =
+        effectiveDirectDeps.mapValues { (ga, v) ->
+          VersionEntry(
+            version = v,
+            direct = true,
+            fromMain = ga in mainGAs,
+            fromTest = ga in testGAs,
+          )
+        }
+    )
 
   while (true) {
     val next =
-      iterate(state, directDeps, childLookup).getOrElse {
+      iterate(state, effectiveDirectDeps, mainGAs, testGAs, childLookup).getOrElse {
         return Err(it)
       }
     if (next.versions == state.versions) {
-      return Ok(next.versions.map { (ga, vd) -> DependencyNode(ga, vd.first, vd.second) })
+      return Ok(
+        next.versions.map { (ga, ve) ->
+          DependencyNode(
+            groupArtifact = ga,
+            version = ve.version,
+            direct = ve.direct,
+            origin = if (ve.fromMain) Origin.MAIN else Origin.TEST,
+          )
+        }
+      )
     }
     state = next
   }
@@ -81,11 +130,17 @@ fun fixpointResolve(
 private fun iterate(
   prev: Resolution,
   directDeps: Map<String, String>,
+  mainGAs: Set<String>,
+  testGAs: Set<String>,
   childLookup: (String, String) -> Result<List<Child>, ResolveError>,
 ): Result<Resolution, ResolveError> {
-  val versions = mutableMapOf<String, Pair<String, Boolean>>()
+  val versions = mutableMapOf<String, VersionEntry>()
   val queue = ArrayDeque<QueueEntry>()
-  val visited = mutableSetOf<String>()
+  // Per (ga, version, exclusions): the origin bits already processed. A later
+  // pop re-enters only if it brings a new origin bit, so each (GA, v, excl)
+  // state is processed at most twice (once per origin). Cycles are still
+  // bounded because no new origin bit can appear after (true, true).
+  val visited = mutableMapOf<String, Pair<Boolean, Boolean>>()
   // Per-GA union of rejects declared by every contributor seen so far.
   // Accumulated even when the contributor's own version proposal loses the
   // conflict, mirroring Gradle's "rejects applies to the GA globally".
@@ -94,8 +149,11 @@ private fun iterate(
   val strictPins = mutableMapOf<String, String>()
 
   for ((groupArtifact, version) in directDeps) {
-    versions[groupArtifact] = Pair(version, true)
-    queue.addLast(QueueEntry(groupArtifact, version, emptySet()))
+    val fromMain = groupArtifact in mainGAs
+    val fromTest = groupArtifact in testGAs
+    versions[groupArtifact] =
+      VersionEntry(version, direct = true, fromMain = fromMain, fromTest = fromTest)
+    queue.addLast(QueueEntry(groupArtifact, version, emptySet(), fromMain, fromTest))
   }
 
   while (queue.isNotEmpty()) {
@@ -106,13 +164,16 @@ private fun iterate(
     // visits proceed so that a child excluded on one path can still reach
     // the resolved set via the other.
     val visitKey = "${entry.groupArtifact}:${entry.version}:${exclusionsKey(entry.exclusions)}"
-    if (visitKey in visited) continue
-    visited.add(visitKey)
+    val alreadyProcessed = visited[visitKey] ?: Pair(false, false)
+    val afterProcess =
+      Pair(alreadyProcessed.first || entry.fromMain, alreadyProcessed.second || entry.fromTest)
+    if (afterProcess == alreadyProcessed) continue
+    visited[visitKey] = afterProcess
 
     // A higher version may have superseded this entry while it waited in
     // the queue. Skip the lookup for versions no longer current — only the
     // final version needs its children enumerated.
-    if (versions[entry.groupArtifact]?.first != entry.version) continue
+    if (versions[entry.groupArtifact]?.version != entry.version) continue
 
     val children =
       childLookup(entry.groupArtifact, entry.version).getOrElse {
@@ -144,42 +205,63 @@ private fun iterate(
       }
       if (child.strict) {
         val alreadyResolved = versions[depGA]
-        if (alreadyResolved != null && alreadyResolved.first != child.version) {
+        if (alreadyResolved != null && alreadyResolved.version != child.version) {
           return Err(
-            ResolveError.StrictVersionConflict(depGA, child.version, alreadyResolved.first)
+            ResolveError.StrictVersionConflict(depGA, child.version, alreadyResolved.version)
           )
         }
         strictPins[depGA] = child.version
       }
 
       val committedEntry = prev.versions[depGA]
+      // Direct-dep wins even over a transitive path with a different
+      // exclusion context: the user-declared direct dep decides the
+      // children, not a transitive's exclusion list. Matches Gradle.
+      // Still propagate origin into the current pass's state so an edge
+      // from a test-origin parent into a main direct dep marks it as
+      // test-reachable (which main-wins then collapses to MAIN anyway).
+      if (committedEntry != null && committedEntry.direct) {
+        orOrigin(versions, depGA, entry.fromMain, entry.fromTest)
+        continue
+      }
       val depVersion =
         when {
           committedEntry == null -> child.version
-          committedEntry.second -> continue
-          compareVersions(committedEntry.first, child.version) > 0 -> committedEntry.first
+          compareVersions(committedEntry.version, child.version) > 0 -> committedEntry.version
           else -> child.version
         }
 
       val existing = versions[depGA]
       if (existing != null) {
-        val (existingVersion, isDirect) = existing
-        // Direct-dep wins even over a transitive path with a different
-        // exclusion context: the user-declared direct dep decides the
-        // children, not a transitive's exclusion list. Matches Gradle.
-        if (isDirect) continue
+        if (existing.direct) {
+          orOrigin(versions, depGA, entry.fromMain, entry.fromTest)
+          continue
+        }
         // Keep enqueueing same-version entries with different exclusion
         // sets so the per-path exclusion check runs against each one.
         // Strictly-lower versions stay skipped (they'd lose the
-        // highest-wins anyway).
-        if (compareVersions(depVersion, existingVersion) < 0) continue
+        // highest-wins anyway); still OR origin for tracking.
+        if (compareVersions(depVersion, existing.version) < 0) {
+          orOrigin(versions, depGA, entry.fromMain, entry.fromTest)
+          continue
+        }
       }
 
       val mergedExclusions = entry.exclusions + child.exclusions
-      if (existing == null || compareVersions(depVersion, existing.first) > 0) {
-        versions[depGA] = Pair(depVersion, false)
+      val mergedFromMain = (existing?.fromMain ?: false) || entry.fromMain
+      val mergedFromTest = (existing?.fromTest ?: false) || entry.fromTest
+      if (existing == null || compareVersions(depVersion, existing.version) > 0) {
+        versions[depGA] =
+          VersionEntry(
+            version = depVersion,
+            direct = false,
+            fromMain = mergedFromMain,
+            fromTest = mergedFromTest,
+          )
+      } else {
+        versions[depGA] = existing.copy(fromMain = mergedFromMain, fromTest = mergedFromTest)
       }
-      queue.addLast(QueueEntry(depGA, depVersion, mergedExclusions))
+      queue.addLast(QueueEntry(depGA, depVersion, mergedExclusions, entry.fromMain, entry.fromTest))
     }
   }
 
@@ -188,14 +270,28 @@ private fun iterate(
   // earlier-accepted version (including direct deps): the BFS can't re-queue
   // mid-pass. Rejects are rebuilt each pass from the same contributors, so
   // any reject that fires in pass N also fires in pass N+1.
-  for ((groupArtifact, versionAndDirect) in versions) {
+  for ((groupArtifact, ve) in versions) {
     val patterns = rejects[groupArtifact] ?: continue
-    val version = versionAndDirect.first
+    val version = ve.version
     val matched = patterns.firstOrNull { matchesRejectPattern(version, it) } ?: continue
     return Err(ResolveError.RejectedVersionResolved(groupArtifact, version, matched))
   }
 
   return Ok(Resolution(versions = versions.toMap()))
+}
+
+private fun orOrigin(
+  versions: MutableMap<String, VersionEntry>,
+  ga: String,
+  fromMain: Boolean,
+  fromTest: Boolean,
+) {
+  val existing = versions[ga] ?: return
+  val mergedMain = existing.fromMain || fromMain
+  val mergedTest = existing.fromTest || fromTest
+  if (mergedMain != existing.fromMain || mergedTest != existing.fromTest) {
+    versions[ga] = existing.copy(fromMain = mergedMain, fromTest = mergedTest)
+  }
 }
 
 /**
@@ -206,9 +302,9 @@ fun resolveGraph(
   directDeps: Map<String, String>,
   pomLookup: (groupArtifact: String, version: String) -> PomInfo?,
 ): Result<List<DependencyNode>, ResolveError> =
-  fixpointResolve(directDeps, pomChildLookup(pomLookup))
+  fixpointResolve(mainSeeds = directDeps, childLookup = pomChildLookup(pomLookup))
 
-private fun pomChildLookup(
+internal fun pomChildLookup(
   pomLookup: (String, String) -> PomInfo?
 ): (String, String) -> Result<List<Child>, ResolveError> = { groupArtifact, version ->
   val pomInfo = pomLookup(groupArtifact, version)

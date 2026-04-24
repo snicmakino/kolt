@@ -20,6 +20,7 @@ import kolt.build.nativedaemon.formatNativeDaemonPreconditionWarning
 import kolt.build.nativedaemon.resolveNativeDaemonPreconditions
 import kolt.config.*
 import kolt.infra.*
+import kolt.resolve.buildClasspath
 import kolt.tool.*
 import kotlin.time.TimeSource
 
@@ -141,7 +142,7 @@ internal fun doCheck(useDaemon: Boolean = true): Result<Unit, Int> {
       .getOrElse {
         return Err(it)
       }
-      .classpath
+      .mainClasspath
   val pArgs =
     resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse {
       eprintln("error: ${it.message}")
@@ -240,7 +241,11 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     resolveDependencies(config).getOrElse {
       return Err(it)
     }
-  val classpath = resolutionOutcome.classpath
+  // Main compile sees main-only deps; doTest/doRun get the full classpath
+  // (main ∪ test) through BuildResult below. Task 3.1 will narrow doRun to
+  // main-only; for now the minimum change keeps that path intact.
+  val mainClasspath = resolutionOutcome.mainClasspath
+  val classpath = buildClasspath(resolutionOutcome.allJars.map { it.cachePath }).ifEmpty { null }
   val pluginJarPathsByAlias =
     resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse {
       eprintln("error: ${it.message}")
@@ -275,11 +280,13 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
   val request =
     CompileRequest(
       workingDir = cwd,
+      // Main compile only sees main closure deps (ADR 0027 §1; spec
+      // main-test-closure-separation): test-origin jars never reach kotlinc.
       // TODO(#14 S5+): teach resolveDependencies to return List<String>
       // directly and delete this split.
       classpath =
-        if (classpath.isNullOrEmpty()) emptyList()
-        else classpath.split(":").filter { it.isNotEmpty() },
+        if (mainClasspath.isNullOrEmpty()) emptyList()
+        else mainClasspath.split(":").filter { it.isNotEmpty() },
       // BTA requires individual .kt files, not directories (#117).
       sources =
         expandKotlinSources(config.build.sources.map { absolutise(it, cwd) }).getOrElse { err ->
@@ -326,7 +333,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
   // previous kind=app build. Manifest write failure is treated as a
   // build failure (ADR 0001: Err propagates, jar artifact is left on
   // disk mirroring the existing jarCmd failure semantics).
-  handleRuntimeClasspathManifest(config, resolutionOutcome.resolvedJars).getOrElse { err ->
+  handleRuntimeClasspathManifest(config, resolutionOutcome.mainJars).getOrElse { err ->
     val failure = err as ManifestWriteError.WriteFailed
     eprintln(
       "error: could not write runtime classpath manifest at ${failure.path}: ${failure.reason}"

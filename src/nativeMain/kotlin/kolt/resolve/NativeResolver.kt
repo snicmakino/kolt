@@ -57,7 +57,7 @@ fun resolveNative(
   val childLookup = makeNativeChildLookup(processed, nativeTarget, cacheBase, repos, deps)
 
   val nodes =
-    fixpointResolve(directDeps, childLookup).getOrElse {
+    fixpointResolve(mainSeeds = directDeps, childLookup = childLookup).getOrElse {
       return Err(it)
     }
 

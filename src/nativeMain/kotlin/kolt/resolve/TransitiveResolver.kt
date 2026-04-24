@@ -13,6 +13,7 @@ fun resolveTransitive(
   existingLock: Lockfile?,
   cacheBase: String,
   deps: ResolverDeps,
+  testSeeds: Map<String, String> = emptyMap(),
 ): Result<ResolveResult, ResolveError> {
   val repos = config.repositories.values.toList()
 
@@ -33,9 +34,14 @@ fun resolveTransitive(
   }
 
   val nodes =
-    resolveGraph(config.dependencies, pomLookup).getOrElse { error ->
-      return Err(error)
-    }
+    fixpointResolve(
+        mainSeeds = config.dependencies,
+        testSeeds = testSeeds,
+        childLookup = pomChildLookup(pomLookup),
+      )
+      .getOrElse { error ->
+        return Err(error)
+      }
 
   return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos)
 }
@@ -213,7 +219,14 @@ private fun materialize(
     }
 
     resolvedDeps.add(
-      ResolvedDep(node.groupArtifact, node.version, hash, fullCachePath, transitive = !node.direct)
+      ResolvedDep(
+        groupArtifact = node.groupArtifact,
+        version = node.version,
+        sha256 = hash,
+        cachePath = fullCachePath,
+        transitive = !node.direct,
+        origin = node.origin,
+      )
     )
   }
 

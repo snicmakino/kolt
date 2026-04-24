@@ -119,9 +119,10 @@ fun resolve(
   existingLock: Lockfile?,
   cacheBase: String,
   deps: ResolverDeps,
+  testSeeds: Map<String, String> = emptyMap(),
 ): Result<ResolveResult, ResolveError> =
   if (config.build.target in NATIVE_TARGETS) resolveNative(config, cacheBase, deps)
-  else resolveTransitive(config, existingLock, cacheBase, deps)
+  else resolveTransitive(config, existingLock, cacheBase, deps, testSeeds = testSeeds)
 
 fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lockfile {
   return Lockfile(
@@ -129,6 +130,14 @@ fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lock
     kotlin = config.kotlin.version,
     jvmTarget = config.build.jvmTarget,
     dependencies =
-      deps.associate { it.groupArtifact to LockEntry(it.version, it.sha256, it.transitive) },
+      deps.associate {
+        it.groupArtifact to
+          LockEntry(
+            version = it.version,
+            sha256 = it.sha256,
+            transitive = it.transitive,
+            test = it.origin == Origin.TEST,
+          )
+      },
   )
 }

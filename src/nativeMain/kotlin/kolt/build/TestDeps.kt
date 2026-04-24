@@ -7,7 +7,3 @@ fun autoInjectedTestDeps(config: KoltConfig): Map<String, String> {
   if (config.build.testSources.isEmpty() && config.testDependencies.isEmpty()) return emptyMap()
   return mapOf("org.jetbrains.kotlin:kotlin-test-junit5" to config.kotlin.version)
 }
-
-// Priority (right wins): auto-injected < main deps < user test deps.
-fun mergeAllDeps(config: KoltConfig): Map<String, String> =
-  autoInjectedTestDeps(config) + config.dependencies + config.testDependencies
