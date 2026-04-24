@@ -22,12 +22,14 @@ internal sealed interface UserJdkError {
 // user code should be read against.
 //
 // Contract:
-//  - `[build] jdk` set: return the managed install if present; otherwise
-//    `ManagedMissing`. Never silently fall back to a system JDK — doing so
-//    would contradict the pin.
-//  - `[build] jdk` unset: probe `java` on PATH and return its `java.home`,
-//    tagging the version with `jvmTarget` for the SDK label. If probing
-//    fails, return `SystemProbeFailed`.
+//  - `[build] jdk` set to a non-blank value: return the managed install when
+//    `bin/java` is present; otherwise `ManagedMissing`. Probing `bin/java`
+//    (not just the directory) catches interrupted installs and manual prunes
+//    that would otherwise feed kotlin-lsp a home with no class roots. Never
+//    silently fall back to a system JDK — that would contradict the pin.
+//  - `[build] jdk` unset or blank: probe `java` on PATH and return its
+//    `java.home`, tagging the version with `jvmTarget` for the SDK label. If
+//    probing fails, return `SystemProbeFailed`.
 internal fun resolveUserJdkHome(
   config: KoltConfig,
   paths: KoltPaths,
@@ -35,9 +37,9 @@ internal fun resolveUserJdkHome(
   probe: () -> String? = ::probeSystemJavaHome,
 ): Result<UserJdkHome, UserJdkError> {
   val managed = config.build.jdk
-  if (managed != null) {
+  if (!managed.isNullOrBlank()) {
     val home = paths.jdkPath(managed)
-    return if (exists(home)) Ok(UserJdkHome(managed, home))
+    return if (exists(paths.javaBin(managed))) Ok(UserJdkHome(managed, home))
     else Err(UserJdkError.ManagedMissing(managed, home))
   }
   val systemHome = probe() ?: return Err(UserJdkError.SystemProbeFailed)

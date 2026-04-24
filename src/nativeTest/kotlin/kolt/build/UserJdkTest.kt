@@ -21,7 +21,7 @@ class UserJdkTest {
       resolveUserJdkHome(
         config,
         paths,
-        exists = { path -> path == paths.jdkPath("21") },
+        exists = { path -> path == paths.javaBin("21") },
         probe = { error("must not probe system java when managed JDK resolves") },
       )
 
@@ -29,6 +29,47 @@ class UserJdkTest {
     assertEquals("21", home.version)
     assertEquals(paths.jdkPath("21"), home.home)
     assertNull(result.getError())
+  }
+
+  // An interrupted toolchain install or a manual prune can leave the JDK
+  // directory behind without `bin/java`. Treat that the same as missing — a
+  // home with no class roots would mislead kotlin-lsp.
+  @Test
+  fun managedJdkReturnsManagedMissingWhenBinJavaMissingEvenIfDirExists() {
+    val config = testConfig(jdk = "21")
+
+    val result =
+      resolveUserJdkHome(
+        config,
+        paths,
+        exists = { path -> path == paths.jdkPath("21") },
+        probe = { error("must not probe system java when managed JDK is pinned") },
+      )
+
+    assertNull(result.get())
+    assertEquals(
+      UserJdkError.ManagedMissing(version = "21", expectedPath = paths.jdkPath("21")),
+      result.getError(),
+    )
+  }
+
+  // `jdk = ""` in kolt.toml parses as a non-null blank string. Treat it like
+  // an unset pin so the warning doesn't surface an empty version label.
+  @Test
+  fun blankManagedJdkFallsBackToSystemProbe() {
+    val config = testConfig(jdk = "", jvmTarget = "17")
+
+    val result =
+      resolveUserJdkHome(
+        config,
+        paths,
+        exists = { error("must not check filesystem for a blank pin") },
+        probe = { "/usr/lib/jvm/java-17-openjdk" },
+      )
+
+    val home = assertNotNull(result.get())
+    assertEquals("17", home.version)
+    assertEquals("/usr/lib/jvm/java-17-openjdk", home.home)
   }
 
   // When the user pinned a managed JDK that hasn't been installed yet,
