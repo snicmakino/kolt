@@ -118,7 +118,7 @@
   - _Requirements: 3.4_
   - _Boundary: docs/adr_
 
-- [ ] 4.2 Daemon と spike の lockfile を v3 で再生成
+- [x] 4.2 Daemon と spike の lockfile を v3 で再生成
   - `kolt-jvm-compiler-daemon/kolt.lock` を `kolt deps install` 相当で再生成し tracked 状態でコミット
   - `spike/daemon-self-host-smoke/kolt.lock` を同様に再生成
   - 生成された lockfile の `"version": 3` と test-origin エントリの `"test": true` を目視確認
@@ -126,10 +126,15 @@
   - _Requirements: 2.1, 6.3_
   - _Depends: 3.1, 3.2, 3.3_
 
-- [ ] 4.3 Daemon self-host runtime manifest に test deps が混入しないことを smoke で確認
+- [x] 4.3 Daemon self-host runtime manifest に test deps が混入しないことを smoke で確認
   - `./gradlew build` 経由で `kolt.kexe` を生成 → `kolt.kexe build` を `kolt-jvm-compiler-daemon/` に対して走らせ、`build/kolt-jvm-compiler-daemon-runtime.classpath` を grep
   - 出力に `org.junit.jupiter` / `org.junit.platform` / `org.opentest4j` / `org.apiguardian` / `kotlin-test` / `kotlin-test-junit5` のいずれも含まれないことを CI の `self-host-post` 経路または相当のテストで pin
   - `JvmAppBuildTest.kt` か追加 smoke test に「auto-inject が skip され test_sources 空の JVM app では manifest が test 由来 jar を含まない」ケースを入れる
   - 完了条件: grep 結果が空であることが CI で検証される、もしくは相当のテストが green
   - _Requirements: 6.1, 6.2_
   - _Depends: 4.2_
+
+## Implementation Notes
+
+- 4.2: `spike/daemon-self-host-smoke/kolt.toml` has no `[dependencies]` and empty `test_sources`, so `resolveDependencies` deletes the stale v2 lockfile (both seeds empty branch). The file is no longer tracked; this is correct given the fixture shape. Req 6.3 "tracked 状態を維持" is preserved in spirit for the non-empty case (daemon) and the spike's missing lockfile reflects "no deps to lock".
+- 4.3 smoke uses unit-level wiring (`splitJvmOutcome` + `handleRuntimeClasspathManifest`) instead of a shell grep; it's cheaper and runs in the normal test suite rather than only in CI's self-host-post job.

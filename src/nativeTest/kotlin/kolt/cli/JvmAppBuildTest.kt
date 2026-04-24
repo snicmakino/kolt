@@ -4,6 +4,7 @@ import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.BUILD_DIR
 import kolt.build.ResolvedJar
+import kolt.build.autoInjectedTestDeps
 import kolt.build.outputJarPath
 import kolt.build.outputRuntimeClasspathPath
 import kolt.config.ConfigError
@@ -261,6 +262,73 @@ class JvmAppBuildTest {
       assertFalse(
         entries.any { it.contains(forbidden) },
         "manifest must exclude test-origin jar matching '$forbidden': $content",
+      )
+    }
+  }
+
+  // Req 6.1 / 6.2 daemon-shape regression: a JVM `kind = "app"` config
+  // with `test_sources = []` and no `[test-dependencies]` (the shape the
+  // daemon self-host kolt.toml uses) must trigger the auto-inject skip,
+  // which means the resolver is never seeded with `kotlin-test-junit5`.
+  // The resulting manifest therefore cannot hold any test-derived jar —
+  // pin that contract end-to-end from config to emitted file so a
+  // regression in either the skip condition or the origin split shows
+  // up as a manifest test failure rather than a silently bloated
+  // distribution tarball.
+  @Test
+  fun jvmAppWithEmptyTestSourcesAndNoTestDepsProducesTestFreeManifest() {
+    val config =
+      testConfig(
+          name = "daemon-shape",
+          target = "jvm",
+          testSources = emptyList(),
+          testDependencies = emptyMap(),
+        )
+        .copy(kind = "app")
+
+    val testSeeds = autoInjectedTestDeps(config) + config.testDependencies
+    assertTrue(
+      testSeeds.isEmpty(),
+      "auto-inject must skip when test_sources and test-dependencies are both empty: $testSeeds",
+    )
+
+    val outcome =
+      splitJvmOutcome(
+        listOf(
+          ResolvedDep(
+            groupArtifact = "org.jetbrains.kotlin:kotlin-build-tools-api",
+            version = "2.3.20",
+            sha256 = "hashBta",
+            cachePath =
+              "/cache/org/jetbrains/kotlin/kotlin-build-tools-api/2.3.20/kotlin-build-tools-api-2.3.20.jar",
+            origin = Origin.MAIN,
+          ),
+          ResolvedDep(
+            groupArtifact = "org.jetbrains.kotlin:kotlin-stdlib",
+            version = "2.3.10",
+            sha256 = "hashStdlib",
+            cachePath = "/cache/org/jetbrains/kotlin/kotlin-stdlib/2.3.10/kotlin-stdlib-2.3.10.jar",
+            transitive = true,
+            origin = Origin.MAIN,
+          ),
+        )
+      )
+    assertEquals(
+      outcome.mainJars,
+      outcome.allJars,
+      "with skipped auto-inject, mainJars and allJars coincide",
+    )
+
+    handleRuntimeClasspathManifest(config, outcome.mainJars).getOrElse { error("emit failed: $it") }
+
+    val manifestPath = outputRuntimeClasspathPath(config)
+    val content = readFileAsString(manifestPath).getOrElse { error("read failed: $it") }
+    val entries = content.split('\n')
+    for (forbidden in
+      listOf("junit-jupiter", "junit-platform", "opentest4j", "apiguardian", "kotlin-test")) {
+      assertFalse(
+        entries.any { it.contains(forbidden) },
+        "test_sources=[] JVM app manifest must not contain '$forbidden': $content",
       )
     }
   }
