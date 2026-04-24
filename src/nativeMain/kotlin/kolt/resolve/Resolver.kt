@@ -81,6 +81,7 @@ data class ResolvedDep(
   val cachePath: String,
   val transitive: Boolean = false,
   val origin: Origin = Origin.MAIN,
+  val sourcesPath: String? = null,
 )
 
 data class ResolveResult(val deps: List<ResolvedDep>, val lockChanged: Boolean)

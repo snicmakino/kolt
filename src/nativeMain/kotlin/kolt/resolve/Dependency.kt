@@ -20,20 +20,37 @@ fun parseCoordinate(groupArtifact: String, version: String): Result<Coordinate, 
   return Ok(Coordinate(group, artifact, version))
 }
 
-private fun buildMavenUrl(coord: Coordinate, baseUrl: String, extension: String): String {
+private fun buildMavenUrl(
+  coord: Coordinate,
+  baseUrl: String,
+  extension: String,
+  classifier: String? = null,
+): String {
   val groupPath = coord.group.replace('.', '/')
-  return "$baseUrl/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
+  val suffix = if (classifier != null) "-$classifier" else ""
+  return "$baseUrl/$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}$suffix.$extension"
 }
 
-private fun buildRelativePath(coord: Coordinate, extension: String): String {
+private fun buildRelativePath(
+  coord: Coordinate,
+  extension: String,
+  classifier: String? = null,
+): String {
   val groupPath = coord.group.replace('.', '/')
-  return "$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}.$extension"
+  val suffix = if (classifier != null) "-$classifier" else ""
+  return "$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}$suffix.$extension"
 }
 
 fun buildDownloadUrl(coord: Coordinate, baseUrl: String): String =
   buildMavenUrl(coord, baseUrl, "jar")
 
 fun buildCachePath(coord: Coordinate): String = buildRelativePath(coord, "jar")
+
+fun buildSourcesDownloadUrl(coord: Coordinate, baseUrl: String): String =
+  buildMavenUrl(coord, baseUrl, "jar", classifier = "sources")
+
+fun buildSourcesCachePath(coord: Coordinate): String =
+  buildRelativePath(coord, "jar", classifier = "sources")
 
 fun buildPomDownloadUrl(coord: Coordinate, baseUrl: String): String =
   buildMavenUrl(coord, baseUrl, "pom")

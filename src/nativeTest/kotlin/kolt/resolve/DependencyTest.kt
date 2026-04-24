@@ -90,6 +90,23 @@ class DependencyTest {
   }
 
   @Test
+  fun buildSourcesDownloadUrlProducesHyphenClassifier() {
+    val coord = Coordinate("org.jetbrains.kotlinx", "kotlinx-coroutines-core", "1.9.0")
+    val url = buildSourcesDownloadUrl(coord, MAVEN_CENTRAL_BASE)
+    assertEquals(
+      "https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/1.9.0/kotlinx-coroutines-core-1.9.0-sources.jar",
+      url,
+    )
+  }
+
+  @Test
+  fun buildSourcesCachePathProducesHyphenClassifier() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val path = buildSourcesCachePath(coord)
+    assertEquals("com/example/lib/1.0.0/lib-1.0.0-sources.jar", path)
+  }
+
+  @Test
   fun buildClasspathJoinsWithColon() {
     val paths = listOf("/home/user/.kolt/cache/a.jar", "/home/user/.kolt/cache/b.jar")
     assertEquals("/home/user/.kolt/cache/a.jar:/home/user/.kolt/cache/b.jar", buildClasspath(paths))

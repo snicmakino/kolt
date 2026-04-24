@@ -46,6 +46,34 @@ fun resolveTransitive(
   return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos)
 }
 
+// Best-effort sources fetch. Sources are editor UX — missing upstream
+// sources are common (esp. internal artifacts) and network hiccups on
+// sources must never fail the build. A probe is attempted only when the
+// binary was freshly downloaded in this resolve, so that subsequent
+// resolves on a warm cache do not re-hit the network for negative
+// results. Ground truth is cache presence: if the file lands on disk
+// (either now or from a prior run) we emit its path; otherwise null.
+internal fun resolveSourcesPath(
+  coord: Coordinate,
+  cacheBase: String,
+  repos: List<String>,
+  deps: ResolverDeps,
+  binaryWasCached: Boolean,
+): String? {
+  val sourcesCachePath = "$cacheBase/${buildSourcesCachePath(coord)}"
+  if (deps.fileExists(sourcesCachePath)) return sourcesCachePath
+  if (binaryWasCached) return null
+  val error =
+    downloadFromRepositories(
+        repos,
+        sourcesCachePath,
+        { buildSourcesDownloadUrl(coord, it) },
+        deps::downloadFile,
+      )
+      .getError()
+  return if (error == null) sourcesCachePath else null
+}
+
 // Falls back to next repo only on 404; any other error stops immediately.
 internal fun downloadFromRepositories(
   repos: List<String>,
@@ -186,7 +214,8 @@ private fun materialize(
     val fullCachePath = "$cacheBase/$relativePath"
     val lockEntry = existingLock?.dependencies?.get(node.groupArtifact)
 
-    if (!deps.fileExists(fullCachePath)) {
+    val binaryWasCached = deps.fileExists(fullCachePath)
+    if (!binaryWasCached) {
       val parentDir = fullCachePath.substringBeforeLast('/')
       deps.ensureDirectoryRecursive(parentDir).getOrElse {
         return Err(ResolveError.DirectoryCreateFailed(parentDir))
@@ -218,6 +247,8 @@ private fun materialize(
       lockChanged = true
     }
 
+    val sourcesPath = resolveSourcesPath(coord, cacheBase, repos, deps, binaryWasCached)
+
     resolvedDeps.add(
       ResolvedDep(
         groupArtifact = node.groupArtifact,
@@ -226,6 +257,7 @@ private fun materialize(
         cachePath = fullCachePath,
         transitive = !node.direct,
         origin = node.origin,
+        sourcesPath = sourcesPath,
       )
     )
   }

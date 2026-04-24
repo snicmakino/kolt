@@ -138,7 +138,17 @@ private fun buildTestModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
 private fun buildLibraryEntry(dep: ResolvedDep): JsonObject = buildJsonObject {
   put("name", "${dep.groupArtifact}:${dep.version}")
   put("type", "java-imported")
-  putJsonArray("roots") { add(buildJsonObject { put("path", dep.cachePath) }) }
+  putJsonArray("roots") {
+    add(buildJsonObject { put("path", dep.cachePath) })
+    dep.sourcesPath?.let { src ->
+      add(
+        buildJsonObject {
+          put("path", src)
+          put("type", "SOURCES")
+        }
+      )
+    }
+  }
   putJsonObject("properties") {
     putJsonObject("attributes") {
       val parts = dep.groupArtifact.split(":")

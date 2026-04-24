@@ -125,6 +125,58 @@ class WorkspaceTest {
     )
   }
 
+  // kotlin-lsp's LibraryRootData reads multi-root libraries: the first
+  // entry defaults to CLASSES, an additional entry with type=SOURCES
+  // points at the -sources.jar so IDE go-to-definition navigates into
+  // Kotlin source instead of decompiled bytecode (losing inline bodies,
+  // default args, reified types).
+  @Test
+  fun generateWorkspaceJsonLibraryAttachesSourcesRootWhenAvailable() {
+    val config = testConfig()
+    val mainDeps =
+      listOf(
+        ResolvedDep(
+          "com.example:lib",
+          "1.0.0",
+          "abc123",
+          "/cache/com/example/lib/1.0.0/lib-1.0.0.jar",
+          sourcesPath = "/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar",
+        )
+      )
+
+    val result = generateWorkspaceJson(config, mainDeps, emptyList())
+    val root = parseJson(result)
+
+    val roots = root["libraries"]!!.jsonArray[0].jsonObject["roots"]!!.jsonArray
+    assertEquals(2, roots.size)
+    assertEquals(
+      "/cache/com/example/lib/1.0.0/lib-1.0.0.jar",
+      roots[0].jsonObject["path"]!!.jsonPrimitive.content,
+    )
+    assertEquals(
+      null,
+      roots[0].jsonObject["type"],
+      "binary root omits type so kotlin-lsp defaults to CLASSES",
+    )
+    assertEquals(
+      "/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar",
+      roots[1].jsonObject["path"]!!.jsonPrimitive.content,
+    )
+    assertEquals("SOURCES", roots[1].jsonObject["type"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun generateWorkspaceJsonLibraryOmitsSourcesRootWhenNull() {
+    val config = testConfig()
+    val mainDeps = listOf(ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar"))
+
+    val result = generateWorkspaceJson(config, mainDeps, emptyList())
+    val root = parseJson(result)
+
+    val roots = root["libraries"]!!.jsonArray[0].jsonObject["roots"]!!.jsonArray
+    assertEquals(1, roots.size)
+  }
+
   @Test
   fun generateWorkspaceJsonLibraryAttributes() {
     val config = testConfig()

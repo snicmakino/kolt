@@ -955,6 +955,7 @@ class TransitiveResolverTest {
     cachedFiles: MutableSet<String> = mutableSetOf(),
     sha256Results: Map<String, String> = emptyMap(),
     pomContents: Map<String, String> = emptyMap(),
+    downloadErrors: Map<String, DownloadError> = emptyMap(),
   ): ResolverDeps {
     return object : ResolverDeps {
       override fun fileExists(path: String): Boolean = path in cachedFiles
@@ -962,6 +963,8 @@ class TransitiveResolverTest {
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
       override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        val forcedError = downloadErrors[url]
+        if (forcedError != null) return Err(forcedError)
         cachedFiles.add(destPath)
         return Ok(Unit)
       }
@@ -976,6 +979,141 @@ class TransitiveResolverTest {
         return Ok(content)
       }
     }
+  }
+
+  // Sources are fetched best-effort the first time a binary hits the
+  // cache. All failures are silent (missing upstream sources are common
+  // and must never fail the build); once the binary is warm we do not
+  // re-probe, so a missing sources.jar on a warm cache stays missing
+  // until the user clears the cache.
+  @Test
+  fun resolveSourcesPathReturnsCachedPathWhenAlreadyOnDisk() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val sourcesCachePath = "/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar"
+    val deps = fakeTransitiveDeps(cachedFiles = mutableSetOf(sourcesCachePath))
+
+    val result =
+      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = true)
+
+    assertEquals(sourcesCachePath, result)
+  }
+
+  @Test
+  fun resolveSourcesPathSkipsNetworkWhenBinaryWasCachedAndNoSourcesOnDisk() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val downloadedUrls = mutableListOf<String>()
+    val deps =
+      object : ResolverDeps {
+        override fun fileExists(path: String): Boolean = false
+
+        override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
+
+        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+          downloadedUrls.add(url)
+          return Ok(Unit)
+        }
+
+        override fun computeSha256(filePath: String): Result<String, Sha256Error> =
+          Err(Sha256Error(filePath))
+
+        override fun readFileContent(path: String): Result<String, OpenFailed> =
+          Err(OpenFailed(path))
+      }
+
+    val result =
+      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = true)
+
+    assertEquals(null, result)
+    assertTrue(downloadedUrls.isEmpty(), "must not re-probe when binary was already cached")
+  }
+
+  @Test
+  fun resolveSourcesPathDownloadsWhenBinaryWasFreshAndSourcesAvailable() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val deps = fakeTransitiveDeps()
+
+    val result =
+      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+
+    assertEquals("/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar", result)
+  }
+
+  @Test
+  fun resolveSourcesPathReturnsNullOn404() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val sourcesUrl = "https://r/com/example/lib/1.0.0/lib-1.0.0-sources.jar"
+    val deps =
+      fakeTransitiveDeps(
+        downloadErrors = mapOf(sourcesUrl to DownloadError.HttpFailed(sourcesUrl, 404))
+      )
+
+    val result =
+      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+
+    assertEquals(null, result)
+  }
+
+  @Test
+  fun resolveSourcesPathReturnsNullOnNetworkError() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val sourcesUrl = "https://r/com/example/lib/1.0.0/lib-1.0.0-sources.jar"
+    val deps =
+      fakeTransitiveDeps(
+        downloadErrors = mapOf(sourcesUrl to DownloadError.NetworkError(sourcesUrl, "timeout"))
+      )
+
+    val result =
+      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+
+    assertEquals(null, result)
+  }
+
+  @Test
+  fun resolveTransitivePopulatesSourcesPathWhenAvailable() {
+    val config = testConfig().copy(dependencies = mapOf("com.example:lib" to "1.0.0"))
+    val pomXml =
+      """
+        <project>
+            <groupId>com.example</groupId>
+            <artifactId>lib</artifactId>
+            <version>1.0.0</version>
+        </project>
+      """
+        .trimIndent()
+
+    val deps =
+      fakeTransitiveDeps(
+        sha256Results = mapOf("/cache/com/example/lib/1.0.0/lib-1.0.0.jar" to "hash1"),
+        pomContents = mapOf("/cache/com/example/lib/1.0.0/lib-1.0.0.pom" to pomXml),
+      )
+    val resolved = assertNotNull(resolveTransitive(config, null, "/cache", deps).get())
+
+    assertEquals("/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar", resolved.deps[0].sourcesPath)
+  }
+
+  @Test
+  fun resolveTransitiveLeavesSourcesPathNullWhen404() {
+    val config = testConfig().copy(dependencies = mapOf("com.example:lib" to "1.0.0"))
+    val pomXml =
+      """
+        <project>
+            <groupId>com.example</groupId>
+            <artifactId>lib</artifactId>
+            <version>1.0.0</version>
+        </project>
+      """
+        .trimIndent()
+    val sourcesUrl = "https://repo1.maven.org/maven2/com/example/lib/1.0.0/lib-1.0.0-sources.jar"
+
+    val deps =
+      fakeTransitiveDeps(
+        sha256Results = mapOf("/cache/com/example/lib/1.0.0/lib-1.0.0.jar" to "hash1"),
+        pomContents = mapOf("/cache/com/example/lib/1.0.0/lib-1.0.0.pom" to pomXml),
+        downloadErrors = mapOf(sourcesUrl to DownloadError.HttpFailed(sourcesUrl, 404)),
+      )
+    val resolved = assertNotNull(resolveTransitive(config, null, "/cache", deps).get())
+
+    assertEquals(null, resolved.deps[0].sourcesPath)
   }
 
   @Test
