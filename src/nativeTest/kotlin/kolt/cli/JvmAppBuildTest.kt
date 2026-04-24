@@ -12,6 +12,8 @@ import kolt.infra.fileExists
 import kolt.infra.readFileAsString
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
+import kolt.resolve.Origin
+import kolt.resolve.ResolvedDep
 import kolt.testConfig
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -200,6 +202,99 @@ class JvmAppBuildTest {
     }
 
     assertFalse(fileExists(manifestPath), "kind flip app→lib must remove the manifest")
+  }
+
+  // Given a resolution outcome that mixes main and test origin deps,
+  // the main-only slice fed into `handleRuntimeClasspathManifest` must
+  // exclude junit-jupiter / opentest4j / apiguardian etc., so daemon
+  // tarballs don't pick them up via `scripts/assemble-dist.sh`.
+  @Test
+  fun jvmAppManifestExcludesTestOriginJarsFromSplitOutcome() {
+    val config = testConfig(name = "app-with-tests", target = "jvm").copy(kind = "app")
+    val outcome =
+      splitJvmOutcome(
+        listOf(
+          ResolvedDep(
+            groupArtifact = "com.example:main-lib",
+            version = "1.0.0",
+            sha256 = "hashMain",
+            cachePath = "/cache/com/example/main-lib/1.0.0/main-lib-1.0.0.jar",
+            origin = Origin.MAIN,
+          ),
+          ResolvedDep(
+            groupArtifact = "org.junit.jupiter:junit-jupiter",
+            version = "5.10.0",
+            sha256 = "hashJupiter",
+            cachePath = "/cache/org/junit/jupiter/junit-jupiter/5.10.0/junit-jupiter-5.10.0.jar",
+            origin = Origin.TEST,
+          ),
+          ResolvedDep(
+            groupArtifact = "org.opentest4j:opentest4j",
+            version = "1.3.0",
+            sha256 = "hashOpentest4j",
+            cachePath = "/cache/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar",
+            transitive = true,
+            origin = Origin.TEST,
+          ),
+          ResolvedDep(
+            groupArtifact = "org.apiguardian:apiguardian-api",
+            version = "1.1.2",
+            sha256 = "hashApiguardian",
+            cachePath = "/cache/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar",
+            transitive = true,
+            origin = Origin.TEST,
+          ),
+        )
+      )
+
+    handleRuntimeClasspathManifest(config, outcome.mainJars).getOrElse { error("emit failed: $it") }
+
+    val manifestPath = outputRuntimeClasspathPath(config)
+    val content = readFileAsString(manifestPath).getOrElse { error("read failed: $it") }
+    val entries = content.split('\n')
+    assertEquals(1, entries.size, "main-only manifest must hold exactly the main dep")
+    assertTrue(
+      entries.single().endsWith("main-lib-1.0.0.jar"),
+      "main origin jar must be present: $content",
+    )
+    for (forbidden in listOf("junit-jupiter", "opentest4j", "apiguardian", "kotlin-test")) {
+      assertFalse(
+        entries.any { it.contains(forbidden) },
+        "manifest must exclude test-origin jar matching '$forbidden': $content",
+      )
+    }
+  }
+
+  // The disjoint-ness invariant holds upstream (main wins on overlap in
+  // the resolver kernel); `splitJvmOutcome.allJars` is simply
+  // `mainJars + testJars` with no dedup step required. Pin the property
+  // so a regression in the kernel or the split helper shows as a
+  // mixed-origin test rather than an obscure classpath duplicate.
+  @Test
+  fun mainAndTestAllJarsAreDisjointByConstruction() {
+    val outcome =
+      splitJvmOutcome(
+        listOf(
+          ResolvedDep(
+            groupArtifact = "com.example:overlap",
+            version = "1.0.0",
+            sha256 = "hashMain",
+            cachePath = "/cache/overlap-main.jar",
+            origin = Origin.MAIN,
+          ),
+          ResolvedDep(
+            groupArtifact = "org.junit.jupiter:junit-jupiter",
+            version = "5.10.0",
+            sha256 = "hashTest",
+            cachePath = "/cache/junit.jar",
+            origin = Origin.TEST,
+          ),
+        )
+      )
+
+    val gas = outcome.allJars.map { it.groupArtifactVersion.substringBeforeLast(":") }
+    assertEquals(gas, gas.distinct(), "allJars must be GA-disjoint")
+    assertEquals(outcome.mainJars + outcome.allJars.drop(outcome.mainJars.size), outcome.allJars)
   }
 
   // Req 2.3 defence-in-depth: even if the resolver accidentally surfaces

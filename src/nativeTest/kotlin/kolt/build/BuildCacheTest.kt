@@ -155,6 +155,56 @@ class BuildCacheTest {
     assertEquals("/cache/okhttp-jvm-5.3.2.jar:/cache/okio-jvm-3.16.4.jar", parsed!!.classpath)
   }
 
+  // The state cache carries both the main classpath (for `kolt run` /
+  // watch-run) and the main ∪ test classpath (for `kolt test`) so an
+  // up-to-date return path can hand either back without re-resolving.
+  @Test
+  fun testClasspathPreservedInBuildState() {
+    val state =
+      BuildState(
+        configMtime = 1000L,
+        sourcesNewestMtime = 2000L,
+        classesDirMtime = 3000L,
+        lockfileMtime = 500L,
+        classpath = "/cache/main.jar",
+        testClasspath = "/cache/main.jar:/cache/junit-jupiter.jar",
+      )
+    val json = serializeBuildState(state)
+    val parsed = parseBuildState(json)
+    assertEquals(
+      "/cache/main.jar:/cache/junit-jupiter.jar",
+      parsed!!.testClasspath,
+      "testClasspath must roundtrip",
+    )
+    assertEquals("/cache/main.jar", parsed.classpath, "main classpath still roundtrips")
+  }
+
+  @Test
+  fun serializationUsesMainAndTestClasspathKeys() {
+    val state =
+      BuildState(
+        configMtime = 1L,
+        sourcesNewestMtime = 2L,
+        classesDirMtime = 3L,
+        lockfileMtime = null,
+        classpath = "/cache/main.jar",
+        testClasspath = "/cache/main.jar:/cache/junit.jar",
+      )
+    val json = serializeBuildState(state)
+    assertTrue(json.contains("main_classpath"), "Expected 'main_classpath' in: $json")
+    assertTrue(json.contains("test_classpath"), "Expected 'test_classpath' in: $json")
+  }
+
+  @Test
+  fun legacyClasspathKeyIsInvalidatedOnParse() {
+    // Older state files used the bare "classpath" key for the all-deps
+    // classpath. Refusing that shape forces a rebuild so the new
+    // main/test split is populated cleanly (pre-v1 clean break).
+    val legacyJson =
+      """{"config_mtime":1,"sources_newest_mtime":2,"classes_dir_mtime":3,"lockfile_mtime":null,"classpath":"/cache/all.jar"}"""
+    assertNull(parseBuildState(legacyJson))
+  }
+
   @Test
   fun serializationUsesClassesDirMtimeKey() {
     val state =

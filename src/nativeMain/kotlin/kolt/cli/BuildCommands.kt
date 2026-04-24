@@ -26,10 +26,15 @@ import kotlin.time.TimeSource
 
 internal const val KOLT_TOML = "kolt.toml"
 
+// `classpath` is the main closure, `testClasspath` is main ∪ test. The
+// split lets doRun / watch-run launch against main-only while doTest
+// compiles and runs against the union without a second resolver walk.
+// Both are null for native targets.
 internal data class BuildResult(
   val config: KoltConfig,
   val classpath: String?,
   val javaPath: String? = null,
+  val testClasspath: String? = null,
 )
 
 // ADR 0027 §4 kind/target matrix: JVM `kind = "app"` emits
@@ -227,7 +232,14 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     // Invariant: the up-to-date path must stay a pure mtime compare —
     // no plugin jar resolution or toolchain provisioning — so offline
     // cached builds don't hard-exit on a failed fetch.
-    return Ok(BuildResult(config, cachedState!!.classpath, managedJavaBin))
+    return Ok(
+      BuildResult(
+        config = config,
+        classpath = cachedState!!.classpath,
+        javaPath = managedJavaBin,
+        testClasspath = cachedState.testClasspath,
+      )
+    )
   }
   // Out of date → rebuild. Drop the state file first so any failure
   // below leaves cached=null for the next run (#50).
@@ -241,11 +253,9 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     resolveDependencies(config).getOrElse {
       return Err(it)
     }
-  // Main compile sees main-only deps; doTest/doRun get the full classpath
-  // (main ∪ test) through BuildResult below. Task 3.1 will narrow doRun to
-  // main-only; for now the minimum change keeps that path intact.
   val mainClasspath = resolutionOutcome.mainClasspath
-  val classpath = buildClasspath(resolutionOutcome.allJars.map { it.cachePath }).ifEmpty { null }
+  val testClasspath =
+    buildClasspath(resolutionOutcome.allJars.map { it.cachePath }).ifEmpty { null }
   val pluginJarPathsByAlias =
     resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse {
       eprintln("error: ${it.message}")
@@ -345,7 +355,8 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     currentState.copy(
       classesDirMtime = newestMtimeAll(CLASSES_DIR),
       lockfileMtime = if (fileExists(LOCK_FILE)) fileMtime(LOCK_FILE) else null,
-      classpath = classpath,
+      classpath = mainClasspath,
+      testClasspath = testClasspath,
     )
   writeFileAsString(BUILD_STATE_FILE, serializeBuildState(newState)).getOrElse {
     eprintln("warning: could not write build state file")
@@ -353,7 +364,14 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
 
   val elapsed = startMark.elapsedNow()
   println("built ${jarCmd.outputPath} in ${formatDuration(elapsed)}")
-  return Ok(BuildResult(config, classpath, managedJavaBin))
+  return Ok(
+    BuildResult(
+      config = config,
+      classpath = mainClasspath,
+      javaPath = managedJavaBin,
+      testClasspath = testClasspath,
+    )
+  )
 }
 
 private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildResult, Int> {
@@ -676,10 +694,15 @@ internal fun doTest(
   if (config.build.target in NATIVE_TARGETS) {
     return doNativeTest(config, testArgs)
   }
-  val (_, classpath, javaPath) =
+  val buildResult =
     doBuild(useDaemon = useDaemon).getOrElse {
       return Err(it)
     }
+  // R4.1: test compile/run classpath is main ∪ test. Fall through to the
+  // main-only classpath if the resolver found no test origin deps (the
+  // union collapses to the main closure).
+  val testClasspath = buildResult.testClasspath ?: buildResult.classpath
+  val javaPath = buildResult.javaPath
 
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
   if (existingTestSources.isEmpty()) {
@@ -713,7 +736,7 @@ internal fun doTest(
 
   val testConfig = config.copy(build = config.build.copy(testSources = existingTestSources))
   val testCmd =
-    testBuildCommand(testConfig, CLASSES_DIR, classpath, pArgs, kotlincPath = managedKotlincBin)
+    testBuildCommand(testConfig, CLASSES_DIR, testClasspath, pArgs, kotlincPath = managedKotlincBin)
   println("compiling tests...")
   executeCommand(testCmd.args).getOrElse { error ->
     eprintln("error: " + formatProcessError(error, "test compilation"))
@@ -727,7 +750,7 @@ internal fun doTest(
       testClassesDir = testCmd.outputPath,
       consoleLauncherPath = consoleLauncherPath,
       testResourceDirs = existingTestResourceDirs,
-      classpath = classpath,
+      classpath = testClasspath,
       testArgs = testArgs,
       javaPath = javaPath,
     )

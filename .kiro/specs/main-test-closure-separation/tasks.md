@@ -69,7 +69,7 @@
 
 ## 3. Integration: caller 側の origin filter と出力経路
 
-- [ ] 3.1 (P) `BuildCommands` の build / run / test 経路を新 `JvmResolutionOutcome` に追従
+- [x] 3.1 (P) `BuildCommands` の build / run / test 経路を新 `JvmResolutionOutcome` に追従
   - `doBuild` の返り (`BuildResult`) を拡張し `mainJars` と `allJars` を後段に持ち回る経路を確保
   - `doRun` は既存 `classpath` (main-only) をそのまま `java` subproc に渡す (意味のみ狭まる)
   - `doTest` は compile (L709 相当) と run (L723 相当) の両方で `allJars` から classpath を組み立てる (disjoint 前提で単純結合)
@@ -85,7 +85,7 @@
   - _Boundary: kolt.cli.BuildCommands, kolt.build.Builder_
   - _Depends: 2.3_
 
-- [ ] 3.2 (P) `Workspace.generateWorkspaceJson` を main / test 分離入力に切り替え
+- [x] 3.2 (P) `Workspace.generateWorkspaceJson` を main / test 分離入力に切り替え
   - `generateWorkspaceJson(config, mainDeps, testDeps)` に signature 変更
   - `buildMainModule` は `mainDeps` のみを library 列挙
   - `buildTestModule` は `mainDeps + testDeps` を列挙 (test コードは main も見る)
@@ -98,7 +98,7 @@
   - _Boundary: kolt.build.Workspace, kolt.cli.DependencyResolution_
   - _Depends: 2.3_
 
-- [ ] 3.3 (P) `DependencyCommands.doTree` / `doInstall` を origin 別に組み直す
+- [x] 3.3 (P) `DependencyCommands.doTree` / `doInstall` を origin 別に組み直す
   - `doTree` (L254, L334 付近) の `mergeAllDeps` 呼び出しを main seeds (`config.dependencies`) と test seeds (`autoInjectedTestDeps + config.testDependencies`) の別 tree 表示に置換 (既存「test dependencies:」セクション出力は維持)
   - `doInstall` は `resolveDependencies` 経由で統一 (直接 resolver 呼び出しの箇所があれば新 `JvmResolutionOutcome` に追従)
   - 既存の deps tree 整形出力 (`formatDependencyTree`) はそのまま使用
@@ -110,7 +110,7 @@
 
 ## 4. Validation: ADR / 成果物の更新とスモーク
 
-- [ ] 4.1 (P) ADR 0027 §1 と ADR 0003 §2 の文言を新契約に揃える
+- [x] 4.1 (P) ADR 0027 §1 と ADR 0003 §2 の文言を新契約に揃える
   - ADR 0027 §1 の "transitive closure, post-exclusion" を「main closure (非test closure) の transitive closure, post-exclusion」に限定する文言を追加
   - ADR 0027 §4 の kind マトリクス脚注に「emit 対象は main closure のみ」の補足
   - ADR 0003 §2 の schema evolution 節に v2 → v3 (`LockEntry.test: Boolean` 追加、v1/v2 は unsupported で reject) の行を追記

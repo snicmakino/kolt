@@ -291,17 +291,31 @@ internal fun doUpdate(): Result<Unit, Int> {
   return Ok(Unit)
 }
 
+internal data class DepsTreeSeeds(
+  val mainSeeds: Map<String, String>,
+  val testSeeds: Map<String, String>,
+) {
+  val isEmpty: Boolean
+    get() = mainSeeds.isEmpty() && testSeeds.isEmpty()
+}
+
+internal fun depsTreeSeeds(config: KoltConfig): DepsTreeSeeds =
+  DepsTreeSeeds(
+    mainSeeds = config.dependencies,
+    // Native targets don't auto-inject `kotlin-test-junit5`; the
+    // `autoInjectedTestDeps` helper already filters by target, so both
+    // JVM and native paths share this expression.
+    testSeeds = autoInjectedTestDeps(config) + config.testDependencies,
+  )
+
 internal fun doTree(): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
     }
 
-  val hasAnyDeps =
-    config.dependencies.isNotEmpty() ||
-      config.testDependencies.isNotEmpty() ||
-      autoInjectedTestDeps(config).isNotEmpty()
-  if (!hasAnyDeps) {
+  val seeds = depsTreeSeeds(config)
+  if (seeds.isEmpty) {
     println("no dependencies")
     return Ok(Unit)
   }
@@ -320,30 +334,29 @@ internal fun doTree(): Result<Unit, Int> {
         createResolverDeps(),
         nativeTarget = konanTargetGradleName(config.build.target),
       )
-    if (config.dependencies.isNotEmpty()) {
-      val tree = buildNativeDependencyTree(config.dependencies, nativeLookup)
+    if (seeds.mainSeeds.isNotEmpty()) {
+      val tree = buildNativeDependencyTree(seeds.mainSeeds, nativeLookup)
       println(formatDependencyTree(tree))
     }
-    if (config.testDependencies.isNotEmpty()) {
-      if (config.dependencies.isNotEmpty()) println()
+    if (seeds.testSeeds.isNotEmpty()) {
+      if (seeds.mainSeeds.isNotEmpty()) println()
       println("test dependencies:")
-      val testTree = buildNativeDependencyTree(config.testDependencies, nativeLookup)
+      val testTree = buildNativeDependencyTree(seeds.testSeeds, nativeLookup)
       println(formatDependencyTree(testTree))
     }
     return Ok(Unit)
   }
 
-  val allTestDeps = autoInjectedTestDeps(config) + config.testDependencies
   val pomLookup =
     createPomLookup(config.repositories.values.toList(), paths.cacheBase, createResolverDeps())
-  if (config.dependencies.isNotEmpty()) {
-    val tree = buildDependencyTree(config.dependencies, pomLookup)
+  if (seeds.mainSeeds.isNotEmpty()) {
+    val tree = buildDependencyTree(seeds.mainSeeds, pomLookup)
     println(formatDependencyTree(tree))
   }
-  if (allTestDeps.isNotEmpty()) {
-    if (config.dependencies.isNotEmpty()) println()
+  if (seeds.testSeeds.isNotEmpty()) {
+    if (seeds.mainSeeds.isNotEmpty()) println()
     println("test dependencies:")
-    val testTree = buildDependencyTree(allTestDeps, pomLookup)
+    val testTree = buildDependencyTree(seeds.testSeeds, pomLookup)
     println(formatDependencyTree(testTree))
   }
   return Ok(Unit)
