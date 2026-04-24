@@ -68,8 +68,9 @@ informal decision that currently lives only in conversation.
   full criterion.
 - **Each new RC resets the full 14 days from its own publication
   timestamp.** A bug found on day 10 of `rc.1` ships as `rc.2` and
-  `rc.2` starts a fresh 14-day window. No partial carry-over,
-  regardless of how narrow the fix is.
+  `rc.2` starts a fresh 14-day window. Publishing `rc.(N+1)`
+  terminates `rc.N`'s clock; only the newest RC is live. No partial
+  carry-over, regardless of how narrow the fix is.
 - **Milestone re-opens invalidate the current RC.** If a new milestone
   issue is opened during an RC window, that RC is abandoned and no
   release is cut from it. The next publication is `rc.(N+1)` after
@@ -95,9 +96,10 @@ informal decision that currently lives only in conversation.
 ### §3 Post-v1 compatibility commitments
 
 - **kolt.toml schema.** Additive fields allowed in any minor; removed
-  or semantically-changed fields require a deprecation window of at
-  least one minor release, during which the old shape continues to
-  work and a stderr warning names the replacement.
+  or semantically-changed fields are minor after a deprecation
+  window of at least one released minor, during which the old shape
+  continues to work and a stderr warning names the replacement.
+  Never patch.
 - **Lockfile format** (`kolt.lock`). A new format is written on the
   next regenerate; the old format is read for one minor then rejected
   in the following minor. Users whose lockfiles have not regenerated
@@ -140,14 +142,16 @@ informal decision that currently lives only in conversation.
 - **Yanked tarballs stay reachable** at their original URLs so
   existing installs can still re-download. Yank is advisory, not
   destructive.
-- **Yank manifest.** The repo ships a top-level `YANKED` text file
-  (one `<version>    <replacement-version>    <reason>` tab-separated
-  line per yanked release). `install.sh` (#230) reads the manifest
-  from the HEAD of `main` at install time and refuses a yanked
-  version unless the user sets `KOLT_ALLOW_YANKED=1`. The manifest is
-  edited by the same PR that publishes the replacement; CI fails the
-  release workflow if a yanked version is about to be tagged without
-  its replacement landing first.
+- **Yank manifest.** The repo ships a top-level `YANKED` text file.
+  Each non-empty line is exactly three tab-separated fields —
+  `<version>\t<replacement-version>\t<reason>`; comments and blank
+  lines are not allowed (parser failure is a release-workflow error).
+  Order is newest yank last. `install.sh` (see #230) reads the
+  manifest from the HEAD of `main` at install time and refuses a
+  yanked version unless the user sets `KOLT_ALLOW_YANKED=1`. The
+  manifest is edited by the same PR that publishes the replacement;
+  CI fails the release workflow if a yanked version is about to be
+  tagged without its replacement landing first.
 
 ### Consequences
 
@@ -163,8 +167,9 @@ informal decision that currently lives only in conversation.
   milestone-clear; a bug on day 10 costs another 14 days. No workaround.
 - Every deprecation becomes a two-release commitment: a runtime
   warning in `1.N.0` and the removal code in `1.(N+1).0`. Wire-
-  protocol and on-disk-layout deprecations carry detection code that
-  survives the window and then gets deleted.
+  protocol and on-disk-layout deprecations carry detection code
+  (legacy `protocolVersion` branches, legacy `~/.kolt/` path probes)
+  that survives the window and then gets deleted.
 - Windows users get no v1 story.
 - `kolt init` / `kolt new` have a chicken-and-egg question — what
   kolt version does a generated `kolt.toml` pin — that this ADR does
@@ -177,8 +182,9 @@ informal decision that currently lives only in conversation.
   separate `v1.0` label on issues.
 - Release workflow (#230) enforces SemVer tag format via a pre-publish
   regex; a tag not matching
-  `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.[1-9]\d*)?$`
-  fails the job.
+  `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(rc|beta)\.[1-9]\d*)?$`
+  fails the job. The `-beta.N` arm is reserved for post-v1 experiments
+  per §2; pre-v1 tags never carry a pre-release suffix.
 - RC publication timestamp and any `regression-v1` tagged issues
   against that RC are the only inputs to "is this RC clean?". Tracked
   by maintainer memo, not automation. An RC with a `regression-v1`
