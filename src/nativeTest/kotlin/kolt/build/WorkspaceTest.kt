@@ -164,14 +164,53 @@ class WorkspaceTest {
     val root = parseJson(result)
 
     val settings = root["kotlinSettings"]!!.jsonArray
-    assertEquals(1, settings.size)
+    assertEquals(2, settings.size)
 
-    val setting = settings[0].jsonObject
-    assertEquals("my-app.main", setting["module"]!!.jsonPrimitive.content)
+    val main = settings[0].jsonObject
+    assertEquals("my-app.main", main["module"]!!.jsonPrimitive.content)
 
-    val compilerArgs = setting["compilerArguments"]!!.jsonPrimitive.content
+    val compilerArgs = main["compilerArguments"]!!.jsonPrimitive.content
     assertTrue(compilerArgs.startsWith("J{"), "compilerArguments should start with J{ prefix")
     assertTrue(compilerArgs.contains("\"jvmTarget\":\"17\""))
+  }
+
+  // kotlin-lsp diagnoses test sources against this entry, so it must carry
+  // the same jvmTarget as main (matching the compiler the test actually
+  // runs under) and isTestModule=true so IDE features treat assertions and
+  // test-only APIs correctly.
+  @Test
+  fun generateWorkspaceJsonEmitsKotlinSettingsForTestModule() {
+    val config = testConfig(jvmTarget = "17", testSources = listOf("test", "test-integration"))
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val settings = root["kotlinSettings"]!!.jsonArray
+    assertEquals(2, settings.size)
+
+    val test = settings[1].jsonObject
+    assertEquals("my-app.test", test["module"]!!.jsonPrimitive.content)
+    assertEquals("my-app.test", test["externalProjectId"]!!.jsonPrimitive.content)
+    assertEquals(true, test["isTestModule"]!!.jsonPrimitive.content.toBoolean())
+
+    val testSourceRoots = test["sourceRoots"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("<WORKSPACE>/test", "<WORKSPACE>/test-integration"), testSourceRoots)
+
+    val compilerArgs = test["compilerArguments"]!!.jsonPrimitive.content
+    assertTrue(compilerArgs.startsWith("J{"))
+    assertTrue(compilerArgs.contains("\"jvmTarget\":\"17\""))
+  }
+
+  @Test
+  fun generateWorkspaceJsonKotlinSettingsOmitsTestEntryWhenNoTestSources() {
+    val config = testConfig(testSources = emptyList())
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val settings = root["kotlinSettings"]!!.jsonArray
+    assertEquals(1, settings.size)
+    assertEquals("my-app.main", settings[0].jsonObject["module"]!!.jsonPrimitive.content)
   }
 
   @Test
@@ -290,6 +329,86 @@ class WorkspaceTest {
       topLibs,
       "top-level libraries must index main ∪ test",
     )
+  }
+
+  // Per-module java language level is carried via `javaSettings`; the JSON
+  // wire has no `-Xjdk-release` slot, so this is the only channel for
+  // kotlin-lsp to diagnose mixed Kotlin/Java code at the right level.
+  @Test
+  fun generateWorkspaceJsonEmitsJavaSettingsForMainAndTest() {
+    val config = testConfig(jvmTarget = "17")
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val javaSettings = root["javaSettings"]!!.jsonArray
+    assertEquals(2, javaSettings.size)
+
+    val main = javaSettings[0].jsonObject
+    assertEquals("my-app.main", main["module"]!!.jsonPrimitive.content)
+    assertEquals("JDK_17", main["languageLevelId"]!!.jsonPrimitive.content)
+    assertEquals(false, main["inheritedCompilerOutput"]!!.jsonPrimitive.content.toBoolean())
+    assertEquals(false, main["excludeOutput"]!!.jsonPrimitive.content.toBoolean())
+
+    val test = javaSettings[1].jsonObject
+    assertEquals("my-app.test", test["module"]!!.jsonPrimitive.content)
+    assertEquals("JDK_17", test["languageLevelId"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun generateWorkspaceJsonJavaSettingsOmitsTestEntryWhenNoTestSources() {
+    val config = testConfig(testSources = emptyList())
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val javaSettings = root["javaSettings"]!!.jsonArray
+    assertEquals(1, javaSettings.size)
+    assertEquals("my-app.main", javaSettings[0].jsonObject["module"]!!.jsonPrimitive.content)
+  }
+
+  @Test
+  fun generateWorkspaceJsonJavaSettingsLanguageLevelTracksJvmTarget() {
+    val config = testConfig(jvmTarget = "21")
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val javaSettings = root["javaSettings"]!!.jsonArray
+    javaSettings.forEach {
+      assertEquals("JDK_21", it.jsonObject["languageLevelId"]!!.jsonPrimitive.content)
+    }
+  }
+
+  // kotlin-lsp's JSON importer maps `excludedPatterns` to the underlying
+  // ContentRootEntity but drops `excludedUrls`, so patterns are the only
+  // effective exclusion channel for the WORKSPACE root today.
+  @Test
+  fun generateWorkspaceJsonMainContentRootExcludesBuildOutputsAndCacheDirs() {
+    val config = testConfig()
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val mainContentRoot =
+      root["modules"]!!.jsonArray[0].jsonObject["contentRoots"]!!.jsonArray[0].jsonObject
+    val excludedPatterns =
+      mainContentRoot["excludedPatterns"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("build", ".kolt-cache", ".kolt"), excludedPatterns)
+  }
+
+  @Test
+  fun generateWorkspaceJsonTestContentRootExcludesBuildOutputsAndCacheDirs() {
+    val config = testConfig()
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val testContentRoot =
+      root["modules"]!!.jsonArray[1].jsonObject["contentRoots"]!!.jsonArray[0].jsonObject
+    val excludedPatterns =
+      testContentRoot["excludedPatterns"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("build", ".kolt-cache", ".kolt"), excludedPatterns)
   }
 
   @Test
