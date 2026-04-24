@@ -164,14 +164,53 @@ class WorkspaceTest {
     val root = parseJson(result)
 
     val settings = root["kotlinSettings"]!!.jsonArray
-    assertEquals(1, settings.size)
+    assertEquals(2, settings.size)
 
-    val setting = settings[0].jsonObject
-    assertEquals("my-app.main", setting["module"]!!.jsonPrimitive.content)
+    val main = settings[0].jsonObject
+    assertEquals("my-app.main", main["module"]!!.jsonPrimitive.content)
 
-    val compilerArgs = setting["compilerArguments"]!!.jsonPrimitive.content
+    val compilerArgs = main["compilerArguments"]!!.jsonPrimitive.content
     assertTrue(compilerArgs.startsWith("J{"), "compilerArguments should start with J{ prefix")
     assertTrue(compilerArgs.contains("\"jvmTarget\":\"17\""))
+  }
+
+  // kotlin-lsp diagnoses test sources against this entry, so it must carry
+  // the same jvmTarget as main (matching the compiler the test actually
+  // runs under) and isTestModule=true so IDE features treat assertions and
+  // test-only APIs correctly.
+  @Test
+  fun generateWorkspaceJsonEmitsKotlinSettingsForTestModule() {
+    val config = testConfig(jvmTarget = "17", testSources = listOf("test", "test-integration"))
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val settings = root["kotlinSettings"]!!.jsonArray
+    assertEquals(2, settings.size)
+
+    val test = settings[1].jsonObject
+    assertEquals("my-app.test", test["module"]!!.jsonPrimitive.content)
+    assertEquals("my-app.test", test["externalProjectId"]!!.jsonPrimitive.content)
+    assertEquals(true, test["isTestModule"]!!.jsonPrimitive.content.toBoolean())
+
+    val testSourceRoots = test["sourceRoots"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("<WORKSPACE>/test", "<WORKSPACE>/test-integration"), testSourceRoots)
+
+    val compilerArgs = test["compilerArguments"]!!.jsonPrimitive.content
+    assertTrue(compilerArgs.startsWith("J{"))
+    assertTrue(compilerArgs.contains("\"jvmTarget\":\"17\""))
+  }
+
+  @Test
+  fun generateWorkspaceJsonKotlinSettingsOmitsTestEntryWhenNoTestSources() {
+    val config = testConfig(testSources = emptyList())
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val settings = root["kotlinSettings"]!!.jsonArray
+    assertEquals(1, settings.size)
+    assertEquals("my-app.main", settings[0].jsonObject["module"]!!.jsonPrimitive.content)
   }
 
   @Test

@@ -30,7 +30,12 @@ fun generateWorkspaceJson(
     }
     putJsonArray("libraries") { allDeps.forEach { dep -> add(buildLibraryEntry(dep)) } }
     putJsonArray("sdks") { add(buildSdkEntry(config.build.jvmTarget)) }
-    putJsonArray("kotlinSettings") { add(buildKotlinSettings(config)) }
+    putJsonArray("kotlinSettings") {
+      add(buildKotlinSettings(config, isTest = false))
+      if (config.build.testSources.isNotEmpty()) {
+        add(buildKotlinSettings(config, isTest = true))
+      }
+    }
     putJsonArray("javaSettings") {
       add(buildJavaSettings("${config.name}.main", config.build.jvmTarget))
       if (config.build.testSources.isNotEmpty()) {
@@ -165,13 +170,13 @@ private fun buildJavaSettings(moduleName: String, jvmTarget: String): JsonObject
   putJsonObject("manifestAttributes") {}
 }
 
-private fun buildKotlinSettings(config: KoltConfig): JsonObject = buildJsonObject {
+private fun buildKotlinSettings(config: KoltConfig, isTest: Boolean): JsonObject = buildJsonObject {
+  val moduleName = "${config.name}.${if (isTest) "test" else "main"}"
+  val sources = if (isTest) config.build.testSources else config.build.sources
   put("name", "Kotlin")
-  putJsonArray("sourceRoots") {
-    config.build.sources.forEach { add(JsonPrimitive("<WORKSPACE>/$it")) }
-  }
+  putJsonArray("sourceRoots") { sources.forEach { add(JsonPrimitive("<WORKSPACE>/$it")) } }
   putJsonArray("configFileItems") {}
-  put("module", "${config.name}.main")
+  put("module", moduleName)
   put("useProjectSettings", false)
   putJsonArray("implementedModuleNames") {}
   putJsonArray("dependsOnModuleNames") {}
@@ -179,8 +184,8 @@ private fun buildKotlinSettings(config: KoltConfig): JsonObject = buildJsonObjec
   put("productionOutputPath", JsonNull)
   put("testOutputPath", JsonNull)
   putJsonArray("sourceSetNames") {}
-  put("isTestModule", false)
-  put("externalProjectId", "${config.name}.main")
+  put("isTestModule", isTest)
+  put("externalProjectId", moduleName)
   put("isHmppEnabled", true)
   putJsonArray("pureKotlinSourceFolders") {}
   put("kind", "default")
