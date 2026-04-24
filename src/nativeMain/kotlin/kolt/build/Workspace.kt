@@ -10,6 +10,11 @@ private val prettyJson = Json {
   prettyPrintIndent = "  "
 }
 
+// kotlin-lsp's JSON importer honors ContentRootData.excludedPatterns but drops
+// excludedUrls (see Kotlin/kotlin-lsp workspace-import/.../json/conversion.kt).
+// Keep patterns unprefixed; PatternUtil matches against file names, not paths.
+private val DEFAULT_CONTENT_ROOT_EXCLUDES = listOf("build", ".kolt-cache", ".kolt")
+
 fun generateWorkspaceJson(
   config: KoltConfig,
   mainDeps: List<ResolvedDep>,
@@ -55,6 +60,9 @@ private fun buildMainModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
       add(
         buildJsonObject {
           put("path", "<WORKSPACE>/")
+          putJsonArray("excludedPatterns") {
+            DEFAULT_CONTENT_ROOT_EXCLUDES.forEach { add(JsonPrimitive(it)) }
+          }
           putJsonArray("sourceRoots") {
             config.build.sources.forEach { src ->
               add(
@@ -98,6 +106,9 @@ private fun buildTestModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
       add(
         buildJsonObject {
           put("path", "<WORKSPACE>/")
+          putJsonArray("excludedPatterns") {
+            DEFAULT_CONTENT_ROOT_EXCLUDES.forEach { add(JsonPrimitive(it)) }
+          }
           putJsonArray("sourceRoots") {
             config.build.testSources.forEach { src ->
               add(

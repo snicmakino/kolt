@@ -292,6 +292,37 @@ class WorkspaceTest {
     )
   }
 
+  // kotlin-lsp's JSON importer maps `excludedPatterns` to the underlying
+  // ContentRootEntity but drops `excludedUrls`, so patterns are the only
+  // effective exclusion channel for the WORKSPACE root today.
+  @Test
+  fun generateWorkspaceJsonMainContentRootExcludesBuildOutputsAndCacheDirs() {
+    val config = testConfig()
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val mainContentRoot =
+      root["modules"]!!.jsonArray[0].jsonObject["contentRoots"]!!.jsonArray[0].jsonObject
+    val excludedPatterns =
+      mainContentRoot["excludedPatterns"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("build", ".kolt-cache", ".kolt"), excludedPatterns)
+  }
+
+  @Test
+  fun generateWorkspaceJsonTestContentRootExcludesBuildOutputsAndCacheDirs() {
+    val config = testConfig()
+
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
+    val root = parseJson(result)
+
+    val testContentRoot =
+      root["modules"]!!.jsonArray[1].jsonObject["contentRoots"]!!.jsonArray[0].jsonObject
+    val excludedPatterns =
+      testContentRoot["excludedPatterns"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(listOf("build", ".kolt-cache", ".kolt"), excludedPatterns)
+  }
+
   @Test
   fun generateKlsClasspathFromResolvedDeps() {
     val deps =
