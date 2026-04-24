@@ -136,6 +136,10 @@ private fun buildTestModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>)
     }
   }
 
+// `type` is only stored into LibraryEntity.typeId and never branched on
+// (see Kotlin/kotlin-lsp workspace-import/.../json/conversion.kt::importWorkspaceData;
+// GenericWorkspaceImporter omits typeId entirely). "java-imported" is the IntelliJ
+// platform library type id for externally-imported JARs.
 private fun buildLibraryEntry(dep: ResolvedDep): JsonObject = buildJsonObject {
   put("name", "${dep.groupArtifact}:${dep.version}")
   put("type", "java-imported")
