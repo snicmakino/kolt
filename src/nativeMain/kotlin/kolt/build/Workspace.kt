@@ -10,15 +10,20 @@ private val prettyJson = Json {
   prettyPrintIndent = "  "
 }
 
-fun generateWorkspaceJson(config: KoltConfig, resolvedDeps: List<ResolvedDep>): String {
+fun generateWorkspaceJson(
+  config: KoltConfig,
+  mainDeps: List<ResolvedDep>,
+  testDeps: List<ResolvedDep>,
+): String {
+  val allDeps = mainDeps + testDeps
   val json = buildJsonObject {
     putJsonArray("modules") {
-      add(buildMainModule(config, resolvedDeps))
+      add(buildMainModule(config, mainDeps))
       if (config.build.testSources.isNotEmpty()) {
-        add(buildTestModule(config, resolvedDeps))
+        add(buildTestModule(config, allDeps))
       }
     }
-    putJsonArray("libraries") { resolvedDeps.forEach { dep -> add(buildLibraryEntry(dep)) } }
+    putJsonArray("libraries") { allDeps.forEach { dep -> add(buildLibraryEntry(dep)) } }
     putJsonArray("sdks") { add(buildSdkEntry(config.build.jvmTarget)) }
     putJsonArray("kotlinSettings") { add(buildKotlinSettings(config)) }
   }

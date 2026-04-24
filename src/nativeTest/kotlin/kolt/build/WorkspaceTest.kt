@@ -1,9 +1,11 @@
 package kolt.build
 
+import kolt.resolve.Origin
 import kolt.resolve.ResolvedDep
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -20,9 +22,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonMinimalProject() {
     val config = testConfig()
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val modules = root["modules"]!!.jsonArray
@@ -38,9 +39,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonNoTestSources() {
     val config = testConfig(testSources = emptyList())
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val modules = root["modules"]!!.jsonArray
@@ -51,9 +51,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonIncludesSourceRoots() {
     val config = testConfig(sources = listOf("src", "generated"))
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val module = root["modules"]!!.jsonArray[0].jsonObject
@@ -69,9 +68,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonIncludesTestSourceRoots() {
     val config = testConfig(testSources = listOf("test", "test-integration"))
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val modules = root["modules"]!!.jsonArray
@@ -90,13 +88,14 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonIncludesLibraries() {
     val config = testConfig()
-    val deps =
+    val mainDeps =
       listOf(
         ResolvedDep(
           "com.example:lib",
           "1.0.0",
           "abc123",
           "/home/user/.kolt/cache/com/example/lib/1.0.0/lib-1.0.0.jar",
+          origin = Origin.MAIN,
         ),
         ResolvedDep(
           "org.other:util",
@@ -104,10 +103,11 @@ class WorkspaceTest {
           "def456",
           "/home/user/.kolt/cache/org/other/util/2.0.0/util-2.0.0.jar",
           transitive = true,
+          origin = Origin.MAIN,
         ),
       )
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, mainDeps, emptyList())
     val root = parseJson(result)
 
     val libraries = root["libraries"]!!.jsonArray
@@ -128,9 +128,9 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonLibraryAttributes() {
     val config = testConfig()
-    val deps = listOf(ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar"))
+    val mainDeps = listOf(ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar"))
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, mainDeps, emptyList())
     val root = parseJson(result)
 
     val lib = root["libraries"]!!.jsonArray[0].jsonObject
@@ -143,9 +143,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonIncludesSdk() {
     val config = testConfig(jvmTarget = "21")
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val sdks = root["sdks"]!!.jsonArray
@@ -160,9 +159,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonIncludesKotlinSettings() {
     val config = testConfig(jvmTarget = "17")
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val settings = root["kotlinSettings"]!!.jsonArray
@@ -179,9 +177,9 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonModuleDependenciesReferenceLibraries() {
     val config = testConfig()
-    val deps = listOf(ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar"))
+    val mainDeps = listOf(ResolvedDep("com.example:lib", "1.0.0", "abc123", "/cache/lib.jar"))
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, mainDeps, emptyList())
     val root = parseJson(result)
 
     val module = root["modules"]!!.jsonArray[0].jsonObject
@@ -196,9 +194,8 @@ class WorkspaceTest {
   @Test
   fun generateWorkspaceJsonTestModuleDependsOnMainModule() {
     val config = testConfig()
-    val deps = emptyList<ResolvedDep>()
 
-    val result = generateWorkspaceJson(config, deps)
+    val result = generateWorkspaceJson(config, emptyList(), emptyList())
     val root = parseJson(result)
 
     val testModule = root["modules"]!!.jsonArray[1].jsonObject
@@ -207,6 +204,92 @@ class WorkspaceTest {
     val moduleDep =
       testDeps.map { it.jsonObject }.first { it["type"]!!.jsonPrimitive.content == "module" }
     assertEquals("my-app.main", moduleDep["name"]!!.jsonPrimitive.content)
+  }
+
+  // - Main module's dependency list carries main origin jars only so
+  //   IDE navigation on main sources cannot cross into test-only
+  //   classes.
+  // - Test module sees main + test (test sources typically reference
+  //   both). The depends-on-main link still comes via `type=module`.
+  // - Top-level `libraries` lists every known jar (main + test) so IDE
+  //   caches and library index views are complete.
+  @Test
+  fun generateWorkspaceJsonSplitsMainAndTestIntoRightModules() {
+    val config = testConfig()
+    val mainDeps =
+      listOf(
+        ResolvedDep(
+          groupArtifact = "com.example:main-lib",
+          version = "1.0.0",
+          sha256 = "hashMain",
+          cachePath = "/cache/main-lib-1.0.0.jar",
+          origin = Origin.MAIN,
+        )
+      )
+    val testDeps =
+      listOf(
+        ResolvedDep(
+          groupArtifact = "org.junit.jupiter:junit-jupiter",
+          version = "5.10.0",
+          sha256 = "hashJupiter",
+          cachePath = "/cache/junit-jupiter-5.10.0.jar",
+          origin = Origin.TEST,
+        ),
+        ResolvedDep(
+          groupArtifact = "org.opentest4j:opentest4j",
+          version = "1.3.0",
+          sha256 = "hashOpentest4j",
+          cachePath = "/cache/opentest4j-1.3.0.jar",
+          transitive = true,
+          origin = Origin.TEST,
+        ),
+      )
+
+    val result = generateWorkspaceJson(config, mainDeps, testDeps)
+    val root = parseJson(result)
+
+    val modules = root["modules"]!!.jsonArray
+    val mainLibNames =
+      modules[0]
+        .jsonObject["dependencies"]!!
+        .jsonArray
+        .map { it.jsonObject }
+        .filter { it["type"]!!.jsonPrimitive.content == "library" }
+        .map { it["name"]!!.jsonPrimitive.content }
+    assertEquals(listOf("com.example:main-lib:1.0.0"), mainLibNames)
+    assertFalse(
+      mainLibNames.any { it.contains("junit") || it.contains("opentest4j") },
+      "main module must not list test-origin libraries: $mainLibNames",
+    )
+
+    val testLibNames =
+      modules[1]
+        .jsonObject["dependencies"]!!
+        .jsonArray
+        .map { it.jsonObject }
+        .filter { it["type"]!!.jsonPrimitive.content == "library" }
+        .map { it["name"]!!.jsonPrimitive.content }
+    assertEquals(
+      listOf(
+        "com.example:main-lib:1.0.0",
+        "org.junit.jupiter:junit-jupiter:5.10.0",
+        "org.opentest4j:opentest4j:1.3.0",
+      ),
+      testLibNames,
+      "test module lists main first, then test origin deps",
+    )
+
+    val topLibs =
+      root["libraries"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+    assertEquals(
+      listOf(
+        "com.example:main-lib:1.0.0",
+        "org.junit.jupiter:junit-jupiter:5.10.0",
+        "org.opentest4j:opentest4j:1.3.0",
+      ),
+      topLibs,
+      "top-level libraries must index main ∪ test",
+    )
   }
 
   @Test

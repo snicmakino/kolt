@@ -13,7 +13,13 @@ data class BuildState(
   @SerialName("sources_newest_mtime") val sourcesNewestMtime: Long,
   @SerialName("classes_dir_mtime") val classesDirMtime: Long?,
   @SerialName("lockfile_mtime") val lockfileMtime: Long?,
-  val classpath: String? = null,
+  // The `main_classpath` rename is load-bearing: older state files
+  // stored the all-deps classpath under `classpath`. Keeping that
+  // SerialName would let those files round-trip into a BuildResult
+  // that hands an all-deps classpath to `kolt run` (which expects
+  // main-only). Strict decode failure forces a rebuild instead.
+  @SerialName("main_classpath") val classpath: String? = null,
+  @SerialName("test_classpath") val testClasspath: String? = null,
   @SerialName("resources_newest_mtime") val resourcesNewestMtime: Long? = null,
   @SerialName("def_newest_mtime") val defNewestMtime: Long? = null,
 )

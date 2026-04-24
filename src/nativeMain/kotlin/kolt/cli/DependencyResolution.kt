@@ -115,6 +115,9 @@ internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcom
   return Ok(splitJvmOutcome(resolveResult.deps))
 }
 
+internal fun splitByOrigin(deps: List<ResolvedDep>): Pair<List<ResolvedDep>, List<ResolvedDep>> =
+  deps.partition { it.origin == Origin.MAIN }
+
 // Extracted for testability: constructs JvmResolutionOutcome from a resolved
 // dep list by splitting on Origin. `allJars` = main ++ test (disjoint —
 // kernel enforces main-wins-on-overlap).
@@ -160,13 +163,17 @@ internal fun resolveNativeDependencies(
 }
 
 private fun writeWorkspaceFiles(config: KoltConfig, deps: List<ResolvedDep>) {
-  val workspaceJson = generateWorkspaceJson(config, deps)
+  // kls-classpath is a flat union — kotlin-lsp expects one classpath
+  // and resolves visibility from module scopes. workspace.json
+  // carries the main/test split for richer IDE consumers.
+  val (mainDeps, testDeps) = splitByOrigin(deps)
+  val workspaceJson = generateWorkspaceJson(config, mainDeps, testDeps)
   writeFileAsString(WORKSPACE_JSON, workspaceJson).getOrElse { error ->
     eprintln("warning: could not write $WORKSPACE_JSON: ${error.path}")
     return
   }
 
-  val klsContent = generateKlsClasspath(deps)
+  val klsContent = generateKlsClasspath(mainDeps + testDeps)
   writeFileAsString(KLS_CLASSPATH, klsContent).getOrElse { error ->
     eprintln("warning: could not write $KLS_CLASSPATH: ${error.path}")
     return
