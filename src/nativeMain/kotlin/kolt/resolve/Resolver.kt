@@ -69,12 +69,18 @@ fun formatResolveError(error: ResolveError): String =
       "error: resolved ${error.groupArtifact}:${error.version} is rejected by constraint '${error.rejectPattern}'"
   }
 
+enum class Origin {
+  MAIN,
+  TEST,
+}
+
 data class ResolvedDep(
   val groupArtifact: String,
   val version: String,
   val sha256: String,
   val cachePath: String,
   val transitive: Boolean = false,
+  val origin: Origin = Origin.MAIN,
 )
 
 data class ResolveResult(val deps: List<ResolvedDep>, val lockChanged: Boolean)
@@ -119,7 +125,7 @@ fun resolve(
 
 fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lockfile {
   return Lockfile(
-    version = 2,
+    version = 3,
     kotlin = config.kotlin.version,
     jvmTarget = config.build.jvmTarget,
     dependencies =

@@ -14,9 +14,13 @@ sealed class LockfileError {
   data class UnsupportedVersion(val version: Int) : LockfileError()
 }
 
-data class LockEntry(val version: String, val sha256: String, val transitive: Boolean = false)
+data class LockEntry(
+  val version: String,
+  val sha256: String,
+  val transitive: Boolean = false,
+  val test: Boolean = false,
+)
 
-// V1 lockfiles (without `transitive` field) are accepted with transitive defaulting to false.
 data class Lockfile(
   val version: Int,
   val kotlin: String,
@@ -29,6 +33,7 @@ private data class LockEntryJson(
   val version: String,
   val sha256: String,
   val transitive: Boolean = false,
+  @SerialName("test") val test: Boolean = false,
 )
 
 @Serializable
@@ -53,7 +58,7 @@ fun parseLockfile(jsonString: String): Result<Lockfile, LockfileError> {
     } catch (e: IllegalArgumentException) {
       return Err(LockfileError.ParseFailed("failed to parse kolt.lock: ${e.message}"))
     }
-  if (parsed.version !in 1..2) {
+  if (parsed.version != 3) {
     return Err(LockfileError.UnsupportedVersion(parsed.version))
   }
   return Ok(
@@ -62,7 +67,9 @@ fun parseLockfile(jsonString: String): Result<Lockfile, LockfileError> {
       kotlin = parsed.kotlin,
       jvmTarget = parsed.jvmTarget,
       dependencies =
-        parsed.dependencies.mapValues { (_, v) -> LockEntry(v.version, v.sha256, v.transitive) },
+        parsed.dependencies.mapValues { (_, v) ->
+          LockEntry(v.version, v.sha256, v.transitive, v.test)
+        },
     )
   )
 }
@@ -71,7 +78,7 @@ fun serializeLockfile(lockfile: Lockfile): String {
   val sorted =
     lockfile.dependencies.entries
       .sortedBy { it.key }
-      .associate { (k, v) -> k to LockEntryJson(v.version, v.sha256, v.transitive) }
+      .associate { (k, v) -> k to LockEntryJson(v.version, v.sha256, v.transitive, v.test) }
   val json =
     LockfileJson(
       version = lockfile.version,

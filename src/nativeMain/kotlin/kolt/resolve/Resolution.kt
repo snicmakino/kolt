@@ -5,7 +5,12 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 
-data class DependencyNode(val groupArtifact: String, val version: String, val direct: Boolean)
+data class DependencyNode(
+  val groupArtifact: String,
+  val version: String,
+  val direct: Boolean,
+  val origin: Origin = Origin.MAIN,
+)
 
 /**
  * A child as seen by the resolution kernel. Populated by resolver-specific lookup adapters

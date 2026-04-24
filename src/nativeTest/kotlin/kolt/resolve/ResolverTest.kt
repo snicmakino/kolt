@@ -250,6 +250,49 @@ class ResolverTest {
   }
 
   @Test
+  fun resolvedDepOriginDefaultsToMain() {
+    val dep = ResolvedDep("com.example:lib", "1.0.0", "hash", "/cache/lib.jar")
+    assertEquals(Origin.MAIN, dep.origin)
+  }
+
+  @Test
+  fun resolvedDepCopyToTestOriginChangesOnlyOrigin() {
+    val main = ResolvedDep("com.example:lib", "1.0.0", "hash", "/cache/lib.jar")
+    val test = main.copy(origin = Origin.TEST)
+    assertEquals(Origin.TEST, test.origin)
+    assertEquals(main.groupArtifact, test.groupArtifact)
+    assertEquals(main.version, test.version)
+    assertEquals(main.sha256, test.sha256)
+    assertEquals(main.cachePath, test.cachePath)
+    assertEquals(main.transitive, test.transitive)
+    assertTrue(main != test, "origin is part of equality")
+  }
+
+  @Test
+  fun resolvedDepEqualityRespectsOrigin() {
+    val a = ResolvedDep("com.example:lib", "1.0.0", "hash", "/cache/lib.jar", origin = Origin.TEST)
+    val b = ResolvedDep("com.example:lib", "1.0.0", "hash", "/cache/lib.jar", origin = Origin.TEST)
+    assertEquals(a, b)
+  }
+
+  @Test
+  fun dependencyNodeOriginDefaultsToMain() {
+    val node = DependencyNode("com.example:lib", "1.0.0", direct = true)
+    assertEquals(Origin.MAIN, node.origin)
+  }
+
+  @Test
+  fun dependencyNodeCopyToTestOriginChangesOnlyOrigin() {
+    val main = DependencyNode("com.example:lib", "1.0.0", direct = true)
+    val test = main.copy(origin = Origin.TEST)
+    assertEquals(Origin.TEST, test.origin)
+    assertEquals(main.groupArtifact, test.groupArtifact)
+    assertEquals(main.version, test.version)
+    assertEquals(main.direct, test.direct)
+    assertTrue(main != test)
+  }
+
+  @Test
   fun buildLockfileFromResolvedDeps() {
     val base = testConfig()
     val config =
@@ -263,7 +306,7 @@ class ResolverTest {
         ResolvedDep("org.example:other", "2.0.0", "def456", "/cache/other.jar", transitive = true),
       )
     val lockfile = buildLockfileFromResolved(config, deps)
-    assertEquals(2, lockfile.version)
+    assertEquals(3, lockfile.version)
     assertEquals("2.1.0", lockfile.kotlin)
     assertEquals("17", lockfile.jvmTarget)
     assertEquals(2, lockfile.dependencies.size)

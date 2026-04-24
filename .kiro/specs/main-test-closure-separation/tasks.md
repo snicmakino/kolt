@@ -2,7 +2,7 @@
 
 ## 1. Foundation: data types, schema, 自動注入条件
 
-- [ ] 1.1 (P) Lockfile schema を v3 に bump し `test: Boolean` フラグを追加
+- [x] 1.1 (P) Lockfile schema を v3 に bump し `test: Boolean` フラグを追加
   - `LockEntry` に `test: Boolean = false` を追加 (既存 `transitive: Boolean = false` と同形)
   - `LockEntryJson` に `@SerialName("test") val test: Boolean = false` を追加
   - `parseLockfile` を `version != 3` で `LockfileError.UnsupportedVersion` を返すよう変更 (v1 / v2 は reject)
@@ -12,7 +12,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
   - _Boundary: kolt.resolve.Lockfile_
 
-- [ ] 1.2 (P) `Origin` enum と resolver data class の origin フィールド
+- [x] 1.2 (P) `Origin` enum と resolver data class の origin フィールド
   - `kolt.resolve` に `enum class Origin { MAIN, TEST }` を新設
   - `ResolvedDep` に `origin: Origin = Origin.MAIN` を追加 (default は Native 経路 / 既存呼び出し互換用)
   - `DependencyNode` にも `origin: Origin` を追加
@@ -21,7 +21,7 @@
   - _Requirements: 1.1, 2.1, 2.2_
   - _Boundary: kolt.resolve.Resolver, kolt.resolve.Resolution_
 
-- [ ] 1.3 (P) `autoInjectedTestDeps` を test ソース / test 依存が空のとき skip
+- [x] 1.3 (P) `autoInjectedTestDeps` を test ソース / test 依存が空のとき skip
   - `target == "jvm"` かつ (`testSources.isNotEmpty()` または `testDependencies.isNotEmpty()`) の時のみ `kotlin-test-junit5` を返すよう条件追加
   - `TestDepsTest.kt` に (a) `testSources = []` / `testDependencies = {}` 時に空 Map を返す、(b) 従来条件では継続 inject する、2 ケースを追加
   - 完了条件: `TestDepsTest.kt` の新旧ケースが pass、`autoInjectedTestDeps(config)` の呼び出しで daemon 相当の config (`test_sources = []`) に空 Map が返る
