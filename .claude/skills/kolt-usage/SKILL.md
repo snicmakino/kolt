@@ -187,6 +187,24 @@ kolt toolchain install   # Download kotlinc version from kolt.toml
 
 Stored at `~/.kolt/toolchains/kotlinc/{version}/`. Used automatically when available, falls back to system `kotlinc`.
 
+### CI cache
+
+`~/.kolt/toolchains/` is a stable cache target across the 1.x line (per ADR 0028 §3): the `jdk/<version>/`, `kotlinc/<version>/`, and `konanc/<version>/` subpaths will not be reorganised without a major release. Cache the directory on a key derived from `kolt.toml` (so a Kotlin/JDK pin bump invalidates) and you'll keep hits across patch and minor upgrades. The bootstrap JDK that powers the warm compiler daemon (ADR 0017) lives in the same directory, so a single cache step also avoids re-downloading the daemon JDK on every run.
+
+GitHub Actions:
+
+```yaml
+- name: Cache kolt toolchains
+  uses: actions/cache@v4
+  with:
+    path: ~/.kolt/toolchains
+    key: ${{ runner.os }}-kolt-toolchains-${{ hashFiles('kolt.toml') }}
+    restore-keys: |
+      ${{ runner.os }}-kolt-toolchains-
+```
+
+The `restore-keys` fallback lets a `kolt.toml` edit reuse the previous cache as a base and only re-download the changed tool. Cache `~/.kolt/daemon/` and the build output directory separately if at all — they have different invalidation lifetimes.
+
 ## Kotlin Version Support
 
 kolt supports **Kotlin 2.3.0 and above** on the daemon path, including `[kotlin.plugins]` projects. Kotlin 2.3.20 is the bundled default (no fetch on first build); other 2.3.x patches get `kotlin-build-tools-impl` fetched from Maven Central on first use. Below 2.3.0 is a soft floor — `kolt build` falls back to subprocess with a one-line warning, or silence it with `--no-daemon`. Forward support (2.4.x+) is re-evaluated at each Kotlin language release. Policy: ADR 0022.

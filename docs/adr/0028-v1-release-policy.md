@@ -112,6 +112,14 @@ informal decision that currently lives only in conversation.
   artifact layout per ADR 0025). Reorganisations require either a
   one-time migration on first run or a deprecation window; the
   proposing ADR picks which.
+- **Toolchain cache layout.** `~/.kolt/toolchains/{jdk|kotlinc|konanc}/<version>/`
+  is a v1-stable subset of the on-disk layout above: the three
+  per-tool subdirectories and their per-version slots will not move
+  or rename across 1.x without a major. CI pipelines may cache the
+  `~/.kolt/toolchains/` root on a key derived from `kolt.toml` plus
+  kolt version and rely on hits surviving patch and minor upgrades.
+  The bootstrap JDK (ADR 0017 §1) shares this directory, so caching
+  also warms the daemon's first run.
 - **Wire protocol.** The daemon protocol carries its own version
   (existing `protocolVersion` in the frame header, ADR 0016). A bump
   is allowed at a minor boundary if the native client negotiates down.
@@ -216,6 +224,8 @@ informal decision that currently lives only in conversation.
 - #230 — `install.sh` + release workflow that RCs consume (ADR 0018 §4).
 - #84 — multi-platform binary distribution, unblocks §4.
 - ADR 0018 §4 — release tarball packaging (this ADR sits on top of it).
+- ADR 0017 §1 — bootstrap JDK lives under the toolchain cache layout
+  this ADR's §3 commits to.
 - CLAUDE.md — the "no back-compat until v1.0" rule is the
   contributor-facing side; this ADR is the user-facing counterpart
   that activates when v1.0 ships.
