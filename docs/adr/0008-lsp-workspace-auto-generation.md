@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted (amended 2026-04-26)
 date: 2026-04-09
 ---
 
@@ -7,7 +7,8 @@ date: 2026-04-09
 
 ## Summary
 
-- `workspace.json` (JetBrains kotlin-lsp) and `kls-classpath` (fwcd/kotlin-language-server) are generated at the project root and kept in sync with the lockfile. (§1)
+- `workspace.json` (JetBrains kotlin-lsp) is generated at the project root and kept in sync with the lockfile. (§1)
+- ~~`kls-classpath` is also emitted for fwcd/kotlin-language-server.~~ Removed 2026-04-26; see §6.
 - Regeneration triggers when the lockfile changes or either file is missing; no regeneration otherwise. (§2)
 - Generation is a pure function in `build/Workspace.kt`; I/O is a thin wrapper in `BuildCommands.kt`. (§3)
 - Both files are generated artefacts; exclude from version control — the `kolt init` template adds them to `.gitignore` by default. (§4)
@@ -84,9 +85,19 @@ Both files sit at the project root next to `kolt.toml` so the LSP can find them 
 4. **A single unified format adapted per-LSP at runtime.** Rejected. No shared "LSP project model" standard exists across the Kotlin ecosystem. Each server reads its own format.
 5. **Regenerate on every `kolt build`.** Rejected as wasteful in the no-op case.
 
+## §6 Update 2026-04-26: drop `kls-classpath`
+
+Reverses Alternatives #3. Reasons:
+
+1. fwcd/kotlin-language-server is upstream-deprecated; its README points users to JetBrains/kotlin-lsp.
+2. fwcd's `ShellClassPathResolver` reads `kls-classpath` as an **executable shell script** invoked via `ProcessBuilder` and parses its stdout. kolt has been writing a plain colon-joined text file (mode 644, no shebang), which fwcd logs a warning for and ignores. The emission has therefore never been functionally consumed by any fwcd user of a kolt project.
+3. The neovim editor smoke test for #248 confirmed that kotlin-lsp's neovim integration relies on Gradle/Maven discovery, not `kls-classpath` — so dropping the file does not regress the path that motivated keeping it.
+
+`generateKlsClasspath` and the `KLS_CLASSPATH` write are removed; the regeneration trigger now keys only on `workspace.json` presence. Existing project trees may have a stale `kls-classpath` file from prior builds; users can `rm` it.
+
 ## Related
 
-- `src/nativeMain/kotlin/kolt/build/Workspace.kt` — `generateWorkspaceJson`, `generateKlsClasspath`
-- `src/nativeMain/kotlin/kolt/cli/BuildCommands.kt` — regeneration trigger
+- `src/nativeMain/kotlin/kolt/build/Workspace.kt` — `generateWorkspaceJson`
+- `src/nativeMain/kotlin/kolt/cli/DependencyResolution.kt` — regeneration trigger (writeWorkspaceFiles)
 - Commit `a5af50f` — initial LSP workspace integration (v0.7.0)
-- ADR 0004 — pure/IO separation; `Workspace.kt` generators are pure, wiring lives in `BuildCommands.kt`
+- ADR 0004 — pure/IO separation; `Workspace.kt` generators are pure, wiring lives in `DependencyResolution.kt`

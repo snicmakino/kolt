@@ -9,7 +9,6 @@ import com.github.michaelbull.result.onErr
 import kolt.build.ResolvedJar
 import kolt.build.UserJdkError
 import kolt.build.autoInjectedTestDeps
-import kolt.build.generateKlsClasspath
 import kolt.build.generateWorkspaceJson
 import kolt.build.resolveUserJdkHome
 import kolt.config.*
@@ -18,7 +17,6 @@ import kolt.resolve.*
 
 internal const val LOCK_FILE = "kolt.lock"
 private const val WORKSPACE_JSON = "workspace.json"
-private const val KLS_CLASSPATH = "kls-classpath"
 
 internal fun createResolverDeps(): ResolverDeps = defaultResolverDeps()
 
@@ -112,7 +110,7 @@ internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcom
     }
   }
 
-  if (resolveResult.lockChanged || !fileExists(WORKSPACE_JSON) || !fileExists(KLS_CLASSPATH)) {
+  if (resolveResult.lockChanged || !fileExists(WORKSPACE_JSON)) {
     writeWorkspaceFiles(config, paths, resolveResult.deps)
   }
 
@@ -167,20 +165,11 @@ internal fun resolveNativeDependencies(
 }
 
 private fun writeWorkspaceFiles(config: KoltConfig, paths: KoltPaths, deps: List<ResolvedDep>) {
-  // kls-classpath is a flat union — kotlin-lsp expects one classpath
-  // and resolves visibility from module scopes. workspace.json
-  // carries the main/test split for richer IDE consumers.
   val (mainDeps, testDeps) = splitByOrigin(deps)
   val sdkHomePath = resolveWorkspaceSdkHomePath(config, paths)
   val workspaceJson = generateWorkspaceJson(config, mainDeps, testDeps, sdkHomePath = sdkHomePath)
   writeFileAsString(WORKSPACE_JSON, workspaceJson).getOrElse { error ->
     eprintln("warning: could not write $WORKSPACE_JSON: ${error.path}")
-    return
-  }
-
-  val klsContent = generateKlsClasspath(mainDeps + testDeps)
-  writeFileAsString(KLS_CLASSPATH, klsContent).getOrElse { error ->
-    eprintln("warning: could not write $KLS_CLASSPATH: ${error.path}")
     return
   }
 }

@@ -48,9 +48,6 @@ fun generateWorkspaceJson(
   return prettyJson.encodeToString(JsonObject.serializer(), json)
 }
 
-fun generateKlsClasspath(resolvedDeps: List<ResolvedDep>): String =
-  resolvedDeps.joinToString(":") { it.cachePath }
-
 private fun buildMainModule(config: KoltConfig, resolvedDeps: List<ResolvedDep>): JsonObject =
   buildJsonObject {
     put("name", "${config.name}.main")

@@ -509,23 +509,4 @@ class WorkspaceTest {
       testContentRoot["excludedPatterns"]!!.jsonArray.map { it.jsonPrimitive.content }
     assertEquals(listOf("build", ".kolt-cache", ".kolt"), excludedPatterns)
   }
-
-  @Test
-  fun generateKlsClasspathFromResolvedDeps() {
-    val deps =
-      listOf(
-        ResolvedDep("com.example:lib", "1.0.0", "abc", "/cache/lib-1.0.0.jar"),
-        ResolvedDep("org.other:util", "2.0.0", "def", "/cache/util-2.0.0.jar"),
-      )
-
-    val result = generateKlsClasspath(deps)
-
-    assertEquals("/cache/lib-1.0.0.jar:/cache/util-2.0.0.jar", result)
-  }
-
-  @Test
-  fun generateKlsClasspathEmptyDeps() {
-    val result = generateKlsClasspath(emptyList())
-    assertEquals("", result)
-  }
 }
