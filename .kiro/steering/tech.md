@@ -6,13 +6,15 @@ kolt is a **native-first CLI with JVM sidecar daemons**. The user-facing binary 
 Kotlin/Native (`kolt.kexe`, linuxX64); compilation work is delegated to JVM daemon
 processes over Unix sockets to amortize kotlinc startup cost.
 
-Self-hosting is partial as of v0.13.0: the native binary rebuilds itself from
-`kolt.toml`, but the daemon JARs still require Gradle to build. Full self-host is on
-the v1.0 path.
+Self-host closed as of v0.14.0 (#97 / #228): both the native binary and the daemon
+JARs build from their own `kolt.toml`s. The `self-host-post` CI job exercises this
+path end-to-end (3× `kolt build` + `scripts/assemble-dist.sh` stitch + tarball
+install + fixture smoke). Gradle is kept in parallel as the bootstrap path and as
+the cross-check until v1.0.
 
-Top-level build layout uses Gradle `includeBuild()` to decouple three pieces: the root
-native project, `kolt-jvm-compiler-daemon/` (JVM daemon), and `kolt-native-compiler-daemon/`
-(proposed native-compiler sidecar).
+Top-level build layout uses Gradle `includeBuild()` to decouple three pieces: the
+root native project, `kolt-jvm-compiler-daemon/` (JVM daemon), and
+`kolt-native-compiler-daemon/` (native-compiler sidecar).
 
 ## Core Technologies
 

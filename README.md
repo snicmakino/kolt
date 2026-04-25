@@ -5,7 +5,7 @@
 
 English | [日本語](README.ja.md)
 
-> v0.13.0 — Early-stage project. Expect breaking changes.
+> v0.14.0 — Early-stage project. Expect breaking changes.
 
 A lightweight build tool for Kotlin. TOML config — no Kotlin DSL build scripts to evaluate. Distributed as a single Kotlin/Native binary — no Java install required to use it.
 
