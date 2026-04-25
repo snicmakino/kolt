@@ -25,6 +25,11 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.jar {
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
+
 tasks.test {
     useJUnitPlatform()
 }
