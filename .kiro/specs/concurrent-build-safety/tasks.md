@@ -58,7 +58,7 @@
   - _Boundary: DependencyCommands_
 
 - [ ] 4. Validation: 多プロセス並走の e2e
-- [ ] 4.1 ConcurrentBuildIT で 2 プロセス間の直列化と atomic download を検証
+- [x] 4.1 ConcurrentBuildIT で 2 プロセス間の直列化と atomic download を検証
   - `src/nativeTest/kotlin/kolt/cli/ConcurrentBuildIT.kt` を新設、`executeCommand` (既存 fork+execvp+waitpid) で `kolt.kexe` を 2 回 spawn
   - 直列化シナリオ: tmp dir に小さな fixture プロジェクトを生成 (`kolt.toml` + Main.kt) し、2 つの `kolt build` を ~50ms 差で起動。両方とも exit 0、合計実行時間が単独実行の概ね 2 倍程度になることで直列化を観察 (タイミング厳密 assert はせず、hard upper bound 60s 以内で終わることのみ assert して flake を抑える)
   - TimedOut パス: shell `flock(1)` で fixture の `build/.kolt-build.lock` を 1 秒保持する peer を spawn し、その間に環境変数 `KOLT_LOCK_TIMEOUT_MS=200` を渡した `kolt build` を起動 → exit code 6 (`EXIT_LOCK_TIMEOUT`) と stderr メッセージを assert (`KOLT_LOCK_TIMEOUT_MS` の env 解釈は 3.1 / 3.2 の CLI entry 側で行い、2.1 の acquire には解釈済みの timeoutMs を渡す — 本番運用上も短い CI timeout 用途に有用な knob)
@@ -72,3 +72,6 @@
 ## Implementation Notes
 
 - Format check: project uses `./scripts/fmt.sh --check` (invoked by pre-commit hook). Format-and-fix: `./scripts/fmt.sh`. There is no Gradle `ktfmt` task; running `./gradlew ktfmtCheck` fails. Run the script before staging Kotlin changes.
+- ConcurrentBuildIT is gated behind `KOLT_CONCURRENT_IT=1` because it spawns the real `kolt.kexe` and pulls live Maven Central deps. Default `./gradlew linuxX64Test` returns early without exercising the e2e cases. To run the gated suite: `./gradlew linkDebugExecutableLinuxX64 && KOLT_CONCURRENT_IT=1 ./gradlew linuxX64Test --tests "kolt.cli.ConcurrentBuildIT"`.
+- Pre-existing TOCTOU race in `ensureDirectoryRecursive` (two procs racing to create the same `~/.kolt/cache/<g>/<a>/<v>/` tree) is **outside** this spec's boundary; scenario 4 sidesteps it with a serial warm-up. Worth a follow-up issue.
+- Stale `kolt.kexe` (binary predating tasks 3.1/3.2) makes scenario 2 fail. The IT does not verify binary freshness; CI must ensure `linkDebugExecutableLinuxX64` runs after lock-related commits. Worth a follow-up to detect via mtime vs. lock-related source mtimes.
