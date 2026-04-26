@@ -16,7 +16,7 @@
   - _Boundary: docs/adr_
 
 - [ ] 2. Core: 同期プリミティブと atomic 書き出し
-- [ ] 2.1 (P) ProjectLock を新設し排他ロックの取得・タイムアウト・解放を実装
+- [x] 2.1 (P) ProjectLock を新設し排他ロックの取得・タイムアウト・解放を実装
   - 新規ディレクトリ `src/nativeMain/kotlin/kolt/concurrency/` に `ProjectLock.kt` を作成
   - `LockHandle`(AutoCloseable) と `sealed class LockError { TimedOut(waitedMs) ; IoError(errno, message) }` を定義、`acquire(buildDir, timeoutMs = 30_000L, onWait)` は `Result<LockHandle, LockError>` を返す
   - 実装は `platform.posix.open(O_CREAT|O_RDWR)` → `platform.linux.flock(LOCK_EX|LOCK_NB)` の 100ms polling、最初の peer 検出時のみ `onWait` を 1 度呼ぶ、上限到達で `LockError.TimedOut`
