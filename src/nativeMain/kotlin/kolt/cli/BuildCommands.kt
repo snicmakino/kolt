@@ -18,11 +18,17 @@ import kolt.build.nativedaemon.NativeDaemonPreconditionError
 import kolt.build.nativedaemon.NativeDaemonSetup
 import kolt.build.nativedaemon.formatNativeDaemonPreconditionWarning
 import kolt.build.nativedaemon.resolveNativeDaemonPreconditions
+import kolt.concurrency.LockError
+import kolt.concurrency.LockHandle
+import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
 import kolt.resolve.buildClasspath
 import kolt.tool.*
 import kotlin.time.TimeSource
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.toKString
+import platform.posix.getenv
 
 internal const val KOLT_TOML = "kolt.toml"
 
@@ -192,7 +198,11 @@ internal fun doClean(): Result<Unit, Int> {
   return Ok(Unit)
 }
 
-internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
+internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> = withProjectLock {
+  doBuildInner(useDaemon)
+}
+
+private fun doBuildInner(useDaemon: Boolean): Result<BuildResult, Int> {
   val startMark = TimeSource.Monotonic.markNow()
   val config =
     loadProjectConfig().getOrElse {
@@ -200,7 +210,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
     }
 
   if (config.build.target in NATIVE_TARGETS) {
-    return doNativeBuild(config, useDaemon)
+    return doNativeBuildInner(config, useDaemon)
   }
 
   val currentState =
@@ -374,7 +384,7 @@ internal fun doBuild(useDaemon: Boolean = true): Result<BuildResult, Int> {
   )
 }
 
-private fun doNativeBuild(config: KoltConfig, useDaemon: Boolean): Result<BuildResult, Int> {
+private fun doNativeBuildInner(config: KoltConfig, useDaemon: Boolean): Result<BuildResult, Int> {
   val startMark = TimeSource.Monotonic.markNow()
 
   val paths =
@@ -631,6 +641,13 @@ internal fun doRun(
   classpath: String?,
   appArgs: List<String> = emptyList(),
   javaPath: String? = null,
+): Result<Unit, Int> = withProjectLock { doRunInner(config, classpath, appArgs, javaPath) }
+
+private fun doRunInner(
+  config: KoltConfig,
+  classpath: String?,
+  appArgs: List<String>,
+  javaPath: String?,
 ): Result<Unit, Int> {
   // ADR 0023 §1 kind gate: reject libraries before any artifact lookup
   // or process launch. Target-agnostic by design (R4.3).
@@ -686,7 +703,9 @@ internal fun doRun(
 internal fun doTest(
   testArgs: List<String> = emptyList(),
   useDaemon: Boolean = true,
-): Result<Unit, Int> {
+): Result<Unit, Int> = withProjectLock { doTestInner(testArgs, useDaemon) }
+
+private fun doTestInner(testArgs: List<String>, useDaemon: Boolean): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
@@ -694,8 +713,11 @@ internal fun doTest(
   if (config.build.target in NATIVE_TARGETS) {
     return doNativeTest(config, testArgs)
   }
+  // doBuildInner (not doBuild) — the outer lock acquired by doTest
+  // already covers the build; calling doBuild would attempt a second
+  // flock(2) acquire on a fresh OFD and deadlock against ourselves.
   val buildResult =
-    doBuild(useDaemon = useDaemon).getOrElse {
+    doBuildInner(useDaemon = useDaemon).getOrElse {
       return Err(it)
     }
   // R4.1: test compile/run classpath is main ∪ test. Fall through to the
@@ -1039,3 +1061,52 @@ internal fun applyPluginsFingerprintToFile(path: String, fingerprint: String): S
     "$dir$name-$fingerprint"
   }
 }
+
+// Read KOLT_LOCK_TIMEOUT_MS from the env. Anything that does not parse as
+// a non-negative Long (unset, empty, "abc", "-5") collapses to the
+// default. Zero is allowed and means "fail immediately if a peer holds".
+// Duplicated in DependencyCommands by design (tasks.md 3.1: no shared
+// abstraction yet) — the two CLI layers stay independently understandable.
+@OptIn(ExperimentalForeignApi::class)
+internal fun parseLockTimeoutMs(): Long {
+  val raw = getenv("KOLT_LOCK_TIMEOUT_MS")?.toKString()
+  val parsed = raw?.toLongOrNull() ?: return ProjectLock.DEFAULT_TIMEOUT_MS
+  return if (parsed >= 0L) parsed else ProjectLock.DEFAULT_TIMEOUT_MS
+}
+
+// Wrap a build-system entry in the project-local advisory lock. The
+// lock guards `kolt.lock` rewrite and `build/` finalisation — a peer
+// that holds it for longer than the (env-overridable) timeout exits via
+// EXIT_LOCK_TIMEOUT; a flock(2) IO failure (FS read-only, EBADF, ...)
+// drops to EXIT_BUILD_ERROR with errno + message on stderr.
+private inline fun <T> withProjectLock(crossinline body: () -> Result<T, Int>): Result<T, Int> {
+  ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+    eprintln("error: could not create directory ${error.path}")
+    return Err(EXIT_BUILD_ERROR)
+  }
+  val timeoutMs = parseLockTimeoutMs()
+  val handle: LockHandle =
+    ProjectLock.acquire(BUILD_DIR, timeoutMs).getOrElse { lockError ->
+      return Err(mapLockErrorToExitCode(lockError, timeoutMs))
+    }
+  return handle.use { body() }
+}
+
+private fun mapLockErrorToExitCode(error: LockError, requestedTimeoutMs: Long): Int =
+  when (error) {
+    is LockError.TimedOut -> {
+      val reportedMs = if (error.waitedMs > 0L) error.waitedMs else requestedTimeoutMs
+      eprintln(
+        "error: lock acquisition timed out after ${reportedMs}ms; " +
+          "another kolt build may be stuck"
+      )
+      EXIT_LOCK_TIMEOUT
+    }
+    is LockError.IoError -> {
+      eprintln(
+        "error: could not acquire build lock at $BUILD_DIR/.kolt-build.lock " +
+          "(errno=${error.errno}: ${error.message})"
+      )
+      EXIT_BUILD_ERROR
+    }
+  }

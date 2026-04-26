@@ -36,7 +36,7 @@
   - _Boundary: Downloader_
 
 - [ ] 3. Integration: lock を CLI entry に wire up
-- [ ] 3.1 (P) BuildCommands の build 系 entry を ProjectLock で wrap
+- [x] 3.1 (P) BuildCommands の build 系 entry を ProjectLock で wrap
   - `BuildCommands.kt` の `doBuild` / `doNativeBuild` / `doTest` / `doRun` の入口で `ProjectLock.acquire(paths.buildDir, timeoutMs).use { ... 既存 body ... }` パターンで wrap
   - timeoutMs は環境変数 `KOLT_LOCK_TIMEOUT_MS` を読み、未設定または parse 失敗時は `ProjectLock.DEFAULT_TIMEOUT_MS` (30_000L) を使う。env 解釈ヘルパは BuildCommands 内に閉じ込める (DependencyCommands と重複してよい — 抽象化はしない)
   - `LockError.TimedOut` は `EXIT_LOCK_TIMEOUT` で exit、stderr に "lock acquisition timed out after Nms; another kolt build may be stuck" 相当のメッセージを出力
@@ -68,3 +68,7 @@
   - _Depends: 3.1, 3.2, 2.2_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.7, 2.1, 2.2, 2.3, 2.4_
   - _Boundary: ConcurrentBuildIT_
+
+## Implementation Notes
+
+- Format check: project uses `./scripts/fmt.sh --check` (invoked by pre-commit hook). Format-and-fix: `./scripts/fmt.sh`. There is no Gradle `ktfmt` task; running `./gradlew ktfmtCheck` fails. Run the script before staging Kotlin changes.
