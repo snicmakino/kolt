@@ -7,7 +7,7 @@
   - **完了状態**: `kolt/cli/ExitCode.kt` に `EXIT_LOCK_TIMEOUT` 定数が公開され、import で参照可能になっている
   - _Requirements: 1.4, 1.7_
 
-- [ ] 1.2 (P) ADR 0029 を起草し並行性契約を記録
+- [x] 1.2 (P) ADR 0029 を起草し並行性契約を記録
   - `docs/adr/0029-concurrent-build-safety-model.md` を新設、既存 ADR (0016 / 0024 / 0027 / 0028) に倣い `## Summary` (5-7 bullet) → Status → Context → Decision → Consequences の順で構成
   - Decision 節に: project-local flock の対象 critical section、`build/.kolt-build.lock` のパス、待機メッセージ、30 秒上限、global cache の `.tmp.<pid>` + `rename(2)` 規約、ADR 0016 §3-§5 で既述の daemon socket bind の OS-level 排他への依存、cross-machine (NFS) 共有の非サポート、を明記
   - Consequences 節で `cleanupStaleTemps` の 24h 判定と pre-v1 / no migration shim 方針を記述
