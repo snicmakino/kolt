@@ -47,7 +47,7 @@
   - _Requirements: 1.4, 1.7_
   - _Boundary: BuildCommands_
 
-- [ ] 3.2 (P) DependencyCommands の deps 系 entry を ProjectLock で wrap
+- [x] 3.2 (P) DependencyCommands の deps 系 entry を ProjectLock で wrap
   - `DependencyCommands.kt` の `doAdd` / `doInstall` / `doUpdate` の入口で同パターン (`ProjectLock.acquire(paths.buildDir, timeoutMs).use { ... }`) で wrap
   - timeoutMs の解釈は 3.1 と同方針 (`KOLT_LOCK_TIMEOUT_MS` env 優先、デフォルト 30_000L)
   - `LockError.TimedOut` は `EXIT_LOCK_TIMEOUT`、`LockError.IoError` は既存 `EXIT_DEPENDENCY_ERROR` 経路
