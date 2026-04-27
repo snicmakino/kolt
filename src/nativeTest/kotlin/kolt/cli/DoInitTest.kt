@@ -1,5 +1,6 @@
 package kolt.cli
 
+import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.executeCommand
@@ -107,6 +108,261 @@ class DoInitTest {
 
     val content = readFileAsString(".git").getOrElse { error("read failed") }
     assertEquals("gitdir: ../other/.git/worktrees/w1\n", content)
+  }
+
+  @Test
+  fun libFlagWritesLibKtNotMainKt() {
+    doInit(listOf("mylib", "--lib")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("src/Lib.kt"), "src/Lib.kt must exist for --lib")
+    assertFalse(fileExists("src/Main.kt"), "src/Main.kt must not exist for --lib")
+  }
+
+  @Test
+  fun libFlagWritesLibTestNotMainTest() {
+    doInit(listOf("mylib", "--lib")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("test/LibTest.kt"), "test/LibTest.kt must exist for --lib")
+    assertFalse(fileExists("test/MainTest.kt"), "test/MainTest.kt must not exist for --lib")
+  }
+
+  @Test
+  fun libFlagOmitsMainFromKoltToml() {
+    doInit(listOf("mylib", "--lib")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("kind = \"lib\""), "kolt.toml must declare kind = \"lib\"")
+    assertFalse(
+      toml.lineSequence().any { it.trimStart().startsWith("main") },
+      "kolt.toml must not declare main for --lib",
+    )
+  }
+
+  @Test
+  fun appFlagAcceptedExplicitly() {
+    doInit(listOf("myapp", "--app")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("src/Main.kt"))
+    assertTrue(fileExists("test/MainTest.kt"))
+  }
+
+  @Test
+  fun unknownFlagFails() {
+    val exit = doInit(listOf("myapp", "--bogus")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun mutuallyExclusiveKindFlagsFail() {
+    val exit = doInit(listOf("myapp", "--lib", "--app")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun rejectsWhenKoltTomlAlreadyExists() {
+    writeFileAsString("kolt.toml", "name = \"seed\"\n").getOrElse { error("seed failed") }
+
+    val exit = doInit(listOf("my-app")).getError()
+
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+    val content = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertEquals("name = \"seed\"\n", content, "existing kolt.toml must not be overwritten")
+  }
+
+  @Test
+  fun infersProjectNameFromCwdWhenArgsEmpty() {
+    doInit(emptyList()).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    val expectedName = tmpDir.substringAfterLast('/')
+    assertTrue(
+      toml.contains("name = \"$expectedName\""),
+      "expected name = \"$expectedName\" in toml: $toml",
+    )
+  }
+
+  @Test
+  fun targetFlagWritesNativeTargetIntoToml() {
+    doInit(listOf("myapp", "--target", "linuxX64")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"linuxX64\""))
+    assertFalse(
+      toml.lineSequence().any { it.trimStart().startsWith("jvm_target") },
+      "jvm_target must be omitted for non-jvm targets",
+    )
+  }
+
+  @Test
+  fun targetFlagEqualsFormAccepted() {
+    doInit(listOf("myapp", "--target=linuxX64")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"linuxX64\""))
+  }
+
+  @Test
+  fun targetFlagWithoutValueFails() {
+    val exit = doInit(listOf("myapp", "--target")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun targetFlagWithInvalidValueFails() {
+    val exit = doInit(listOf("myapp", "--target", "wasm")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun targetFlagDuplicateConflictingValueFails() {
+    val exit = doInit(listOf("myapp", "--target", "jvm", "--target", "linuxX64")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun targetFlagDuplicateSameValueAccepted() {
+    doInit(listOf("myapp", "--target", "jvm", "--target", "jvm")).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"jvm\""))
+  }
+
+  @Test
+  fun targetFlagEqualsFormJvmHappyPath() {
+    doInit(listOf("myapp", "--target=jvm")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"jvm\""))
+    assertTrue(toml.contains("jvm_target = "))
+  }
+
+  @Test
+  fun targetFlagEqualsFormEmptyValueFails() {
+    val exit = doInit(listOf("myapp", "--target=")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun targetFlagFollowedByAnotherFlagFails() {
+    val exit = doInit(listOf("myapp", "--target", "--lib")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun groupFlagNestsSourceUnderGroupPath() {
+    doInit(listOf("myapp", "--group", "com.example")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("src/com/example/myapp/Main.kt"))
+    assertFalse(fileExists("src/Main.kt"), "non-nested Main.kt must not exist with --group")
+  }
+
+  @Test
+  fun groupFlagNestsTestUnderGroupPath() {
+    doInit(listOf("myapp", "--group", "com.example")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("test/com/example/myapp/MainTest.kt"))
+    assertFalse(fileExists("test/MainTest.kt"))
+  }
+
+  @Test
+  fun groupFlagAddsPackageDeclaration() {
+    doInit(listOf("myapp", "--group", "com.example")).getOrElse { error("doInit failed: exit=$it") }
+
+    val source =
+      readFileAsString("src/com/example/myapp/Main.kt").getOrElse { error("read failed") }
+    assertTrue(source.startsWith("package com.example.myapp\n"))
+  }
+
+  @Test
+  fun groupFlagWritesFqMainToToml() {
+    doInit(listOf("myapp", "--group", "com.example")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("main = \"com.example.myapp.main\""))
+  }
+
+  @Test
+  fun groupFlagWithLibNestsLibKtAndOmitsMain() {
+    doInit(listOf("mylib", "--lib", "--group", "com.example")).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    assertTrue(fileExists("src/com/example/mylib/Lib.kt"))
+    assertTrue(fileExists("test/com/example/mylib/LibTest.kt"))
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertFalse(
+      toml.lineSequence().any { it.trimStart().startsWith("main") },
+      "lib + group must still omit main",
+    )
+  }
+
+  @Test
+  fun groupFlagSanitizesHyphenInProjectName() {
+    doInit(listOf("my-app", "--group", "com.example")).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    assertTrue(fileExists("src/com/example/my_app/Main.kt"))
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("main = \"com.example.my_app.main\""))
+  }
+
+  @Test
+  fun groupFlagEqualsFormAccepted() {
+    doInit(listOf("myapp", "--group=com.example")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("src/com/example/myapp/Main.kt"))
+  }
+
+  @Test
+  fun groupFlagRejectsInvalidGroup() {
+    val exit = doInit(listOf("myapp", "--group", "9bad")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun groupFlagRejectsEmptyValue() {
+    val exit = doInit(listOf("myapp", "--group=")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun noGroupFlagKeepsTopLevelLayout() {
+    doInit(listOf("myapp")).getOrElse { error("doInit failed: exit=$it") }
+
+    assertTrue(fileExists("src/Main.kt"))
+    val source = readFileAsString("src/Main.kt").getOrElse { error("read failed") }
+    assertFalse(source.startsWith("package "), "no --group must not add package declaration")
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("main = \"main\""), "no --group must keep main = \"main\"")
+  }
+
+  @Test
+  fun groupFlagDuplicateConflictingValueFails() {
+    val exit = doInit(listOf("myapp", "--group", "com.a", "--group", "com.b")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun groupFlagDuplicateSameValueAccepted() {
+    doInit(listOf("myapp", "--group", "com.example", "--group", "com.example")).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+    assertTrue(fileExists("src/com/example/myapp/Main.kt"))
+  }
+
+  @Test
+  fun groupFlagWithoutValueFails() {
+    val exit = doInit(listOf("myapp", "--group")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun groupFlagFollowedByAnotherFlagFails() {
+    val exit = doInit(listOf("myapp", "--group", "--lib")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
   }
 
   @Test

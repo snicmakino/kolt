@@ -26,6 +26,7 @@ fun main(args: Array<String>) {
 
   when (filteredArgs[0]) {
     "init" -> doInit(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
+    "new" -> doNew(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "build" ->
       if (watch) watchCommandLoop("build", useDaemon)
       else doBuild(useDaemon = useDaemon).getOrElse { exitProcess(it) }
@@ -92,7 +93,9 @@ private fun printUsage() {
   eprintln("usage: kolt <command>")
   eprintln("")
   eprintln("commands:")
-  eprintln("  init       Create a new project")
+  eprintln("  init       Create a new project in the current directory")
+  eprintln("  new        Create a new project in <name>/ (same flags as init)")
+  eprintln("             init/new flags: --lib|--app, --target <target>, --group <group>")
   eprintln("  build      Compile the project")
   eprintln("  check      Check compilation without producing artifacts")
   eprintln("  run        Build and run the project")
