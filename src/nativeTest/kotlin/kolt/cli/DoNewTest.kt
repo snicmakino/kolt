@@ -3,6 +3,7 @@ package kolt.cli
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.infra.ensureDirectoryRecursive
+import kolt.infra.executeCommand
 import kolt.infra.fileExists
 import kolt.infra.readFileAsString
 import kolt.infra.removeDirectoryRecursive
@@ -134,9 +135,7 @@ class DoNewTest {
 
   @Test
   fun newSkipsGitInitWhenParentIsAlreadyAWorktree() {
-    kolt.infra.executeCommand(listOf("git", "init", "-q")).getOrElse {
-      error("parent git init failed")
-    }
+    executeCommand(listOf("git", "init", "-q")).getOrElse { error("parent git init failed") }
 
     doNew(listOf("myapp")).getOrElse { error("doNew failed: exit=$it") }
 

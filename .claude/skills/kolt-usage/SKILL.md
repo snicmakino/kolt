@@ -12,24 +12,43 @@ Single binary (Kotlin/Native), instant startup, incremental builds via mtime-bas
 ## Quick Start
 
 ```sh
-mkdir my-app && cd my-app
-kolt init
+kolt new my-app          # creates ./my-app/ and scaffolds inside
+cd my-app
 kolt build
 kolt run
 ```
 
-`kolt init [name]` writes into the current directory — it does **not** create a subdirectory, so `mkdir + cd` first. Without `[name]`, the project name is inferred from the directory. Generated files:
+Or scaffold into an existing directory:
 
-- `kolt.toml` — defaults to `target = "jvm"`, `jvm_target = "17"`, `main = "main"`, `sources = ["src"]`, `[kotlin] version = "2.3.20"`
+```sh
+mkdir my-app && cd my-app
+kolt init                # scaffolds into the current directory
+```
+
+`kolt init` and `kolt new` accept the same flags; the difference is path handling. `init` requires that `kolt.toml` does not already exist; `new <name>` requires that `<name>/` does not already exist.
+
+| Flag | Meaning |
+|------|---------|
+| `--app` (default) / `--lib` | Project kind. App scaffolds `src/Main.kt` with `fun main()`; lib scaffolds `src/Lib.kt` with `fun greet()` and omits `[build] main`. |
+| `--target <jvm\|linuxX64\|linuxArm64\|macosX64\|macosArm64\|mingwX64>` | Build target (default `jvm`). Non-jvm targets omit `jvm_target`. |
+| `--group <com.example>` | Nest sources under `<group>/<name>/` and add matching `package` declarations. App's `main` becomes the FQN (`com.example.myapp.main`). |
+
+Both `--target VALUE` and `--target=VALUE` (and the same for `--group`) are accepted. Repeating a flag with the same value is fine; conflicting values error out.
+
+Generated files for `kolt init`/`kolt new myapp` with no flags:
+
+- `kolt.toml` — `target = "jvm"`, `jvm_target = "17"`, `main = "main"`, `sources = ["src"]`, `[kotlin] version = "2.3.20"`
 - `src/Main.kt` — `fun main()` hello-world stub
 - `test/MainTest.kt` — `kotlin.test` example
+- `.gitignore` and a `git init` (skipped if already inside a worktree)
 
-JVM is the default target; change `[build] target` in `kolt.toml` for native (`linuxX64`, etc.).
+`kolt init` without `[name]` infers the project name from the current directory; `kolt new` requires `<name>` explicitly.
 
 ## Commands
 
 ```
-kolt init [name]            Create a new project
+kolt init [name]            Create a new project in the current directory
+kolt new <name>             Create a new project in <name>/ (same flags as init)
 kolt build                  Compile the project
 kolt run                    Build and run (kolt run -- args for app arguments)
 kolt test                   Build and run tests (kolt test -- args for JUnit Platform)
