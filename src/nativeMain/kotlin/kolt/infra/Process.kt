@@ -123,6 +123,49 @@ fun spawnDetached(args: List<String>, logPath: String? = null): Result<Unit, Pro
   return Ok(Unit)
 }
 
+// Same as `executeCommand` but redirects stdout and stderr to /dev/null
+// in the child. Use when the exit code is the only signal of interest
+// and stderr noise from the expected non-zero-exit path is undesirable.
+@OptIn(ExperimentalForeignApi::class)
+fun executeCommandQuiet(args: List<String>): Result<Int, ProcessError> {
+  if (args.isEmpty()) return Err(ProcessError.EmptyArgs)
+
+  val pid = fork()
+  if (pid < 0) {
+    return Err(ProcessError.ForkFailed)
+  }
+  if (pid == 0) {
+    val devNull = open("/dev/null", O_WRONLY)
+    if (devNull >= 0) {
+      dup2(devNull, STDOUT_FILENO)
+      dup2(devNull, STDERR_FILENO)
+      if (devNull > STDERR_FILENO) platform.posix.close(devNull)
+    }
+    memScoped {
+      val argv = allocArray<CPointerVar<ByteVar>>(args.size + 1)
+      for (i in args.indices) {
+        argv[i] = args[i].cstr.ptr
+      }
+      argv[args.size] = null
+      execvp(args[0], argv)
+      _exit(127)
+    }
+  }
+  memScoped {
+    val status = alloc<IntVar>()
+    while (waitpid(pid, status.ptr, 0) == -1) {
+      if (errno != EINTR) return Err(ProcessError.WaitFailed)
+    }
+    val raw = status.value
+    return if ((raw and 0x7F) == 0) {
+      val exitCode = (raw shr 8) and 0xFF
+      if (exitCode == 0) Ok(0) else Err(ProcessError.NonZeroExit(exitCode))
+    } else {
+      Err(ProcessError.SignalKilled)
+    }
+  }
+}
+
 @OptIn(ExperimentalForeignApi::class)
 fun executeAndCapture(command: String): Result<String, ProcessError> {
   val fp = popen(command, "r") ?: return Err(ProcessError.PopenFailed)

@@ -21,10 +21,6 @@ import platform.posix.PATH_MAX
 import platform.posix.getcwd
 import platform.posix.getenv
 
-private const val SRC_DIR = "src"
-private const val GITIGNORE = ".gitignore"
-private const val GIT_DIR = ".git"
-
 @OptIn(ExperimentalForeignApi::class)
 internal fun doInit(args: List<String>): Result<Unit, Int> {
   if (fileExists(KOLT_TOML)) {
@@ -55,75 +51,8 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
     return Err(EXIT_CONFIG_ERROR)
   }
 
-  writeFileAsString(KOLT_TOML, generateKoltToml(projectName)).getOrElse { error ->
-    eprintln("error: could not write ${error.path}")
-    return Err(EXIT_BUILD_ERROR)
-  }
-  println("created $KOLT_TOML")
-
-  if (!fileExists(SRC_DIR)) {
-    ensureDirectory(SRC_DIR).getOrElse { error ->
-      eprintln("error: could not create directory ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-  }
-
-  val mainKtPath = "$SRC_DIR/Main.kt"
-  if (!fileExists(mainKtPath)) {
-    writeFileAsString(mainKtPath, generateMainKt()).getOrElse { error ->
-      eprintln("error: could not write ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-    println("created $mainKtPath")
-  }
-
-  val testDir = "test"
-  if (!fileExists(testDir)) {
-    ensureDirectory(testDir).getOrElse { error ->
-      eprintln("error: could not create directory ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-  }
-
-  val testKtPath = "$testDir/MainTest.kt"
-  if (!fileExists(testKtPath)) {
-    writeFileAsString(testKtPath, generateTestKt()).getOrElse { error ->
-      eprintln("error: could not write ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-    println("created $testKtPath")
-  }
-
-  if (!fileExists(GITIGNORE)) {
-    writeFileAsString(GITIGNORE, generateGitignore()).getOrElse { error ->
-      eprintln("error: could not write ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-    println("created $GITIGNORE")
-  }
-
-  if (!fileExists(GIT_DIR) && !isInsideExistingGitWorktree()) {
-    val err = executeCommand(listOf("git", "init", "-q")).getError()
-    if (err == null) {
-      println("initialized git repository")
-    } else {
-      eprintln("warning: could not run git init (${formatProcessError(err, "git init")})")
-    }
-  }
-
-  println("initialized project '$projectName'")
-  return Ok(Unit)
+  return scaffoldProject(".", ScaffoldOptions(projectName))
 }
-
-// `executeAndCapture` only redirects stdout via popen("r"); git's
-// "fatal: not a git repository" still goes to the parent's stderr.
-// The 2>/dev/null is load-bearing: it suppresses that noise on the
-// expected non-zero-exit path (= cwd not in any worktree).
-// Any failure (popen error, missing git, weird permission denied) is
-// treated as "not in a worktree" — false negatives are safe (we'd
-// just create a fresh `.git/`); false positives would be worse.
-private fun isInsideExistingGitWorktree(): Boolean =
-  executeAndCapture("git rev-parse --is-inside-work-tree 2>/dev/null").getError() == null
 
 internal fun doAdd(args: List<String>): Result<Unit, Int> = withDependencyLock { doAddInner(args) }
 
