@@ -220,6 +220,37 @@ class DoInitTest {
   }
 
   @Test
+  fun targetFlagDuplicateSameValueAccepted() {
+    doInit(listOf("myapp", "--target", "jvm", "--target", "jvm")).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"jvm\""))
+  }
+
+  @Test
+  fun targetFlagEqualsFormJvmHappyPath() {
+    doInit(listOf("myapp", "--target=jvm")).getOrElse { error("doInit failed: exit=$it") }
+
+    val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
+    assertTrue(toml.contains("target = \"jvm\""))
+    assertTrue(toml.contains("jvm_target = "))
+  }
+
+  @Test
+  fun targetFlagEqualsFormEmptyValueFails() {
+    val exit = doInit(listOf("myapp", "--target=")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
+  fun targetFlagFollowedByAnotherFlagFails() {
+    val exit = doInit(listOf("myapp", "--target", "--lib")).getError()
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+  }
+
+  @Test
   fun skipsGitInitInsideExistingWorktree() {
     // Make tmpDir a real repo, then run doInit from a subdirectory.
     executeCommand(listOf("git", "init", "-q")).getOrElse { error("parent git init failed") }

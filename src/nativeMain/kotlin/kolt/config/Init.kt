@@ -16,7 +16,7 @@ private const val INIT_TEMPLATE_KOTLIN_VERSION = "2.3.20"
 fun generateKoltToml(
   projectName: String,
   kind: ScaffoldKind = ScaffoldKind.APP,
-  target: String = "jvm",
+  target: String = DEFAULT_SCAFFOLD_TARGET,
 ): String = buildString {
   appendLine("""name = "$projectName"""")
   appendLine("""version = "0.1.0"""")

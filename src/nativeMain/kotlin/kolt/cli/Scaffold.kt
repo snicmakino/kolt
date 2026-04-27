@@ -49,20 +49,15 @@ internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
         }
         kind = newKind
       }
-      arg == "--target" -> {
-        if (!iter.hasNext()) return Err("--target requires a value")
-        val newTarget =
-          setTargetOnce(target, iter.next()).getOrElse {
+      arg == "--target" || arg.startsWith("--target=") -> {
+        val value =
+          readFlagValue(arg, "--target", iter).getOrElse {
             return Err(it)
           }
-        target = newTarget
-      }
-      arg.startsWith("--target=") -> {
-        val newTarget =
-          setTargetOnce(target, arg.removePrefix("--target=")).getOrElse {
+        target =
+          mergeTarget(target, value).getOrElse {
             return Err(it)
           }
-        target = newTarget
       }
       arg.startsWith("--") -> return Err("unknown flag '$arg'")
       else -> {
@@ -80,13 +75,35 @@ internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
   )
 }
 
-private fun setTargetOnce(current: String?, value: String): Result<String, String> {
-  if (value.isEmpty()) return Err("--target requires a value")
+// Reads the value bound to a long option, supporting both
+// `--name VALUE` and `--name=VALUE`. Rejects `--`-prefixed values so a
+// missing value followed by another flag (`--target --lib`) does not
+// silently swallow the flag.
+private fun readFlagValue(
+  arg: String,
+  flagName: String,
+  iter: Iterator<String>,
+): Result<String, String> {
+  val value =
+    if (arg == flagName) {
+      if (!iter.hasNext()) return Err("$flagName requires a value")
+      iter.next()
+    } else {
+      arg.removePrefix("$flagName=")
+    }
+  if (value.isEmpty()) return Err("$flagName requires a value")
+  if (value.startsWith("--")) {
+    return Err("$flagName requires a value (got '$value', looks like another flag)")
+  }
+  return Ok(value)
+}
+
+private fun mergeTarget(current: String?, value: String): Result<String, String> {
   if (value !in VALID_TARGETS) {
     return Err("invalid target '$value' (valid: ${VALID_TARGETS.joinToString(", ")})")
   }
   if (current != null && current != value) {
-    return Err("--target may only be specified once")
+    return Err("--target already set to '$current'; cannot also set '$value'")
   }
   return Ok(value)
 }
