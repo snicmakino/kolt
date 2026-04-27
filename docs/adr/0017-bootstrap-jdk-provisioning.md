@@ -7,7 +7,7 @@ date: 2026-04-14
 
 ## Summary
 
-- The compiler daemon runs on a dedicated kolt-owned JDK, pinned as `BOOTSTRAP_JDK_VERSION` in `kolt.build.daemon.BootstrapJdk`, independent of the user's `kolt.toml [build] jdk`. Phase A pins to `"21"`. (§1)
+- The compiler daemon runs on a dedicated kolt-owned JDK, pinned as `BOOTSTRAP_JDK_VERSION` in `kolt.build.daemon.BootstrapJdk`, independent of the user's `kolt.toml [build] jdk`. Currently pinned to `"25"` (Phase A initial value was `"21"`; bumped to the latest LTS for v1 alignment). (§1)
 - `ensureBootstrapJavaBin(paths)` auto-installs the pinned JDK under `~/.kolt/toolchains/jdk/<BOOTSTRAP_JDK_VERSION>/` on first use, reusing the existing `installJdkToolchain` code path. (§2)
 - Any install failure surfaces as `BootstrapJdkInstallFailed(jdkInstallDir, cause)` and the build degrades to the subprocess compile path with a one-line warning, honouring ADR 0016 §5. (§3)
 - `BOOTSTRAP_JDK_VERSION` is not exposed in `kolt.toml`; users cannot override it per project. (§4)
@@ -34,7 +34,7 @@ Chosen option: **auto-provision a dedicated bootstrap JDK slot**, because it dec
 
 ### §1 Dedicated bootstrap JDK slot
 
-kolt reserves `~/.kolt/toolchains/jdk/<BOOTSTRAP_JDK_VERSION>/` for the daemon. `BOOTSTRAP_JDK_VERSION` is a compile-time constant in `kolt.build.daemon.BootstrapJdk`, pinned to `"21"` in Phase A. The slot shares the namespace with user-requested JDKs, so a project that already pins JDK 21 shares the install for free. A kolt release bumps the constant once for all users.
+kolt reserves `~/.kolt/toolchains/jdk/<BOOTSTRAP_JDK_VERSION>/` for the daemon. `BOOTSTRAP_JDK_VERSION` is a compile-time constant in `kolt.build.daemon.BootstrapJdk`, currently pinned to `"25"` (Phase A initial value was `"21"`). The slot shares the namespace with user-requested JDKs, so a project that already pins the same major shares the install for free. A kolt release bumps the constant once for all users.
 
 ### §2 Auto-install on first use
 
@@ -52,7 +52,7 @@ Any failure on the install path — download, checksum, extraction — surfaces 
 
 ### §5 Feature-version pin, not exact-version pin
 
-The current pin uses Adoptium's `latest/<feature>` endpoint (`latest/21`), which tracks "whatever 21 GA is today". Two machines installing on different days can end up with different JDK 21 point releases, but both satisfy daemon requirements identically. Tightening to an exact version (Adoptium `/v3/binary/version/...`) requires a second URL pattern that the existing `installJdkToolchain` does not know about; this is deferred follow-up.
+The current pin uses Adoptium's `latest/<feature>` endpoint (`latest/25`), which tracks "whatever 25 GA is today". Two machines installing on different days can end up with different JDK 25 point releases, but both satisfy daemon requirements identically. Tightening to an exact version (Adoptium `/v3/binary/version/...`) requires a second URL pattern that the existing `installJdkToolchain` does not know about; this is deferred follow-up.
 
 ### Consequences
 
@@ -60,12 +60,12 @@ The current pin uses Adoptium's `latest/<feature>` endpoint (`latest/21`), which
 - Daemon JDK is decoupled from the project JDK; a project pinned to JDK 11 still gets the warm-compiler speedup.
 - Every machine running the same kolt version gets the same JDK family; a kolt release bumps the bootstrap for everyone.
 - Provisioning uses the same `installJdkToolchain` code path as `kolt toolchain install`; no parallel mechanism.
-- Shared cache: a project pinning JDK 21 and the bootstrap slot share a single install under `~/.kolt/toolchains/jdk/21/`.
+- Shared cache: a project pinning the same major as `BOOTSTRAP_JDK_VERSION` and the bootstrap slot share a single install under `~/.kolt/toolchains/jdk/<major>/`.
 
 **Negative**
 - First `kolt build` on a clean machine is gated on a ~200 MB download. An offline first run silently degrades to the subprocess compile path and retries on the next online build.
 - Release notes must state which JDK the daemon runs on for each kolt release. A bootstrap JDK behind on security patches affects all users downloading after it falls behind.
-- Feature-version pin means "kolt version X uses JDK 21.0.5" is not a claim kolt can make without the exact-version endpoint work.
+- Feature-version pin means "kolt version X uses JDK 25.0.N" (where N is the GA point release at install time) is not a claim kolt can make without the exact-version endpoint work.
 
 ### Confirmation
 

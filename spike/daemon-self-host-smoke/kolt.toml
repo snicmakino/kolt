@@ -7,8 +7,8 @@ version = "2.3.20"
 
 [build]
 target = "jvm"
-jvm_target = "21"
-jdk = "21"
+jvm_target = "25"
+jdk = "25"
 main = "smoke.main"
 sources = ["src/main/kotlin"]
 test_sources = []

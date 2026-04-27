@@ -22,6 +22,14 @@ repositories {
     mavenCentral()
 }
 
+// JDK pin (BOOTSTRAP_JDK_VERSION in src/nativeMain/.../BootstrapJdk.kt, two
+// daemon kolt.toml `jdk`/`jvm_target`, three daemon build.gradle.kts
+// `jvmToolchain(N)`) is also hand-synced across 5 sites. Drift surfaces as
+// `UnsupportedClassVersionError` on daemon spawn (when daemon `jvm_target` >
+// BOOTSTRAP) or as a wasted JDK install in CI cache. No guard yet — see #268
+// for the migration plan (move both verify* tasks below + a new JDK pin guard
+// to native unit tests, so the checks survive removal of Gradle from the root
+// build per the daemon self-host direction in #97/#228).
 val verifyDaemonKotlinVersion = tasks.register("verifyDaemonKotlinVersion") {
     group = "verification"
     description = "Fails the build if any daemon-side kotlin version pin drifts from root daemonKotlinVersion."

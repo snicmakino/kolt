@@ -38,7 +38,7 @@ class ConfigTest {
     assertEquals("jvm", config.build.target)
     assertEquals("com.example.main", config.build.main)
     assertEquals(listOf("src"), config.build.sources)
-    assertEquals("17", config.build.jvmTarget)
+    assertEquals("25", config.build.jvmTarget)
     assertEquals(emptyMap(), config.dependencies)
   }
 

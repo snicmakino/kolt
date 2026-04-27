@@ -13,7 +13,7 @@ SIZES=("${@:-1 10 25 50}")
 SIZES=(${SIZES[@]})
 
 KOTLIN_VERSION="2.1.0"
-JVM_TARGET="21"
+JVM_TARGET="25"
 
 write_kolt_toml() {
   local name="$1"

@@ -31,7 +31,7 @@ fun generateKoltToml(
   appendLine("[build]")
   appendLine("""target = "$target"""")
   if (target == "jvm") {
-    appendLine("""jvm_target = "17"""")
+    appendLine("""jvm_target = "25"""")
   }
   if (kind == ScaffoldKind.APP) {
     val mainFqn =
