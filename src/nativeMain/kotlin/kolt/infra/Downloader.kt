@@ -20,10 +20,18 @@ import libcurl.curl_easy_perform
 import libcurl.curl_easy_setopt
 import libcurl.curl_easy_strerror
 import platform.posix.FILE
+import platform.posix.closedir
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fwrite
+import platform.posix.getpid
+import platform.posix.opendir
+import platform.posix.readdir
 import platform.posix.remove
+import platform.posix.rename
+import platform.posix.stat
+import platform.posix.time
+import platform.posix.time_tVar
 
 sealed class DownloadError {
   data class HttpFailed(val url: String, val statusCode: Int) : DownloadError()
@@ -33,17 +41,30 @@ sealed class DownloadError {
   data class NetworkError(val url: String, val message: String) : DownloadError()
 }
 
+private const val STALE_TEMP_AGE_SECONDS: Long = 86_400L
+
 @OptIn(ExperimentalForeignApi::class)
 fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+  val parentDir = parentDirOf(destPath)
+  if (parentDir != null) {
+    cleanupStaleTemps(parentDir)
+  }
+
+  // Per-pid temp suffix lets concurrent downloaders of the same coordinate
+  // each own their own intermediate file; the eventual rename(2) is atomic
+  // on the same filesystem so any reader sees either no file or a complete one.
+  val tempPath = "$destPath.tmp.${getpid()}"
+
   val curl =
     curl_easy_init() ?: return Err(DownloadError.NetworkError(url, "failed to initialize libcurl"))
 
-  val fp = fopen(destPath, "wb")
+  val fp = fopen(tempPath, "wb")
   if (fp == null) {
     curl_easy_cleanup(curl)
-    return Err(DownloadError.WriteFailed(destPath))
+    return Err(DownloadError.WriteFailed(tempPath))
   }
 
+  var fileClosed = false
   var success = false
   try {
     curl_easy_setopt(curl, CURLOPT_URL, url)
@@ -69,12 +90,62 @@ fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
       }
     }
 
+    // Close before rename so flushed bytes are on disk and the FILE* does
+    // not point at a renamed inode on the unlikely close-after-rename path.
+    fclose(fp)
+    fileClosed = true
+
+    if (rename(tempPath, destPath) != 0) {
+      return Err(DownloadError.WriteFailed(destPath))
+    }
+
     success = true
     return Ok(Unit)
   } finally {
-    fclose(fp)
+    if (!fileClosed) fclose(fp)
     curl_easy_cleanup(curl)
-    if (!success) remove(destPath)
+    if (!success) remove(tempPath)
+  }
+}
+
+// Sweep `*.tmp.*` files older than `olderThanSeconds` from `cacheDir`.
+// Errors (cannot opendir, cannot stat) are swallowed silently — sweeping
+// is best-effort and must never fail a download.
+@OptIn(ExperimentalForeignApi::class)
+private fun cleanupStaleTemps(cacheDir: String, olderThanSeconds: Long = STALE_TEMP_AGE_SECONDS) {
+  val dir = opendir(cacheDir) ?: return
+  val nowSec = memScoped {
+    val nowVar = alloc<time_tVar>()
+    time(nowVar.ptr)
+  }
+  try {
+    while (true) {
+      val entry = readdir(dir) ?: break
+      val name = entry.pointed.d_name.toKString()
+      if (name == "." || name == "..") continue
+      if (!name.contains(".tmp.")) continue
+      val full = "$cacheDir/$name"
+      memScoped {
+        val st = alloc<stat>()
+        if (stat(full, st.ptr) == 0) {
+          val mtime = st.st_mtim.tv_sec
+          if (nowSec - mtime > olderThanSeconds) {
+            remove(full)
+          }
+        }
+      }
+    }
+  } finally {
+    closedir(dir)
+  }
+}
+
+private fun parentDirOf(path: String): String? {
+  val idx = path.lastIndexOf('/')
+  return when {
+    idx < 0 -> null
+    idx == 0 -> "/"
+    else -> path.substring(0, idx)
   }
 }
 

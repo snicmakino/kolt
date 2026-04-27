@@ -6,6 +6,9 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.*
+import kolt.concurrency.LockError
+import kolt.concurrency.LockHandle
+import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
 import kolt.resolve.*
@@ -16,6 +19,7 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.toKString
 import platform.posix.PATH_MAX
 import platform.posix.getcwd
+import platform.posix.getenv
 
 private const val SRC_DIR = "src"
 private const val GITIGNORE = ".gitignore"
@@ -121,7 +125,9 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
 private fun isInsideExistingGitWorktree(): Boolean =
   executeAndCapture("git rev-parse --is-inside-work-tree 2>/dev/null").getError() == null
 
-internal fun doAdd(args: List<String>): Result<Unit, Int> {
+internal fun doAdd(args: List<String>): Result<Unit, Int> = withDependencyLock { doAddInner(args) }
+
+private fun doAddInner(args: List<String>): Result<Unit, Int> {
   val addArgs =
     parseAddArgs(args).getOrElse { error ->
       when (error) {
@@ -177,7 +183,10 @@ internal fun doAdd(args: List<String>): Result<Unit, Int> {
   val section = if (addArgs.isTest) "[test-dependencies]" else "[dependencies]"
   println("added $groupArtifact = \"$version\" to $section")
 
-  return doInstall()
+  // doInstallInner (not doInstall) — the outer lock acquired by doAdd
+  // already covers the install; calling doInstall would attempt a second
+  // flock(2) acquire on a fresh OFD and deadlock against ourselves.
+  return doInstallInner()
 }
 
 private fun fetchLatestVersion(
@@ -234,7 +243,9 @@ private fun fetchLatestVersion(
     .let { Ok(it) }
 }
 
-internal fun doInstall(): Result<Unit, Int> {
+internal fun doInstall(): Result<Unit, Int> = withDependencyLock { doInstallInner() }
+
+private fun doInstallInner(): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
@@ -246,7 +257,9 @@ internal fun doInstall(): Result<Unit, Int> {
   return Ok(Unit)
 }
 
-internal fun doUpdate(): Result<Unit, Int> {
+internal fun doUpdate(): Result<Unit, Int> = withDependencyLock { doUpdateInner() }
+
+private fun doUpdateInner(): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
@@ -390,3 +403,50 @@ private fun printDepsUsage() {
   eprintln("  update     Re-resolve dependencies and update lockfile")
   eprintln("  tree       Show dependency tree")
 }
+
+// Read KOLT_LOCK_TIMEOUT_MS from the env. Anything that does not parse as
+// a non-negative Long (unset, empty, "abc", "-5") collapses to the
+// default. Zero is allowed and means "fail immediately if a peer holds".
+// Duplicated from BuildCommands by design (tasks.md 3.2: no shared
+// abstraction yet) — the two CLI layers stay independently understandable.
+@OptIn(ExperimentalForeignApi::class)
+internal fun parseDependencyLockTimeoutMs(): Long {
+  val raw = getenv("KOLT_LOCK_TIMEOUT_MS")?.toKString()
+  val parsed = raw?.toLongOrNull() ?: return ProjectLock.DEFAULT_TIMEOUT_MS
+  return if (parsed >= 0L) parsed else ProjectLock.DEFAULT_TIMEOUT_MS
+}
+
+// Wrap a deps-system entry in the project-local advisory lock. Mirrors
+// `withProjectLock` in BuildCommands but routes IO failures to
+// EXIT_DEPENDENCY_ERROR (the deps tree of CLI exit codes — task 3.2).
+private inline fun <T> withDependencyLock(crossinline body: () -> Result<T, Int>): Result<T, Int> {
+  ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+    eprintln("error: could not create directory ${error.path}")
+    return Err(EXIT_DEPENDENCY_ERROR)
+  }
+  val timeoutMs = parseDependencyLockTimeoutMs()
+  val handle: LockHandle =
+    ProjectLock.acquire(BUILD_DIR, timeoutMs).getOrElse { lockError ->
+      return Err(mapDependencyLockErrorToExitCode(lockError, timeoutMs))
+    }
+  return handle.use { body() }
+}
+
+private fun mapDependencyLockErrorToExitCode(error: LockError, requestedTimeoutMs: Long): Int =
+  when (error) {
+    is LockError.TimedOut -> {
+      val reportedMs = if (error.waitedMs > 0L) error.waitedMs else requestedTimeoutMs
+      eprintln(
+        "error: lock acquisition timed out after ${reportedMs}ms; " +
+          "another kolt build may be stuck"
+      )
+      EXIT_LOCK_TIMEOUT
+    }
+    is LockError.IoError -> {
+      eprintln(
+        "error: could not acquire build lock at $BUILD_DIR/.kolt-build.lock " +
+          "(errno=${error.errno}: ${error.message})"
+      )
+      EXIT_DEPENDENCY_ERROR
+    }
+  }
