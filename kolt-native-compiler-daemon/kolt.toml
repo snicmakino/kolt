@@ -10,8 +10,8 @@ serialization = true
 
 [build]
 target = "jvm"
-jvm_target = "21"
-jdk = "21"
+jvm_target = "25"
+jdk = "25"
 main = "kolt.nativedaemon.main"
 sources = ["src/main/kotlin"]
 test_sources = []

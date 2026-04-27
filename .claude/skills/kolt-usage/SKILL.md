@@ -37,7 +37,7 @@ Both `--target VALUE` and `--target=VALUE` (and the same for `--group`) are acce
 
 Generated files for `kolt init`/`kolt new myapp` with no flags:
 
-- `kolt.toml` — `target = "jvm"`, `jvm_target = "17"`, `main = "main"`, `sources = ["src"]`, `[kotlin] version = "2.3.20"`
+- `kolt.toml` — `target = "jvm"`, `jvm_target = "25"`, `main = "main"`, `sources = ["src"]`, `[kotlin] version = "2.3.20"`
 - `src/Main.kt` — `fun main()` hello-world stub
 - `test/MainTest.kt` — `kotlin.test` example
 - `.gitignore` and a `git init` (skipped if already inside a worktree)
@@ -109,7 +109,7 @@ serialization = true
 
 [build]
 target = "jvm"
-jvm_target = "17"
+jvm_target = "25"
 main = "main"
 sources = ["src"]
 test_sources = ["test"]
@@ -145,7 +145,7 @@ package = "libcurl"
 | `[kotlin] compiler` | Override kotlinc/daemon version independently of `version`. Must be `>= version`. | `version` |
 | `[kotlin.plugins]` | Compiler plugins (`serialization`, `allopen`, `noarg`) | `{}` |
 | `[build] target` | `"jvm"` or a KonanTarget (`"linuxX64"`, `"linuxArm64"`, `"macosX64"`, `"macosArm64"`, `"mingwX64"`) | (required) |
-| `[build] jvm_target` | JVM bytecode target | `"17"` |
+| `[build] jvm_target` | JVM bytecode target | `"25"` |
 | `[build] jdk` | JDK version pin for daemon/runtime | (host JDK) |
 | `[build] main` | Entry point function FQN (e.g. `"main"` or `"com.example.main"`) | (required) |
 | `[build] sources` | Source directories | (required) |

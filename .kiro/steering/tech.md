@@ -21,7 +21,7 @@ root native project, `kolt-jvm-compiler-daemon/` (JVM daemon), and
 - **Language**: Kotlin 2.3.x (pinned in both `build.gradle.kts` and `kolt.toml`). The
   Kotlin compiler version used for user builds is independently overridable via
   `[kotlin] compiler = "..."` so users can pin an older API.
-- **JVM target**: JDK 21 for daemon JARs and Gradle builds.
+- **JVM target**: JDK 25 for daemon JARs and Gradle builds.
 - **Native target**: linuxX64 via Kotlin/Native (konanc). Two-stage library+link
   compile flow (ADR 0014) to keep plugin registrars working on native.
 
@@ -68,7 +68,7 @@ the repo is English-first.
 ## Development Environment
 
 ### Required Tools
-- **JDK** (host or `[build] jdk`-managed). Daemon pins JDK 21.
+- **JDK** (host or `[build] jdk`-managed). Daemon pins JDK 25.
 - **kotlinc** — auto-downloaded to `~/.kolt/toolchains/kotlinc/{version}/` on first
   run; falls back to system kotlinc if present.
 - **konanc** — auto-installed on first native build; also provisioned by Gradle

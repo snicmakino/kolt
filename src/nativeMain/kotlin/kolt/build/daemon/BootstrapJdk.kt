@@ -11,7 +11,7 @@ import kolt.tool.ToolchainError
 import kolt.tool.installJdkToolchain
 
 // Independent of the project's JDK — see ADR 0017.
-const val BOOTSTRAP_JDK_VERSION: String = "21"
+const val BOOTSTRAP_JDK_VERSION: String = "25"
 
 internal data class BootstrapJdkError(val jdkInstallDir: String, val cause: ToolchainError)
 

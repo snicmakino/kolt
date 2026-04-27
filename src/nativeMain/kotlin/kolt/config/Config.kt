@@ -64,7 +64,7 @@ data class KotlinSection(
 @Serializable
 data class BuildSection(
   val target: String,
-  @SerialName("jvm_target") val jvmTarget: String = "17",
+  @SerialName("jvm_target") val jvmTarget: String = "25",
   val jdk: String? = null,
   val main: String?,
   val sources: List<String>,
@@ -102,7 +102,7 @@ private val toml = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = true)
 @Serializable
 private data class RawBuildSection(
   val target: String? = null,
-  @SerialName("jvm_target") val jvmTarget: String = "17",
+  @SerialName("jvm_target") val jvmTarget: String = "25",
   val jdk: String? = null,
   val main: String? = null,
   val sources: List<String>,

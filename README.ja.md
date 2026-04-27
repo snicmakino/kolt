@@ -110,7 +110,7 @@ serialization = true
 
 [build]
 target = "jvm"
-jvm_target = "17"
+jvm_target = "25"
 main = "main"
 sources = ["src"]
 resources = ["resources"]
@@ -134,7 +134,7 @@ jitpack = "https://jitpack.io"
 | `[kotlin] compiler` | `version` と独立して kotlinc / daemon のバージョンを固定（`>= version` 必須） | `version` |
 | `[kotlin.plugins]` | コンパイラプラグイン（`serialization`、`allopen`、`noarg`） | `{}` |
 | `[build] target` | `"jvm"` または KonanTarget（`"linuxX64"`, `"linuxArm64"`, `"macosX64"`, `"macosArm64"`, `"mingwX64"`） | （必須） |
-| `[build] jvm_target` | JVM バイトコードターゲット | `"17"` |
+| `[build] jvm_target` | JVM バイトコードターゲット | `"25"` |
 | `[build] jdk` | daemon/runtime 用の JDK バージョン | （ホスト JDK） |
 | `[build] main` | エントリポイント関数の FQN（例：`"main"` または `"com.example.main"`） | （必須） |
 | `[build] sources` | ソースディレクトリ | （必須） |
