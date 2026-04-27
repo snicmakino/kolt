@@ -15,7 +15,7 @@ import platform.posix.PATH_MAX
 import platform.posix.getcwd
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun doInit(args: List<String>): Result<Unit, Int> {
+internal fun doInit(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Result<Unit, Int> {
   val parsed =
     parseInitArgs(args).getOrElse { msg ->
       eprintln("error: $msg")
@@ -46,8 +46,14 @@ internal fun doInit(args: List<String>): Result<Unit, Int> {
     return Err(EXIT_CONFIG_ERROR)
   }
 
+  val resolved =
+    resolveInteractive(parsed, io).getOrElse { msg ->
+      eprintln("error: $msg")
+      return Err(EXIT_CONFIG_ERROR)
+    }
+
   return scaffoldProject(
     ".",
-    ScaffoldOptions(projectName, parsed.kind, parsed.target, parsed.group),
+    ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
   )
 }

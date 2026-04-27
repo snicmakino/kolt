@@ -7,7 +7,7 @@ import kolt.infra.ensureDirectory
 import kolt.infra.eprintln
 import kolt.infra.fileExists
 
-internal fun doNew(args: List<String>): Result<Unit, Int> {
+internal fun doNew(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Result<Unit, Int> {
   val parsed =
     parseInitArgs(args).getOrElse { msg ->
       eprintln("error: $msg")
@@ -33,6 +33,12 @@ internal fun doNew(args: List<String>): Result<Unit, Int> {
     return Err(EXIT_CONFIG_ERROR)
   }
 
+  val resolved =
+    resolveInteractive(parsed, io).getOrElse { msg ->
+      eprintln("error: $msg")
+      return Err(EXIT_CONFIG_ERROR)
+    }
+
   ensureDirectory(projectName).getOrElse { error ->
     eprintln("error: could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
@@ -40,6 +46,6 @@ internal fun doNew(args: List<String>): Result<Unit, Int> {
 
   return scaffoldProject(
     projectName,
-    ScaffoldOptions(projectName, parsed.kind, parsed.target, parsed.group),
+    ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
   )
 }

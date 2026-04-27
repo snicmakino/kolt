@@ -34,9 +34,10 @@ internal data class ScaffoldOptions(
 
 internal data class ParsedInitArgs(
   val projectName: String?,
-  val kind: ScaffoldKind = ScaffoldKind.APP,
-  val target: String = DEFAULT_SCAFFOLD_TARGET,
-  val group: String? = null,
+  val kind: ScaffoldKind?,
+  val target: String?,
+  val group: String?,
+  val groupSpecified: Boolean,
 )
 
 internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
@@ -44,6 +45,7 @@ internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
   var kind: ScaffoldKind? = null
   var target: String? = null
   var group: String? = null
+  var groupSpecified = false
   val iter = args.iterator()
   while (iter.hasNext()) {
     val arg = iter.next()
@@ -74,6 +76,7 @@ internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
           mergeGroup(group, value).getOrElse {
             return Err(it)
           }
+        groupSpecified = true
       }
       arg.startsWith("--") -> return Err("unknown flag '$arg'")
       else -> {
@@ -85,9 +88,10 @@ internal fun parseInitArgs(args: List<String>): Result<ParsedInitArgs, String> {
   return Ok(
     ParsedInitArgs(
       projectName = projectName,
-      kind = kind ?: ScaffoldKind.APP,
-      target = target ?: DEFAULT_SCAFFOLD_TARGET,
+      kind = kind,
+      target = target,
       group = group,
+      groupSpecified = groupSpecified,
     )
   )
 }
