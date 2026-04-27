@@ -48,6 +48,10 @@ fun main(args: Array<String>) {
         rejectIfLibrary(parsed).getOrElse { exitProcess(it) }
         val (config, classpath, javaPath) =
           doBuild(useDaemon = useDaemon).getOrElse { exitProcess(it) }
+        // The build lock is released between doBuild and doRun. Safe today
+        // because classpath is in-memory; if doRun ever re-reads
+        // build/<name>-runtime.classpath, fold the doRun acquire into
+        // doBuild or hold the lock across both calls.
         doRun(config, classpath, appArgs, javaPath).getOrElse { exitProcess(it) }
       }
     }

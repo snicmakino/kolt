@@ -3,6 +3,7 @@
 package kolt.cli
 
 import com.github.michaelbull.result.getOrElse
+import kolt.infra.eprintln
 import kolt.infra.executeAndCapture
 import kolt.infra.executeCommand
 import kolt.infra.fileExists
@@ -345,13 +346,29 @@ class ConcurrentBuildIT {
     }
   }
 
-  private fun enabled(): Boolean = getenv("KOLT_CONCURRENT_IT")?.toKString() == "1"
+  // Without an explicit env opt-in the four scenarios early-return rather
+  // than running, so the suite ships clean to default `linuxX64Test`. Print
+  // the skip notice once so a developer running tests without the env
+  // variable does not assume "4 passed" means concurrent safety was
+  // exercised.
+  private fun enabled(): Boolean {
+    val on = getenv("KOLT_CONCURRENT_IT")?.toKString() == "1"
+    if (!on && !skipNoticePrinted) {
+      skipNoticePrinted = true
+      eprintln(
+        "ConcurrentBuildIT: skipped (set KOLT_CONCURRENT_IT=1 and run linkDebugExecutableLinuxX64 to enable)"
+      )
+    }
+    return on
+  }
 
   companion object {
     // Single literal "$" token for use inside the bash heredoc raw
     // strings. Kotlin would otherwise interpret `$P1` / `$!` / `$?` as
     // template lookups against missing properties.
     private const val D = "$"
+
+    private var skipNoticePrinted = false
 
     // kotlin-result is small (a few KB), already published, and a
     // frequent dependency on Maven Central — a low-risk synthetic
