@@ -81,7 +81,7 @@
   - _Requirements: 5.2, 5.3, 5.4_
   - _Boundary: install.sh_
 
-- [ ] 2.7 extract_and_link 関数の実装 (idempotent)
+- [x] 2.7 extract_and_link 関数の実装 (idempotent)
   - `mkdir -p ~/.local/share/kolt ~/.local/bin` (必要なら作成)
   - `~/.local/bin/kolt` の existing を `[ -L ... ]` で check: 既存しかつ symlink ではない (regular file / dir) → exit 8 + 「remove this file manually then re-run」を stderr
   - `~/.local/share/kolt/<v>/` 既存なら `rm -rf` (rustup-init 流の clean repair)

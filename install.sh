@@ -183,8 +183,39 @@ download_and_verify() {
 }
 
 extract_and_link() {
-    echo "TODO: extract_and_link" >&2
-    exit 1
+    el_tarball="$1"
+    el_version="$2"
+
+    el_share_dir="$HOME/.local/share/kolt"
+    el_bin_dir="$HOME/.local/bin"
+    el_install_dir="$el_share_dir/$el_version"
+    el_symlink="$el_bin_dir/kolt"
+
+    mkdir -p "$el_share_dir" "$el_bin_dir"
+
+    if [ -e "$el_symlink" ] && [ ! -L "$el_symlink" ]; then
+        echo "extract_and_link: $el_symlink exists and is not a symlink" >&2
+        echo "remove this file manually then re-run install.sh" >&2
+        exit 8
+    fi
+
+    if [ -d "$el_install_dir" ]; then
+        rm -rf "$el_install_dir"
+    fi
+
+    tar xzf "$el_tarball" -C "$el_share_dir"
+
+    el_extracted="$el_share_dir/kolt-${el_version}-linux-x64"
+    mv "$el_extracted" "$el_install_dir"
+
+    el_libexec_abs="$el_install_dir/libexec"
+    for el_argfile in "$el_install_dir/libexec/classpath/"*.argfile; do
+        if [ -f "$el_argfile" ]; then
+            sed -i "s|@KOLT_LIBEXEC@|$el_libexec_abs|g" "$el_argfile"
+        fi
+    done
+
+    ln -sf "$el_install_dir/bin/kolt" "$el_symlink"
 }
 
 print_path_hint() {
