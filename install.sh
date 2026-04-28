@@ -83,8 +83,43 @@ is_yanked() {
 }
 
 select_version() {
-    echo "TODO: select_version" >&2
-    exit 1
+    sv_platform="$1"
+    sv_manifest="$2"
+
+    if [ -n "$KOLT_VERSION" ]; then
+        printf '%s' "${KOLT_VERSION#v}"
+        return
+    fi
+
+    sv_response=$(mktemp)
+    if ! curl -fsSL -o "$sv_response" "$DEFAULT_RELEASES_API"; then
+        rm -f "$sv_response"
+        echo "select_version: failed to fetch $DEFAULT_RELEASES_API" >&2
+        exit 6
+    fi
+
+    sv_tags=$(grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' "$sv_response" \
+        | sed -E 's/^"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
+    rm -f "$sv_response"
+
+    if [ -z "$sv_tags" ]; then
+        echo "select_version: no tags found in API response" >&2
+        exit 6
+    fi
+
+    sv_filtered=$(printf '%s\n' "$sv_tags" | grep -v -- '-' || true)
+    sv_sorted=$(printf '%s\n' "$sv_filtered" | sort -V -r)
+
+    for sv_tag in $sv_sorted; do
+        sv_version="${sv_tag#v}"
+        if ! is_yanked "$sv_manifest" "$sv_version" >/dev/null; then
+            printf '%s' "$sv_version"
+            return
+        fi
+    done
+
+    echo "select_version: no non-yanked release found" >&2
+    exit 6
 }
 
 yank_check() {

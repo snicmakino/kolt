@@ -58,7 +58,7 @@
   - _Requirements: 3.3, 3.4_
   - _Boundary: install.sh_
 
-- [ ] 2.5 select_version 関数の実装
+- [x] 2.5 select_version 関数の実装
   - `KOLT_VERSION` set → 値をそのまま echo (API 不問、yank filter なし)
   - 未 set → `https://api.github.com/repos/snicmakino/kolt/releases?per_page=100` を curl
   - response から `grep -oE '"tag_name":\s*"[^"]+"'` + `sed -E 's/.../\1/'` で tag_name を抽出
