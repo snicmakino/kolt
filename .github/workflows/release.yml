@@ -28,6 +28,8 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -192,6 +194,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Real curl|sh smoke against the published assets lands in 3.4.
-      - name: Skeleton placeholder
-        run: echo "smoke skeleton; real curl|sh in task 3.4"
+      # Single step: isolated HOME, real curl|sh against raw GitHub URL,
+      # then assert kolt --version. HOME is set inside the step because
+      # exports do not propagate across steps.
+      - name: Install via curl|sh and verify
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          TEST_HOME=$(mktemp -d)
+          export HOME="$TEST_HOME"
+          echo "Using isolated HOME: $HOME"
+
+          curl -fsSL https://raw.githubusercontent.com/snicmakino/kolt/main/install.sh | sh
+
+          VERSION="${TAG#v}"
+          OUTPUT=$("$HOME/.local/bin/kolt" --version)
+          echo "kolt --version output: $OUTPUT"
+          if [ "$OUTPUT" != "kolt $VERSION" ]; then
+            echo "Smoke failed: expected 'kolt $VERSION', got '$OUTPUT'" >&2
+            exit 1
+          fi
+          echo "Smoke OK"

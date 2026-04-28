@@ -133,7 +133,7 @@
   - _Boundary: release.yml_
   - _Depends: 1.2_
 
-- [ ] 3.4 smoke job: clean runner + raw URL curl|sh + assertion
+- [x] 3.4 smoke job: clean runner + raw URL curl|sh + assertion
   - `runs-on: ubuntu-latest` + clean state (`HOME=$(mktemp -d)` を export)
   - `curl -fsSL https://raw.githubusercontent.com/snicmakino/kolt/main/install.sh | sh` で install.sh を起動
   - `~/.local/bin/kolt --version` の exit 0 + `^kolt <expected-version>$` regex match を assert
