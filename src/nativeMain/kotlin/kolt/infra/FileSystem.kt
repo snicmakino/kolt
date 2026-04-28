@@ -65,6 +65,11 @@ fun writeFileAsString(path: String, content: String): Result<Unit, WriteFailed> 
   }
 }
 
+// Per-segment `mkdir` tolerates `EEXIST` so two procs racing to create
+// the same nested tree both succeed; without this, the loser of a TOCTOU
+// between `fileExists` and `mkdir` surfaces `MkdirFailed` even though
+// the path is fine to use. Other `errno` values (`EACCES`, `ENOSPC`,
+// `ENOTDIR`, ...) still surface.
 @OptIn(ExperimentalForeignApi::class)
 fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> {
   if (fileExists(path)) return Ok(Unit)
@@ -78,10 +83,8 @@ fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> {
         current.isEmpty() -> part
         else -> "$current/$part"
       }
-    if (!fileExists(current)) {
-      if (mkdir(current, 0b111111101u) != 0) {
-        return Err(MkdirFailed(current))
-      }
+    if (mkdir(current, 0b111111101u) != 0 && errno != EEXIST) {
+      return Err(MkdirFailed(current))
     }
   }
   return Ok(Unit)

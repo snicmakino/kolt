@@ -176,15 +176,10 @@ class ConcurrentBuildIT {
   }
 
   // Req 2.1-2.4: two procs racing on the same coordinate end with one
-  // valid jar at the final path and zero `*.tmp.<pid>` siblings. We use
-  // a tmp HOME to keep the user's `~/.kolt/cache/` untouched and pre-
-  // warm the cache directory layout with a serial run so that the
-  // parallel half exercises the Downloader race specifically (not the
-  // upstream `mkdir`-with-EEXIST race in `ensureDirectoryRecursive`,
-  // which is out of this spec's boundary). The pre-warm leaves the
-  // coordinate directories in place; we then delete just the jar, so
-  // both subsequent processes see a missing artefact and race the
-  // download into the empty cache slot.
+  // valid jar at the final path and zero `*.tmp.<pid>` siblings. A tmp
+  // HOME keeps the user's `~/.kolt/cache/` untouched. Both procs hit a
+  // fully cold cache — exercising the per-segment `mkdir`-with-EEXIST
+  // path (#263) and the Downloader's atomic rename together.
   @Test
   fun parallelDownloadsEndWithSingleValidJarAndNoTempLeftover() {
     if (!enabled()) return
@@ -199,39 +194,6 @@ class ConcurrentBuildIT {
       "$tmpHome/.kolt/cache/com/michael-bull/kotlin-result/kotlin-result-jvm/$KOTLIN_RESULT_JVM_VERSION"
     val expectedJar = "$coordinateDir/kotlin-result-jvm-$KOTLIN_RESULT_JVM_VERSION.jar"
 
-    // Phase 1: serial warm-up so the cache directory tree exists and
-    // the resolver lockfile is materialised; race only the binary
-    // download in phase 2.
-    val warmScript =
-      """
-            set -u
-            export HOME="$tmpHome"
-            cd "$fixture1"
-            "$kolt" deps install > w.stdout 2> w.stderr
-            echo $D? > w.exit
-            """
-        .trimIndent()
-    runHarness(warmScript)
-    assertEquals(
-      0,
-      readExit(fixture1, "w.exit"),
-      "warm-up deps install must exit 0; stderr=${readOptional(fixture1, "w.stderr")}",
-    )
-    assertTrue(
-      fileExists(expectedJar),
-      "warm-up must populate $expectedJar — saw " +
-        "${executeAndCapture("ls -la $coordinateDir 2>&1").getOrElse { "<ls failed>" }}",
-    )
-    // Drop the jar to force both racing procs to re-download. We keep
-    // the coordinate dir + all sibling pom/module so the test really
-    // does isolate the Downloader race.
-    executeCommand(listOf("rm", "-f", expectedJar)).getOrElse {
-      error("could not remove $expectedJar: $it")
-    }
-
-    // Phase 2: race two `deps install` against the warmed cache. Both
-    // should rebuild the same dependency, neither should leave a
-    // `.tmp.<pid>` sibling, and the final jar should be present.
     val raceScript =
       """
             set -u
