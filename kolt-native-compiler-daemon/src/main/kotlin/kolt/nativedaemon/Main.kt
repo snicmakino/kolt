@@ -11,10 +11,10 @@ import kolt.nativedaemon.server.DaemonConfig
 import kolt.nativedaemon.server.DaemonServer
 import kotlin.system.exitProcess
 
-// Kotlin version pin for the native daemon. Must move in lockstep with the
-// root `daemonKotlinVersion` in the top-level build.gradle.kts; the root
-// `verifyDaemonKotlinVersion` task guards against drift. Mirrors
-// `KOLT_DAEMON_KOTLIN_VERSION` in kolt-jvm-compiler-daemon/.../Main.kt.
+// Kotlin version pin for the native daemon. Must move in lockstep with
+// `BUNDLED_DAEMON_KOTLIN_VERSION`, `KOLT_DAEMON_KOTLIN_VERSION`, and the
+// kotlinc/BTA artifact pins in the daemons' Gradle scripts; `DriftGuardsTest`
+// guards against drift.
 internal const val KOLT_NATIVE_DAEMON_KOTLIN_VERSION: String = "2.3.20"
 
 // ADR 0024 §8: --konanc-jar and --konan-home are the two paths the daemon

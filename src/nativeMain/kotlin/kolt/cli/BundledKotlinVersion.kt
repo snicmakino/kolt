@@ -1,8 +1,8 @@
-// Hand-pinned sibling of `daemonKotlinVersion` (root build.gradle.kts) and
-// `KOLT_DAEMON_KOTLIN_VERSION` (kolt-jvm-compiler-daemon Main.kt). All three,
-// plus the four kotlinc/BTA artifact pins in kolt-jvm-compiler-daemon's build
-// scripts, must move together per ADR 0019 §1. `verifyDaemonKotlinVersion`
-// asserts all seven at build time.
+// Hand-pinned sibling of `KOLT_DAEMON_KOTLIN_VERSION` (kolt-jvm-compiler-daemon
+// Main.kt), `KOLT_NATIVE_DAEMON_KOTLIN_VERSION` (kolt-native-compiler-daemon
+// Main.kt), and the kotlinc/BTA artifact pins in the daemons' Gradle scripts.
+// All sites must move together per ADR 0019 §1; `DriftGuardsTest` asserts the
+// sync.
 //
 // Per ADR 0022 §8 this constant is the *tested default baseline*, not
 // the only daemon-supported version: other 2.3.x patches resolve via

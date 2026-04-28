@@ -12,7 +12,7 @@ date: 2026-04-18
 - **Backward policy: event-driven at Kotlin 2.6.0 stable** (projected ~summer 2027). Apply a `(subprocess still functional × observed < 2.3 user base)` matrix to decide soft-floor continuation vs. migration to a hard floor. (§4, §5)
 - **Forward-backward coupling.** If 2.4.0 and 2.5.0 forward spikes both go RED, defer the backward evaluation one language release. Every deferral names the next concrete trigger; never open-ended. (§6)
 - **Per-version daemon spawn** supersedes ADR 0019 §1's single-version pin. Socket path becomes `~/.kolt/daemon/<projectHash>/<kotlinVersion>/daemon.sock`; BTA-API/impl JARs are fetched per Kotlin version via `BtaImplFetcher`. IC state isolation is free (ADR 0019 §5 already version-stamps the path). (§7, §9)
-- **`KOLT_DAEMON_KOTLIN_VERSION` repositioned** from contract to "tested default baseline" — the CI-exercised primary path and the default when `config.kotlin` is omitted. The `verifyDaemonKotlinVersion` 6-pin check stays. (§8)
+- **`KOLT_DAEMON_KOTLIN_VERSION` repositioned** from contract to "tested default baseline" — the CI-exercised primary path and the default when `config.kotlin` is omitted. The 6-pin consistency check stays (migrated to `DriftGuardsTest` in #268). (§8)
 
 ## Context and Problem Statement
 
@@ -116,7 +116,7 @@ The single-version pin from ADR 0019 §1 (`kotlin-build-tools-api:2.3.20`) is re
 
 The constant now names "the tested default baseline" — the version kolt's CI exercises as the primary path and the default when a user omits `config.kotlin`. Other 2.3.x versions run via `BtaImplFetcher` (§7); they are supported, not exceptional. The constant's sole remaining purpose is CI baseline + default, not a hard floor on `kolt.toml`.
 
-The `verifyDaemonKotlinVersion` 6-pin consistency check (covering `BundledKotlinVersion.kt`, daemon `Main.kt`, and the two Gradle pair artifacts on both the daemon and IC subprojects) remains in place.
+The 6-pin consistency check (covering `BundledKotlinVersion.kt`, both daemon `Main.kt` files, and the kotlinc/BTA artifact pins on both the daemon and IC subprojects) remains in place — migrated from the Gradle `verifyDaemonKotlinVersion` task to `DriftGuardsTest` in #268.
 
 ### §9 Interaction with the #136 stop-gap
 
@@ -139,7 +139,7 @@ PR #139's subprocess fallback is preserved, not replaced. The only change is the
 
 ### Confirmation
 
-Per-version daemon spawn verified in #138 implementation PR. `verifyDaemonKotlinVersion` CI gate enforces baseline coherence. Forward re-evaluation trigger: file an issue when each Kotlin `x.y.0` stable ships.
+Per-version daemon spawn verified in #138 implementation PR. The native `DriftGuardsTest` (#268) enforces baseline coherence in CI. Forward re-evaluation trigger: file an issue when each Kotlin `x.y.0` stable ships.
 
 ## Alternatives considered
 
