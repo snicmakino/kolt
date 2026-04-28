@@ -167,35 +167,205 @@ jobs:
           set -euo pipefail
           KOLT="$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" ./scripts/assemble-dist.sh
 
-      - name: Extract tarball to install dir
+      - name: Read kolt.toml version
         run: |
           set -euo pipefail
-          mkdir -p /tmp/kolt-install
-          tar xzf dist/kolt-*-linux-x64.tar.gz -C /tmp/kolt-install
-          ls -la /tmp/kolt-install/
+          VERSION=$(grep -E '^version = "' kolt.toml | head -n 1 | sed -E 's/^version = "(.*)"/\1/')
+          echo "KOLT_TOML_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # Resolve the `@KOLT_LIBEXEC@` placeholder the stitcher wrote into each
-      # argfile (ADR 0018 §1: tarball is install-location agnostic). In a real
-      # install this is `install.sh`'s job; here we inline the equivalent
-      # `sed -i` pass so the argfiles are directly usable from the install dir.
-      - name: Substitute KOLT_LIBEXEC placeholder in argfiles
+      # Local HTTP server lets install.sh exercise its real download +
+      # SHA-256 + extract + sed + symlink path against the assembled tarball
+      # without needing a published GitHub Release.
+      - name: Set up local serve directory
         run: |
           set -euo pipefail
-          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
-          LIBEXEC="${INSTALL_DIR}/libexec"
-          for argfile in "${LIBEXEC}/classpath/"*.argfile; do
-            sed -i "s|@KOLT_LIBEXEC@|${LIBEXEC}|g" "${argfile}"
+          SERVE_DIR=$(mktemp -d)
+          cp "dist/kolt-${KOLT_TOML_VERSION}-linux-x64.tar.gz" "$SERVE_DIR/"
+          cp "dist/kolt-${KOLT_TOML_VERSION}-linux-x64.tar.gz.sha256" "$SERVE_DIR/"
+          : > "$SERVE_DIR/YANKED"
+          # Synthetic YANKED for refuse / override tests (entry yanks the
+          # current kolt.toml version with replacement-test as the alias).
+          printf '%s\treplacement-test\ttest yank entry\n' \
+            "$KOLT_TOML_VERSION" > "$SERVE_DIR/YANKED-with-yank"
+          # Malformed YANKED for parse-error smoke: 2 tab-separated fields,
+          # missing the third. Used by the Parse error smoke step.
+          printf 'v0.1.0\trepl\n' > "$SERVE_DIR/YANKED-bad"
+          # Tampered tarball + .sha256 for the SHA-256 mismatch smoke. We
+          # reuse the real tarball bytes under a fake version name so the
+          # download succeeds, then attach a digest of all zeros to force a
+          # verification failure without disturbing the real version 0.X.Y
+          # install.
+          cp "$SERVE_DIR/kolt-${KOLT_TOML_VERSION}-linux-x64.tar.gz" \
+            "$SERVE_DIR/kolt-99.99.99-linux-x64.tar.gz"
+          printf '%s  %s\n' \
+            "0000000000000000000000000000000000000000000000000000000000000000" \
+            "kolt-99.99.99-linux-x64.tar.gz" \
+            > "$SERVE_DIR/kolt-99.99.99-linux-x64.tar.gz.sha256"
+          echo "SERVE_DIR=$SERVE_DIR" >> "$GITHUB_ENV"
+
+      - name: Start local HTTP server
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$SERVE_DIR" \
+            >/dev/null 2>&1 &
+          echo "HTTP_PID=$!" >> "$GITHUB_ENV"
+          # Give the server a moment to bind before the first curl.
+          for _ in 1 2 3 4 5; do
+            curl -fsS "http://127.0.0.1:8000/YANKED" >/dev/null 2>&1 && break
+            sleep 1
           done
 
-      # Fixture smoke (Task 4.1): drive `<install>/bin/kolt build` on a
-      # minimal JVM app. Success here is the end-to-end signal that the 3 ×
-      # kolt build → assemble-dist → tarball → extract chain produced a
-      # working install.
+      - name: Install via install.sh — happy path
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED
+        run: |
+          set -euo pipefail
+          KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh
+          OUTPUT=$("$HOME/.local/bin/kolt" --version)
+          if [ "$OUTPUT" != "kolt $KOLT_TOML_VERSION" ]; then
+            echo "Happy path failed: expected 'kolt $KOLT_TOML_VERSION', got '$OUTPUT'" >&2
+            exit 1
+          fi
+          echo "Happy path OK: $OUTPUT"
+
+      - name: Yank refuse smoke (KOLT_ALLOW_YANKED unset)
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED-with-yank
+        run: |
+          set +e
+          OUTPUT=$(KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh 2>&1)
+          EXIT=$?
+          set -e
+          if [ "$EXIT" != "3" ]; then
+            echo "Yank refuse failed: expected exit 3, got $EXIT" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "replacement-test"; then
+            echo "Yank refuse failed: 'replacement-test' not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          echo "Yank refuse OK (exit 3, replacement surfaced)"
+
+      - name: Yank override smoke (KOLT_ALLOW_YANKED=1)
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED-with-yank
+          KOLT_ALLOW_YANKED: "1"
+        run: |
+          set +e
+          OUTPUT=$(KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh 2>&1)
+          EXIT=$?
+          set -e
+          if [ "$EXIT" != "0" ]; then
+            echo "Yank override failed: expected exit 0, got $EXIT" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "warning"; then
+            echo "Yank override failed: warning not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          echo "Yank override OK (exit 0, warning emitted)"
+
+      - name: Parse error smoke (malformed YANKED)
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED-bad
+        run: |
+          set +e
+          OUTPUT=$(KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh 2>&1)
+          EXIT=$?
+          set -e
+          if [ "$EXIT" != "2" ]; then
+            echo "Parse error failed: expected exit 2, got $EXIT" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "YANKED parse error at line"; then
+            echo "Parse error failed: line-numbered error message not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          echo "Parse error OK (exit 2 + line-numbered message)"
+
+      - name: Non-symlink refuse smoke
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED
+        run: |
+          # Replace the prior happy-path symlink with a regular file so
+          # extract_and_link's [ -e ] && [ ! -L ] guard fires.
+          rm -f "$HOME/.local/bin/kolt"
+          echo "user file" > "$HOME/.local/bin/kolt"
+
+          set +e
+          OUTPUT=$(KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh 2>&1)
+          EXIT=$?
+          set -e
+
+          # Always remove the regular file before asserting so a step
+          # failure here does not leave a poisoned install entry.
+          rm -f "$HOME/.local/bin/kolt"
+
+          if [ "$EXIT" != "8" ]; then
+            echo "Non-symlink refuse failed: expected exit 8, got $EXIT" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "remove this file manually"; then
+            echo "Non-symlink refuse failed: remove-this-file hint not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          echo "Non-symlink refuse OK (exit 8 + remove hint)"
+
+      - name: SHA-256 mismatch smoke
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED
+        run: |
+          set +e
+          OUTPUT=$(KOLT_VERSION=99.99.99 sh ./install.sh 2>&1)
+          EXIT=$?
+          set -e
+          if [ "$EXIT" != "5" ]; then
+            echo "SHA mismatch failed: expected exit 5, got $EXIT" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "expected:"; then
+            echo "SHA mismatch failed: 'expected:' not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$OUTPUT" | grep -q "actual:"; then
+            echo "SHA mismatch failed: 'actual:' not in stderr" >&2
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+          echo "SHA mismatch OK (exit 5 + both digests)"
+
+      # Fixture smoke: drive `<install>/bin/kolt build` on a minimal JVM
+      # app via the installer-managed dir, end-to-end signal that the 3 ×
+      # kolt build → assemble-dist → install.sh chain produced a working
+      # install.
       - name: Smoke-build fixture with installed kolt
         run: |
           set -euo pipefail
-          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
+          INSTALL_DIR="$HOME/.local/share/kolt/$KOLT_TOML_VERSION"
           cd spike/daemon-self-host-smoke
           rm -rf build
           "${INSTALL_DIR}/bin/kolt" build
           test -f build/debug/smoke.jar
+
+      - name: Stop local HTTP server
+        if: always()
+        run: |
+          if [ -n "${HTTP_PID:-}" ]; then
+            kill "$HTTP_PID" 2>/dev/null || true
+          fi

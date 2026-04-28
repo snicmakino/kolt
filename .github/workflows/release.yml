@@ -1,0 +1,218 @@
+name: Release
+
+# Tag push (v*) is the production trigger. workflow_dispatch with dry_run
+# defaults to true so a manual run only exercises the gates and build,
+# without publishing assets — used to validate release.yml end-to-end before
+# the first real tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Skip gh release create and smoke job'
+        type: boolean
+        default: true
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Resolve the "tag" value used by all three gates. For tag pushes the
+      # value comes from GITHUB_REF_NAME directly. For workflow_dispatch
+      # there is no real tag, so we synthesize one from kolt.toml's version
+      # field — the gates then exercise format and YANKED checks against
+      # what would be the next legitimate release.
+      - name: Determine tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            KOLT_TOML_VERSION=$(grep -E '^version = "' kolt.toml | head -n 1 | sed -E 's/^version = "(.*)"/\1/')
+            TAG="v$KOLT_TOML_VERSION"
+            echo "Using synthetic tag from kolt.toml: $TAG"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Gate 1 — SemVer regex
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          REGEX='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(rc|beta)\.[1-9][0-9]*)?$'
+          if ! printf '%s' "$TAG" | grep -qE "$REGEX"; then
+            echo "Gate 1 failed: tag '$TAG' does not match SemVer regex" >&2
+            echo "  regex: $REGEX" >&2
+            exit 1
+          fi
+          echo "Gate 1 OK: tag matches SemVer"
+
+      - name: Gate 2 — tag matches kolt.toml version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          KOLT_TOML_VERSION=$(grep -E '^version = "' kolt.toml | head -n 1 | sed -E 's/^version = "(.*)"/\1/')
+          EXPECTED="v$KOLT_TOML_VERSION"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "Gate 2 failed: tag does not match kolt.toml version" >&2
+            echo "  tag:       $TAG" >&2
+            echo "  kolt.toml: $EXPECTED" >&2
+            exit 1
+          fi
+          echo "Gate 2 OK: tag matches kolt.toml"
+
+      # Gate 3 mirrors install.sh's fetch_yanked_and_validate format check
+      # so the same YANKED file is accepted on both sides (ADR 0028 §5).
+      - name: Gate 3 — YANKED manifest
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ ! -f YANKED ]; then
+            echo "Gate 3 failed: YANKED file not found at repo root" >&2
+            exit 1
+          fi
+          awk -F'\t' '
+            {
+              if (length($0) == 0) { msg = "blank line not allowed" }
+              else if ($0 ~ /^#/) { msg = "comments not allowed" }
+              else if ($0 ~ /^[ \t]/ || $0 ~ /[ \t]$/) { msg = "leading or trailing whitespace not allowed" }
+              else if (NF != 3) { msg = "expected 3 tab-separated fields, got " NF }
+              else if ($1 == "" || $2 == "" || $3 == "") { msg = "empty field" }
+              else { next }
+              print "YANKED parse error at line " NR ": " msg > "/dev/stderr"
+              exit 1
+            }
+          ' YANKED
+          VERSION="${TAG#v}"
+          MATCH=$(awk -F'\t' -v v="$VERSION" '$1 == v { print "line " NR ": " $0; exit }' YANKED)
+          if [ -n "$MATCH" ]; then
+            echo "Gate 3 failed: tag version '$VERSION' is yanked" >&2
+            echo "  $MATCH" >&2
+            exit 1
+          fi
+          echo "Gate 3 OK: format valid, version not yanked"
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Install libcurl dev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+
+      # Cache keys mirror self-host-smoke.yml so both workflows share warm
+      # caches keyed per-repo, not per-workflow.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Cache Gradle Kotlin Native
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('build.gradle.kts') }}
+          restore-keys: |
+            konan-${{ runner.os }}-
+
+      - name: Cache kolt toolchains
+        uses: actions/cache@v4
+        with:
+          path: ~/.kolt
+          key: kolt-${{ runner.os }}-${{ hashFiles('kolt.toml') }}
+          restore-keys: |
+            kolt-${{ runner.os }}-
+
+      - name: Bootstrap kolt.kexe via Gradle
+        run: ./gradlew --no-daemon linkDebugExecutableLinuxX64
+
+      # assemble-dist.sh runs the 3 × kolt build --release internally and
+      # emits both the tarball and .sha256 (PR #228 + task 1.2). The KOLT
+      # env var overrides its default releaseExecutable path so the
+      # bootstrapped debug kexe drives the 3 release builds.
+      - name: Assemble tarball + sha256
+        run: |
+          KOLT="$GITHUB_WORKSPACE/build/bin/linuxX64/debugExecutable/kolt.kexe" \
+            ./scripts/assemble-dist.sh
+
+      - name: Publish to GitHub Release
+        if: github.event_name == 'push' || !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          TARBALL="dist/kolt-${VERSION}-linux-x64.tar.gz"
+          SHA="${TARBALL}.sha256"
+
+          PRERELEASE_FLAG=""
+          case "$TAG" in
+            *-rc.*|*-beta.*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
+
+          # shellcheck disable=SC2086 # PRERELEASE_FLAG is intentionally split
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            $PRERELEASE_FLAG \
+            "$TARBALL" \
+            "$SHA"
+
+  smoke:
+    name: Smoke
+    needs: release
+    if: github.event_name == 'push' || !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Single step: isolated HOME, real curl|sh against raw GitHub URL,
+      # then assert kolt --version. HOME is set inside the step because
+      # exports do not propagate across steps.
+      - name: Install via curl|sh and verify
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          TEST_HOME=$(mktemp -d)
+          export HOME="$TEST_HOME"
+          echo "Using isolated HOME: $HOME"
+
+          curl -fsSL https://raw.githubusercontent.com/snicmakino/kolt/main/install.sh | sh
+
+          VERSION="${TAG#v}"
+          OUTPUT=$("$HOME/.local/bin/kolt" --version)
+          echo "kolt --version output: $OUTPUT"
+          if [ "$OUTPUT" != "kolt $VERSION" ]; then
+            echo "Smoke failed: expected 'kolt $VERSION', got '$OUTPUT'" >&2
+            exit 1
+          fi
+          echo "Smoke OK"

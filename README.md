@@ -13,21 +13,26 @@ The tool itself starts instantly. Actual compilation delegates to `kotlinc` / `k
 
 ## Installation
 
-Build from source:
+Install the latest release on Linux x64:
 
 ```sh
-git clone https://github.com/snicmakino/kolt.git
-cd kolt
-./gradlew build
+curl -fsSL https://raw.githubusercontent.com/snicmakino/kolt/main/install.sh | sh
 ```
 
-The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy it to a directory on your PATH:
+The installer fetches the matching tarball from GitHub Releases, verifies its SHA-256, and unpacks it under `~/.local/share/kolt/<version>/` with a symlink at `~/.local/bin/kolt`. You may need to add `~/.local/bin` to your `PATH`:
 
 ```sh
-cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-kolt is built with Gradle. Partial self-hosting works (kolt can compile the native binary from `kolt.toml`), but the compiler daemon JAR still requires Gradle to build ([#97](https://github.com/snicmakino/kolt/issues/97)).
+### Environment variables
+
+- `KOLT_VERSION=<v>` — install a specific version instead of the latest stable.
+- `KOLT_ALLOW_YANKED=1` — install a yanked version anyway (otherwise the installer refuses and prints the recommended replacement).
+
+### Supported platforms
+
+The first release ships **linux-x64 only**. macOS support is tracked in [#82](https://github.com/snicmakino/kolt/issues/82); linuxArm64 in [#83](https://github.com/snicmakino/kolt/issues/83). For other platforms see [Building from source](#building-from-source).
 
 ## Quick Start
 
@@ -350,6 +355,22 @@ kolt aims to be what `go build` is to Go or `cargo build` is to Rust — a fast,
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) ([日本語](docs/architecture.ja.md)) for the internal design — component overview, build flow, daemon lifecycle, and architectural decisions.
+
+## Building from source
+
+Contributors and platforms not yet covered by the installer can build kolt from source:
+
+```sh
+git clone https://github.com/snicmakino/kolt.git
+cd kolt
+./gradlew build
+```
+
+The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy it to a directory on your PATH:
+
+```sh
+cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
+```
 
 ## Claude Code Integration
 
