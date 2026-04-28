@@ -10,7 +10,17 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.value
+import platform.posix.EINTR
+import platform.posix._exit
+import platform.posix.errno
+import platform.posix.fork
 import platform.posix.remove
+import platform.posix.waitpid
 
 @OptIn(ExperimentalForeignApi::class)
 class FileSystemTest {
@@ -159,6 +169,46 @@ class FileSystemTest {
     } finally {
       platform.posix.rmdir(path)
     }
+  }
+
+  // Two procs both walking a fresh nested tree race at every segment:
+  // both observe `fileExists(seg) == false`, both call `mkdir(seg)`, the
+  // loser sees `errno == EEXIST` and must treat that as success rather
+  // than `MkdirFailed`. Multi-segment + multiple rounds keep the race
+  // window wide enough to be deterministic on cold tmp.
+  @Test
+  fun ensureDirectoryRecursiveSurvivesConcurrentRace() {
+    val rounds = 16
+    for (i in 0 until rounds) {
+      val base = "/tmp/kolt_test_recursive_race_$i"
+      removeDirectoryRecursive(base)
+      val target = "$base/a/b/c/d/e"
+      val pid1 = fork()
+      if (pid1 == 0) {
+        val ok = ensureDirectoryRecursive(target).get() != null
+        _exit(if (ok) 0 else 1)
+      }
+      val pid2 = fork()
+      if (pid2 == 0) {
+        val ok = ensureDirectoryRecursive(target).get() != null
+        _exit(if (ok) 0 else 1)
+      }
+      val exit1 = waitChildExit(pid1)
+      val exit2 = waitChildExit(pid2)
+      assertEquals(0, exit1, "round $i child 1 must succeed; got exit=$exit1")
+      assertEquals(0, exit2, "round $i child 2 must succeed; got exit=$exit2")
+      assertTrue(fileExists(target), "round $i target must exist after race")
+      removeDirectoryRecursive(base)
+    }
+  }
+
+  private fun waitChildExit(pid: Int): Int = memScoped {
+    val status = alloc<IntVar>()
+    while (waitpid(pid, status.ptr, 0) == -1) {
+      if (errno != EINTR) error("waitpid failed for pid=$pid errno=$errno")
+    }
+    val raw = status.value
+    return@memScoped if ((raw and 0x7F) == 0) (raw shr 8) and 0xFF else -1
   }
 
   @Test
