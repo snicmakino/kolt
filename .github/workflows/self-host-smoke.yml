@@ -167,35 +167,66 @@ jobs:
           set -euo pipefail
           KOLT="$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" ./scripts/assemble-dist.sh
 
-      - name: Extract tarball to install dir
+      - name: Read kolt.toml version
         run: |
           set -euo pipefail
-          mkdir -p /tmp/kolt-install
-          tar xzf dist/kolt-*-linux-x64.tar.gz -C /tmp/kolt-install
-          ls -la /tmp/kolt-install/
+          VERSION=$(grep -E '^version = "' kolt.toml | head -n 1 | sed -E 's/^version = "(.*)"/\1/')
+          echo "KOLT_TOML_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # Resolve the `@KOLT_LIBEXEC@` placeholder the stitcher wrote into each
-      # argfile (ADR 0018 §1: tarball is install-location agnostic). In a real
-      # install this is `install.sh`'s job; here we inline the equivalent
-      # `sed -i` pass so the argfiles are directly usable from the install dir.
-      - name: Substitute KOLT_LIBEXEC placeholder in argfiles
+      # Local HTTP server lets install.sh exercise its real download +
+      # SHA-256 + extract + sed + symlink path against the assembled tarball
+      # without needing a published GitHub Release.
+      - name: Set up local serve directory
         run: |
           set -euo pipefail
-          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
-          LIBEXEC="${INSTALL_DIR}/libexec"
-          for argfile in "${LIBEXEC}/classpath/"*.argfile; do
-            sed -i "s|@KOLT_LIBEXEC@|${LIBEXEC}|g" "${argfile}"
+          SERVE_DIR=$(mktemp -d)
+          cp "dist/kolt-${KOLT_TOML_VERSION}-linux-x64.tar.gz" "$SERVE_DIR/"
+          cp "dist/kolt-${KOLT_TOML_VERSION}-linux-x64.tar.gz.sha256" "$SERVE_DIR/"
+          : > "$SERVE_DIR/YANKED"
+          echo "SERVE_DIR=$SERVE_DIR" >> "$GITHUB_ENV"
+
+      - name: Start local HTTP server
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$SERVE_DIR" \
+            >/dev/null 2>&1 &
+          echo "HTTP_PID=$!" >> "$GITHUB_ENV"
+          # Give the server a moment to bind before the first curl.
+          for _ in 1 2 3 4 5; do
+            curl -fsS "http://127.0.0.1:8000/YANKED" >/dev/null 2>&1 && break
+            sleep 1
           done
 
-      # Fixture smoke (Task 4.1): drive `<install>/bin/kolt build` on a
-      # minimal JVM app. Success here is the end-to-end signal that the 3 ×
-      # kolt build → assemble-dist → tarball → extract chain produced a
-      # working install.
+      - name: Install via install.sh — happy path
+        env:
+          KOLT_TEST_BASE_URL: http://127.0.0.1:8000
+          KOLT_TEST_YANKED_URL: http://127.0.0.1:8000/YANKED
+        run: |
+          set -euo pipefail
+          KOLT_VERSION="$KOLT_TOML_VERSION" sh ./install.sh
+          OUTPUT=$("$HOME/.local/bin/kolt" --version)
+          if [ "$OUTPUT" != "kolt $KOLT_TOML_VERSION" ]; then
+            echo "Happy path failed: expected 'kolt $KOLT_TOML_VERSION', got '$OUTPUT'" >&2
+            exit 1
+          fi
+          echo "Happy path OK: $OUTPUT"
+
+      # Fixture smoke: drive `<install>/bin/kolt build` on a minimal JVM
+      # app via the installer-managed dir, end-to-end signal that the 3 ×
+      # kolt build → assemble-dist → install.sh chain produced a working
+      # install.
       - name: Smoke-build fixture with installed kolt
         run: |
           set -euo pipefail
-          INSTALL_DIR=$(ls -d /tmp/kolt-install/kolt-*-linux-x64)
+          INSTALL_DIR="$HOME/.local/share/kolt/$KOLT_TOML_VERSION"
           cd spike/daemon-self-host-smoke
           rm -rf build
           "${INSTALL_DIR}/bin/kolt" build
           test -f build/debug/smoke.jar
+
+      - name: Stop local HTTP server
+        if: always()
+        run: |
+          if [ -n "${HTTP_PID:-}" ]; then
+            kill "$HTTP_PID" 2>/dev/null || true
+          fi

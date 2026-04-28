@@ -147,7 +147,7 @@
 
 ## 4. self-host-smoke.yml extension
 
-- [ ] 4.1 inline sed step を install.sh + 環境変数経由に置換 (happy path)
+- [x] 4.1 inline sed step を install.sh + 環境変数経由に置換 (happy path)
   - 既存 lines 181-188 (Substitute KOLT_LIBEXEC placeholder in argfiles step) を削除
   - serve directory を `mktemp -d` で用意し、`dist/kolt-<v>-linux-x64.tar.gz` + `.sha256` + 空 `YANKED` を copy / 生成
   - `python3 -m http.server 8000 --bind 127.0.0.1 --directory <serve-dir> &` で local serve、PID を変数に保存し step 終了時に `trap 'kill $PID' EXIT`
