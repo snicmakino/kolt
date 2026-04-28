@@ -25,9 +25,9 @@ class FrameCodecTest {
             "library",
             "-nopack",
             "-Xenable-incremental-compilation",
-            "-Xic-cache-dir=build/.ic-cache",
+            "-Xic-cache-dir=build/debug/.ic-cache",
             "-o",
-            "build/m-klib",
+            "build/debug/m-klib",
           )
       )
 

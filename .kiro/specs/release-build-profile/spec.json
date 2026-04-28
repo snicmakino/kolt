@@ -1,0 +1,22 @@
+{
+    "feature_name": "release-build-profile",
+    "created_at": "2026-04-28T04:23:58Z",
+    "updated_at": "2026-04-28T05:45:00Z",
+    "language": "en",
+    "phase": "tasks-generated",
+    "approvals": {
+        "requirements": {
+            "generated": true,
+            "approved": true
+        },
+        "design": {
+            "generated": true,
+            "approved": true
+        },
+        "tasks": {
+            "generated": true,
+            "approved": true
+        }
+    },
+    "ready_for_implementation": true
+}

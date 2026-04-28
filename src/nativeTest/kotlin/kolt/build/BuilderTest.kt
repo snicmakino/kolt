@@ -78,16 +78,22 @@ class BuilderTest {
   fun jarCommandPackagesClassesDirToJar() {
     val cmd = jarCommand(testConfig())
 
-    assertEquals(listOf("jar", "cf", "build/my-app.jar", "-C", "build/classes", "."), cmd.args)
-    assertEquals("build/my-app.jar", cmd.outputPath)
+    assertEquals(
+      listOf("jar", "cf", "build/debug/my-app.jar", "-C", "build/classes", "."),
+      cmd.args,
+    )
+    assertEquals("build/debug/my-app.jar", cmd.outputPath)
   }
 
   @Test
   fun jarCommandOutputPathUsesProjectName() {
     val cmd = jarCommand(testConfig(name = "hello-world"))
 
-    assertEquals("build/hello-world.jar", cmd.outputPath)
-    assertEquals(listOf("jar", "cf", "build/hello-world.jar", "-C", "build/classes", "."), cmd.args)
+    assertEquals("build/debug/hello-world.jar", cmd.outputPath)
+    assertEquals(
+      listOf("jar", "cf", "build/debug/hello-world.jar", "-C", "build/classes", "."),
+      cmd.args,
+    )
   }
 
   @Test
@@ -106,7 +112,7 @@ class BuilderTest {
     val cmd = jarCommand(testConfig(), jarPath = managedJarBin)
 
     assertEquals(
-      listOf(managedJarBin, "cf", "build/my-app.jar", "-C", "build/classes", "."),
+      listOf(managedJarBin, "cf", "build/debug/my-app.jar", "-C", "build/classes", "."),
       cmd.args,
     )
   }
@@ -132,11 +138,11 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-klib",
+        "build/debug/my-app-klib",
       ),
       cmd.args,
     )
-    assertEquals("build/my-app-klib", cmd.outputPath)
+    assertEquals("build/debug/my-app-klib", cmd.outputPath)
   }
 
   @Test
@@ -155,7 +161,7 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-klib",
+        "build/debug/my-app-klib",
       ),
       cmd.args,
     )
@@ -165,7 +171,7 @@ class BuilderTest {
   fun nativeLibraryCommandWithProjectName() {
     val cmd = nativeLibraryCommand(testConfig(name = "hello", target = "linuxX64"))
 
-    assertEquals("build/hello-klib", cmd.outputPath)
+    assertEquals("build/debug/hello-klib", cmd.outputPath)
     assertEquals(
       listOf(
         "konanc",
@@ -176,7 +182,7 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/hello-klib",
+        "build/debug/hello-klib",
       ),
       cmd.args,
     )
@@ -205,7 +211,7 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-klib",
+        "build/debug/my-app-klib",
         "-Xplugin=foo.jar",
       ),
       cmd.args,
@@ -236,7 +242,7 @@ class BuilderTest {
         "-l",
         "/cache/c.klib",
         "-o",
-        "build/my-app-klib",
+        "build/debug/my-app-klib",
       ),
       cmd.args,
     )
@@ -262,15 +268,16 @@ class BuilderTest {
         "program",
         "-e",
         "com.example.main",
-        "-Xinclude=build/my-app-klib",
+        "-g",
+        "-Xinclude=build/debug/my-app-klib",
         "-Xenable-incremental-compilation",
-        "-Xic-cache-dir=build/.ic-cache",
+        "-Xic-cache-dir=build/debug/.ic-cache",
         "-o",
-        "build/my-app",
+        "build/debug/my-app",
       ),
       cmd.args,
     )
-    assertEquals("build/my-app.kexe", cmd.outputPath)
+    assertEquals("build/debug/my-app.kexe", cmd.outputPath)
   }
 
   @Test
@@ -278,7 +285,7 @@ class BuilderTest {
     val cmd =
       nativeLinkCommand(testConfig(name = "hello", target = "linuxX64"), main = "com.example.main")
 
-    assertEquals("build/hello.kexe", cmd.outputPath)
+    assertEquals("build/debug/hello.kexe", cmd.outputPath)
     assertEquals(
       listOf(
         "konanc",
@@ -288,11 +295,12 @@ class BuilderTest {
         "program",
         "-e",
         "com.example.main",
-        "-Xinclude=build/hello-klib",
+        "-g",
+        "-Xinclude=build/debug/hello-klib",
         "-Xenable-incremental-compilation",
-        "-Xic-cache-dir=build/.ic-cache",
+        "-Xic-cache-dir=build/debug/.ic-cache",
         "-o",
-        "build/hello",
+        "build/debug/hello",
       ),
       cmd.args,
     )
@@ -337,11 +345,12 @@ class BuilderTest {
         "/cache/a.klib",
         "-l",
         "/cache/b.klib",
-        "-Xinclude=build/my-app-klib",
+        "-g",
+        "-Xinclude=build/debug/my-app-klib",
         "-Xenable-incremental-compilation",
-        "-Xic-cache-dir=build/.ic-cache",
+        "-Xic-cache-dir=build/debug/.ic-cache",
         "-o",
-        "build/my-app",
+        "build/debug/my-app",
       ),
       cmd.args,
     )
@@ -396,11 +405,11 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-test-klib",
+        "build/debug/my-app-test-klib",
       ),
       cmd.args,
     )
-    assertEquals("build/my-app-test-klib", cmd.outputPath)
+    assertEquals("build/debug/my-app-test-klib", cmd.outputPath)
   }
 
   @Test
@@ -427,7 +436,7 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-test-klib",
+        "build/debug/my-app-test-klib",
       ),
       cmd.args,
     )
@@ -452,7 +461,7 @@ class BuilderTest {
         "library",
         "-nopack",
         "-o",
-        "build/my-app-test-klib",
+        "build/debug/my-app-test-klib",
         "-Xplugin=foo.jar",
         "-Xplugin=bar.jar",
       ),
@@ -483,7 +492,7 @@ class BuilderTest {
         "-l",
         "/cache/b.klib",
         "-o",
-        "build/my-app-test-klib",
+        "build/debug/my-app-test-klib",
       ),
       cmd.args,
     )
@@ -509,13 +518,14 @@ class BuilderTest {
         "-p",
         "program",
         "-generate-test-runner",
-        "-Xinclude=build/my-app-test-klib",
+        "-g",
+        "-Xinclude=build/debug/my-app-test-klib",
         "-o",
-        "build/my-app-test",
+        "build/debug/my-app-test",
       ),
       cmd.args,
     )
-    assertEquals("build/my-app-test.kexe", cmd.outputPath)
+    assertEquals("build/debug/my-app-test.kexe", cmd.outputPath)
   }
 
   @Test
@@ -529,7 +539,7 @@ class BuilderTest {
   fun nativeTestLinkCommandWithProjectName() {
     val cmd = nativeTestLinkCommand(testConfig(name = "hello", target = "linuxX64"))
 
-    assertEquals("build/hello-test.kexe", cmd.outputPath)
+    assertEquals("build/debug/hello-test.kexe", cmd.outputPath)
     assertEquals(
       listOf(
         "konanc",
@@ -538,9 +548,10 @@ class BuilderTest {
         "-p",
         "program",
         "-generate-test-runner",
-        "-Xinclude=build/hello-test-klib",
+        "-g",
+        "-Xinclude=build/debug/hello-test-klib",
         "-o",
-        "build/hello-test",
+        "build/debug/hello-test",
       ),
       cmd.args,
     )
@@ -566,9 +577,10 @@ class BuilderTest {
         "/cache/a.klib",
         "-l",
         "/cache/b.klib",
-        "-Xinclude=build/my-app-test-klib",
+        "-g",
+        "-Xinclude=build/debug/my-app-test-klib",
         "-o",
-        "build/my-app-test",
+        "build/debug/my-app-test",
       ),
       cmd.args,
     )
@@ -588,9 +600,9 @@ class BuilderTest {
 
     val cmd = jarCommand(testConfig(name = "hello-world"), jarPath = managedJarBin)
 
-    assertEquals("build/hello-world.jar", cmd.outputPath)
+    assertEquals("build/debug/hello-world.jar", cmd.outputPath)
     assertEquals(
-      listOf(managedJarBin, "cf", "build/hello-world.jar", "-C", "build/classes", "."),
+      listOf(managedJarBin, "cf", "build/debug/hello-world.jar", "-C", "build/classes", "."),
       cmd.args,
     )
   }
@@ -657,5 +669,54 @@ class BuilderTest {
 
     assertFalse(cmd.args.contains("-language-version"))
     assertFalse(cmd.args.contains("-api-version"))
+  }
+
+  @Test
+  fun nativeLinkCommandUnderReleaseAddsOptAndOmitsG() {
+    val cmd =
+      nativeLinkCommand(
+        testConfig(target = "linuxX64"),
+        main = "com.example.main",
+        profile = Profile.Release,
+      )
+
+    assertTrue(cmd.args.contains("-opt"))
+    assertFalse(cmd.args.contains("-g"))
+    assertEquals("build/release/my-app.kexe", cmd.outputPath)
+    assertTrue(cmd.args.contains("-Xinclude=build/release/my-app-klib"))
+    assertTrue(cmd.args.contains("-Xic-cache-dir=build/release/.ic-cache"))
+  }
+
+  @Test
+  fun nativeLinkCommandUnderDebugAddsGAndOmitsOpt() {
+    val cmd =
+      nativeLinkCommand(
+        testConfig(target = "linuxX64"),
+        main = "com.example.main",
+        profile = Profile.Debug,
+      )
+
+    assertTrue(cmd.args.contains("-g"))
+    assertFalse(cmd.args.contains("-opt"))
+  }
+
+  @Test
+  fun nativeLibraryCommandKeepsOptAndGOutOfArgsForBothProfiles() {
+    val debug = nativeLibraryCommand(testConfig(target = "linuxX64"), profile = Profile.Debug)
+    val release = nativeLibraryCommand(testConfig(target = "linuxX64"), profile = Profile.Release)
+
+    assertFalse(debug.args.contains("-opt"))
+    assertFalse(debug.args.contains("-g"))
+    assertFalse(release.args.contains("-opt"))
+    assertFalse(release.args.contains("-g"))
+  }
+
+  @Test
+  fun nativeTestLinkCommandUnderReleaseAddsOptAndOmitsG() {
+    val cmd = nativeTestLinkCommand(testConfig(target = "linuxX64"), profile = Profile.Release)
+
+    assertTrue(cmd.args.contains("-opt"))
+    assertFalse(cmd.args.contains("-g"))
+    assertEquals("build/release/my-app-test.kexe", cmd.outputPath)
   }
 }

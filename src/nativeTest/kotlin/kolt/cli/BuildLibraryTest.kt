@@ -87,7 +87,7 @@ class JvmLibraryInvariantsTest {
 
     val cmd = jarCommand(libConfig)
 
-    assertEquals("build/mylib.jar", cmd.outputPath)
+    assertEquals("build/debug/mylib.jar", cmd.outputPath)
   }
 
   // R2.2: the JVM compile command for a lib config must not pass
@@ -135,7 +135,7 @@ class JvmLibraryInvariantsTest {
       "lib jar command must not declare a Main-Class attribute: ${cmd.args}",
     )
     assertEquals(
-      listOf("jar", "cf", "build/mylib.jar", "-C", "build/classes", "."),
+      listOf("jar", "cf", "build/debug/mylib.jar", "-C", "build/classes", "."),
       cmd.args,
       "lib jar command must match the thin-jar invariant shape",
     )
@@ -180,6 +180,6 @@ class JvmLibraryInvariantsTest {
       jar.args.any { it.contains("Main-Class", ignoreCase = true) },
       "app jar command must not declare a Main-Class attribute: ${jar.args}",
     )
-    assertEquals("build/myapp.jar", jar.outputPath)
+    assertEquals("build/debug/myapp.jar", jar.outputPath)
   }
 }

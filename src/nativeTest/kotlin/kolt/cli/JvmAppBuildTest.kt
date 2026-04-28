@@ -9,6 +9,7 @@ import kolt.build.outputJarPath
 import kolt.build.outputRuntimeClasspathPath
 import kolt.config.ConfigError
 import kolt.config.parseConfig
+import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.fileExists
 import kolt.infra.readFileAsString
 import kolt.infra.removeDirectoryRecursive
@@ -138,6 +139,9 @@ class JvmAppBuildTest {
         it.copy(kind = "lib", build = it.build.copy(main = null))
       }
     val manifestPath = outputRuntimeClasspathPath(config)
+    ensureDirectoryRecursive(manifestPath.substringBeforeLast('/')).getOrElse {
+      error("ensure failed: $it")
+    }
     // Seed a stale manifest as if a previous kind=app build ran here.
     writeFileAsString(manifestPath, "/stale/a.jar\n/stale/b.jar").getError()?.let {
       error("seed failed: $it")
@@ -163,6 +167,9 @@ class JvmAppBuildTest {
       )
     for (config in matrix) {
       val manifestPath = outputRuntimeClasspathPath(config)
+      ensureDirectoryRecursive(manifestPath.substringBeforeLast('/')).getOrElse {
+        error("ensure failed for ${config.name}: $it")
+      }
       writeFileAsString(manifestPath, "/stale/x.jar").getError()?.let {
         error("seed failed for ${config.name}: $it")
       }

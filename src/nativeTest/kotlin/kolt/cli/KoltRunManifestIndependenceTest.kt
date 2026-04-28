@@ -1,10 +1,12 @@
 package kolt.cli
 
 import com.github.michaelbull.result.getError
+import com.github.michaelbull.result.getOrElse
 import kolt.build.BUILD_DIR
 import kolt.build.outputRuntimeClasspathPath
 import kolt.build.runCommand
 import kolt.infra.deleteFile
+import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.fileExists
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
@@ -114,6 +116,9 @@ class KoltRunManifestIndependenceTest {
     // Simulate the post-`kolt build` state, then delete the manifest as
     // step (a) of the Req 2.8 procedure ("after `kolt build` remove
     // `build/<name>-runtime.classpath`"). `kolt run` must still succeed.
+    ensureDirectoryRecursive(manifestPath.substringBeforeLast('/')).getOrElse {
+      error("ensure failed: $it")
+    }
     writeFileAsString(manifestPath, "/cache/stale-but-never-read.jar").getError()?.let {
       error("seed failed: $it")
     }
@@ -152,6 +157,9 @@ class KoltRunManifestIndependenceTest {
     // memory. If `runCommand` (or anything on the run path) opened the
     // manifest, the `-cp` arg would include these stale entries.
     val staleContent = "/cache/STALE/wrong-1.jar\n" + "/cache/STALE/wrong-2.jar"
+    ensureDirectoryRecursive(manifestPath.substringBeforeLast('/')).getOrElse {
+      error("ensure failed: $it")
+    }
     writeFileAsString(manifestPath, staleContent).getError()?.let { error("seed failed: $it") }
     val resolverClasspath = "/cache/org.jetbrains/kotlin-stdlib/2.3.20/kotlin-stdlib-2.3.20.jar"
 

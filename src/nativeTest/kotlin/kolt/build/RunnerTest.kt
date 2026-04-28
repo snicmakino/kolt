@@ -97,31 +97,31 @@ class RunnerTest {
   @Test
   fun nativeRunCommandExecutesKexeBinary() {
     val cmd = nativeRunCommand(testConfig(target = "linuxX64"))
-    assertEquals(listOf("build/my-app.kexe"), cmd.args)
+    assertEquals(listOf("build/debug/my-app.kexe"), cmd.args)
   }
 
   @Test
   fun nativeRunCommandAppendsAppArgs() {
     val cmd = nativeRunCommand(testConfig(target = "linuxX64"), listOf("--port", "8080"))
-    assertEquals(listOf("build/my-app.kexe", "--port", "8080"), cmd.args)
+    assertEquals(listOf("build/debug/my-app.kexe", "--port", "8080"), cmd.args)
   }
 
   @Test
   fun nativeRunCommandUsesProjectName() {
     val cmd = nativeRunCommand(testConfig(name = "hello", target = "linuxX64"))
-    assertEquals(listOf("build/hello.kexe"), cmd.args)
+    assertEquals(listOf("build/debug/hello.kexe"), cmd.args)
   }
 
   @Test
   fun nativeTestRunCommandExecutesTestKexeBinary() {
     val cmd = nativeTestRunCommand(testConfig(target = "linuxX64"))
-    assertEquals(listOf("build/my-app-test.kexe"), cmd.args)
+    assertEquals(listOf("build/debug/my-app-test.kexe"), cmd.args)
   }
 
   @Test
   fun nativeTestRunCommandUsesProjectName() {
     val cmd = nativeTestRunCommand(testConfig(name = "hello", target = "linuxX64"))
-    assertEquals(listOf("build/hello-test.kexe"), cmd.args)
+    assertEquals(listOf("build/debug/hello-test.kexe"), cmd.args)
   }
 
   @Test
@@ -132,7 +132,7 @@ class RunnerTest {
         testArgs = listOf("--ktest_filter=MyTest.*", "--ktest_logger=SIMPLE"),
       )
     assertEquals(
-      listOf("build/my-app-test.kexe", "--ktest_filter=MyTest.*", "--ktest_logger=SIMPLE"),
+      listOf("build/debug/my-app-test.kexe", "--ktest_filter=MyTest.*", "--ktest_logger=SIMPLE"),
       cmd.args,
     )
   }
@@ -154,5 +154,41 @@ class RunnerTest {
       listOf(managedJavaBin, "-cp", "build/classes", "com.example.MainKt", "--port", "8080"),
       cmd.args,
     )
+  }
+
+  @Test
+  fun runCommandIsByteIdenticalAcrossProfiles() {
+    val debug =
+      runCommand(
+        testConfig(),
+        main = "com.example.main",
+        classpath = "/cache/lib.jar",
+        appArgs = listOf("--flag"),
+        profile = Profile.Debug,
+      )
+    val release =
+      runCommand(
+        testConfig(),
+        main = "com.example.main",
+        classpath = "/cache/lib.jar",
+        appArgs = listOf("--flag"),
+        profile = Profile.Release,
+      )
+
+    assertEquals(debug.args, release.args)
+  }
+
+  @Test
+  fun nativeRunCommandUnderReleaseUsesReleaseKexePath() {
+    val cmd = nativeRunCommand(testConfig(target = "linuxX64"), profile = Profile.Release)
+
+    assertEquals(listOf("build/release/my-app.kexe"), cmd.args)
+  }
+
+  @Test
+  fun nativeTestRunCommandUnderReleaseUsesReleaseTestKexePath() {
+    val cmd = nativeTestRunCommand(testConfig(target = "linuxX64"), profile = Profile.Release)
+
+    assertEquals(listOf("build/release/my-app-test.kexe"), cmd.args)
   }
 }

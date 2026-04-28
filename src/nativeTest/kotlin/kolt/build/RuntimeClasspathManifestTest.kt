@@ -51,9 +51,9 @@ class RuntimeClasspathManifestTest {
 
   @Test
   fun outputRuntimeClasspathPathUsesBuildDirAndProjectName() {
-    assertEquals("build/my-app-runtime.classpath", outputRuntimeClasspathPath(testConfig()))
+    assertEquals("build/debug/my-app-runtime.classpath", outputRuntimeClasspathPath(testConfig()))
     assertEquals(
-      "build/hello-world-runtime.classpath",
+      "build/debug/hello-world-runtime.classpath",
       outputRuntimeClasspathPath(testConfig(name = "hello-world")),
     )
   }

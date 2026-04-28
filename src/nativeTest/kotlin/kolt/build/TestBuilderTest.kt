@@ -297,4 +297,27 @@ class TestBuilderTest {
     assertEquals("2.1", cmd.args[langIdx + 1])
     assertEquals("2.1", cmd.args[apiIdx + 1])
   }
+
+  @Test
+  fun testBuildCommandIsByteIdenticalAcrossProfiles() {
+    val debug =
+      testBuildCommand(
+        config = testConfig(),
+        classesDir = "build/classes",
+        classpath = "/cache/dep.jar",
+        pluginArgs = listOf("-Xplugin=foo.jar"),
+        profile = Profile.Debug,
+      )
+    val release =
+      testBuildCommand(
+        config = testConfig(),
+        classesDir = "build/classes",
+        classpath = "/cache/dep.jar",
+        pluginArgs = listOf("-Xplugin=foo.jar"),
+        profile = Profile.Release,
+      )
+
+    assertEquals(debug.args, release.args)
+    assertEquals(debug.outputPath, release.outputPath)
+  }
 }

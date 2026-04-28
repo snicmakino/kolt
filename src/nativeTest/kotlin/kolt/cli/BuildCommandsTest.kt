@@ -164,7 +164,7 @@ class CinteropNativeBuildIntegrationTest {
     val linkCmd = nativeLinkCommand(config, main = "com.example.main", klibs = listOf(klibPath))
     val linkLIdx = linkCmd.args.indexOf("-l")
     assertEquals("build/libcurl.klib", linkCmd.args[linkLIdx + 1])
-    assertEquals("build/myapp.kexe", linkCmd.outputPath)
+    assertEquals("build/debug/myapp.kexe", linkCmd.outputPath)
   }
 
   @Test
@@ -338,9 +338,10 @@ class NativeIcCacheLocationTest {
   // would silently break the "wiped by kolt clean" contract.
   @Test
   fun icCacheLivesUnderBuildDir() {
+    val cacheDir = kolt.build.nativeIcCacheDir(kolt.build.Profile.Debug)
     assertTrue(
-      kolt.build.NATIVE_IC_CACHE_DIR.startsWith("${kolt.build.BUILD_DIR}/"),
-      "NATIVE_IC_CACHE_DIR=${kolt.build.NATIVE_IC_CACHE_DIR} must live under BUILD_DIR=${kolt.build.BUILD_DIR}",
+      cacheDir.startsWith("${kolt.build.BUILD_DIR}/"),
+      "nativeIcCacheDir=$cacheDir must live under BUILD_DIR=${kolt.build.BUILD_DIR}",
     )
   }
 }

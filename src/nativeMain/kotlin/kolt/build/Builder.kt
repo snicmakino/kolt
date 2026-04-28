@@ -7,6 +7,7 @@ import com.github.michaelbull.result.getOrElse
 import kolt.config.CinteropConfig
 import kolt.config.KoltConfig
 import kolt.config.konanTargetGradleName
+import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.writeFileAsString
 
 internal const val BUILD_DIR = "build"
@@ -15,12 +16,17 @@ internal const val CLASSES_DIR = "$BUILD_DIR/classes"
 // Native IC cache. Wiped by `kolt clean` (it lives under BUILD_DIR).
 // Spike #160: touch/abi-neutral wall-time -30–39% at 25–50 files; cold
 // builds also speed up from konanc's IC strategy. Issue #168.
-internal const val NATIVE_IC_CACHE_DIR = "$BUILD_DIR/.ic-cache"
+internal fun nativeIcCacheDir(profile: Profile): String = "$BUILD_DIR/${profile.dirName}/.ic-cache"
 
-internal fun outputJarPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.jar"
+private fun profileDir(profile: Profile): String = "$BUILD_DIR/${profile.dirName}"
 
-internal fun outputRuntimeClasspathPath(config: KoltConfig): String =
-  "$BUILD_DIR/${config.name}-runtime.classpath"
+internal fun outputJarPath(config: KoltConfig, profile: Profile = Profile.Debug): String =
+  "${profileDir(profile)}/${config.name}.jar"
+
+internal fun outputRuntimeClasspathPath(
+  config: KoltConfig,
+  profile: Profile = Profile.Debug,
+): String = "${profileDir(profile)}/${config.name}-runtime.classpath"
 
 // A resolved JVM dependency jar, kept as a pair of (a) absolute cache path and
 // (b) full GAV coordinate for the tiebreak rule in ADR 0027 §1 ("alphabetical
@@ -38,14 +44,18 @@ internal sealed class ManifestWriteError {
 internal fun writeRuntimeClasspathManifest(
   config: KoltConfig,
   resolvedJars: List<ResolvedJar>,
+  profile: Profile = Profile.Debug,
 ): Result<Unit, ManifestWriteError> {
-  val selfJarPath = outputJarPath(config)
+  val selfJarPath = outputJarPath(config, profile)
   val sorted =
     resolvedJars
       .filter { it.cachePath != selfJarPath }
       .sortedWith(compareBy({ fileName(it.cachePath) }, { it.groupArtifactVersion }))
   val content = sorted.joinToString("\n") { it.cachePath }
-  val path = outputRuntimeClasspathPath(config)
+  val path = outputRuntimeClasspathPath(config, profile)
+  ensureDirectoryRecursive(profileDir(profile)).getOrElse { error ->
+    return Err(ManifestWriteError.WriteFailed(path = error.path, reason = "mkdir failed"))
+  }
   writeFileAsString(path, content).getOrElse { error ->
     return Err(ManifestWriteError.WriteFailed(path = error.path, reason = "write failed"))
   }
@@ -57,15 +67,21 @@ private fun fileName(path: String): String {
   return if (slash < 0) path else path.substring(slash + 1)
 }
 
-internal fun outputKexePath(config: KoltConfig): String = "$BUILD_DIR/${config.name}.kexe"
+internal fun outputKexePath(config: KoltConfig, profile: Profile = Profile.Debug): String =
+  "${profileDir(profile)}/${config.name}.kexe"
 
-internal fun outputNativeTestKexePath(config: KoltConfig): String =
-  "$BUILD_DIR/${config.name}-test.kexe"
+internal fun outputNativeTestKexePath(
+  config: KoltConfig,
+  profile: Profile = Profile.Debug,
+): String = "${profileDir(profile)}/${config.name}-test.kexe"
 
-internal fun outputNativeKlibPath(config: KoltConfig): String = "$BUILD_DIR/${config.name}-klib"
+internal fun outputNativeKlibPath(config: KoltConfig, profile: Profile = Profile.Debug): String =
+  "${profileDir(profile)}/${config.name}-klib"
 
-internal fun outputNativeTestKlibPath(config: KoltConfig): String =
-  "$BUILD_DIR/${config.name}-test-klib"
+internal fun outputNativeTestKlibPath(
+  config: KoltConfig,
+  profile: Profile = Profile.Debug,
+): String = "${profileDir(profile)}/${config.name}-test-klib"
 
 data class BuildCommand(val args: List<String>, val outputPath: String)
 
@@ -106,13 +122,14 @@ fun checkCommand(
 
 // Two-stage build: konanc silently no-ops compiler plugins on single-step
 // `-p program`, so Stage 1 compiles into a klib (plugin applied), Stage 2 links.
-fun nativeLibraryCommand(
+internal fun nativeLibraryCommand(
   config: KoltConfig,
   pluginArgs: List<String> = emptyList(),
   konancPath: String? = null,
   klibs: List<String> = emptyList(),
+  profile: Profile = Profile.Debug,
 ): BuildCommand {
-  val outputBase = outputNativeKlibPath(config)
+  val outputBase = outputNativeKlibPath(config, profile)
   val nativeTarget = konanTargetGradleName(config.build.target)
   val args = buildList {
     add(konancPath ?: "konanc")
@@ -137,15 +154,16 @@ fun nativeLibraryCommand(
 // `main` is passed explicitly (not read from `config.build.main`) because
 // `BuildSection.main` became nullable in the lib-build-pipeline spec; the
 // kind gate and null-check live at the caller per ADR 0001.
-fun nativeLinkCommand(
+internal fun nativeLinkCommand(
   config: KoltConfig,
   main: String,
   konancPath: String? = null,
   klibs: List<String> = emptyList(),
+  profile: Profile = Profile.Debug,
 ): BuildCommand {
-  val outputPath = outputKexePath(config)
-  val outputBase = "$BUILD_DIR/${config.name}"
-  val klibPath = outputNativeKlibPath(config)
+  val outputPath = outputKexePath(config, profile)
+  val outputBase = "${profileDir(profile)}/${config.name}"
+  val klibPath = outputNativeKlibPath(config, profile)
   val nativeTarget = konanTargetGradleName(config.build.target)
   val args = buildList {
     add(konancPath ?: "konanc")
@@ -159,22 +177,27 @@ fun nativeLinkCommand(
       add("-l")
       add(klib)
     }
+    when (profile) {
+      Profile.Debug -> add("-g")
+      Profile.Release -> add("-opt")
+    }
     add("-Xinclude=$klibPath")
     add("-Xenable-incremental-compilation")
-    add("-Xic-cache-dir=$NATIVE_IC_CACHE_DIR")
+    add("-Xic-cache-dir=${nativeIcCacheDir(profile)}")
     add("-o")
     add(outputBase)
   }
   return BuildCommand(args = args, outputPath = outputPath)
 }
 
-fun nativeTestLibraryCommand(
+internal fun nativeTestLibraryCommand(
   config: KoltConfig,
   pluginArgs: List<String> = emptyList(),
   konancPath: String? = null,
   klibs: List<String> = emptyList(),
+  profile: Profile = Profile.Debug,
 ): BuildCommand {
-  val outputBase = outputNativeTestKlibPath(config)
+  val outputBase = outputNativeTestKlibPath(config, profile)
   val nativeTarget = konanTargetGradleName(config.build.target)
   val args = buildList {
     add(konancPath ?: "konanc")
@@ -197,14 +220,15 @@ fun nativeTestLibraryCommand(
   return BuildCommand(args = args, outputPath = outputBase)
 }
 
-fun nativeTestLinkCommand(
+internal fun nativeTestLinkCommand(
   config: KoltConfig,
   konancPath: String? = null,
   klibs: List<String> = emptyList(),
+  profile: Profile = Profile.Debug,
 ): BuildCommand {
-  val outputPath = outputNativeTestKexePath(config)
-  val outputBase = "$BUILD_DIR/${config.name}-test"
-  val klibPath = outputNativeTestKlibPath(config)
+  val outputPath = outputNativeTestKexePath(config, profile)
+  val outputBase = "${profileDir(profile)}/${config.name}-test"
+  val klibPath = outputNativeTestKlibPath(config, profile)
   val nativeTarget = konanTargetGradleName(config.build.target)
   val args = buildList {
     add(konancPath ?: "konanc")
@@ -216,6 +240,10 @@ fun nativeTestLinkCommand(
     for (klib in klibs) {
       add("-l")
       add(klib)
+    }
+    when (profile) {
+      Profile.Debug -> add("-g")
+      Profile.Release -> add("-opt")
     }
     add("-Xinclude=$klibPath")
     add("-o")
@@ -264,8 +292,12 @@ fun cinteropStamp(entry: CinteropConfig, defMtime: Long, kotlinVersion: String):
     append("package=").append(entry.packageName ?: "").append('\n')
   }
 
-fun jarCommand(config: KoltConfig, jarPath: String? = null): BuildCommand {
-  val outputPath = outputJarPath(config)
+internal fun jarCommand(
+  config: KoltConfig,
+  jarPath: String? = null,
+  profile: Profile = Profile.Debug,
+): BuildCommand {
+  val outputPath = outputJarPath(config, profile)
   return BuildCommand(
     args = listOf(jarPath ?: "jar", "cf", outputPath, "-C", CLASSES_DIR, "."),
     outputPath = outputPath,
