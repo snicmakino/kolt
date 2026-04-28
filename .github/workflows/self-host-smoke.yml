@@ -82,7 +82,7 @@ jobs:
       - name: Verify self-hosted binary
         run: |
           set -euo pipefail
-          version=$(./build/kolt.kexe --version)
+          version=$(./build/debug/kolt.kexe --version)
           echo "$version"
           echo "$version" | grep -Eq '^kolt [0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 
@@ -198,4 +198,4 @@ jobs:
           cd spike/daemon-self-host-smoke
           rm -rf build
           "${INSTALL_DIR}/bin/kolt" build
-          test -f build/smoke.jar
+          test -f build/debug/smoke.jar
