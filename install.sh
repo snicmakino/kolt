@@ -44,8 +44,33 @@ platform_detect() {
 }
 
 fetch_yanked_and_validate() {
-    echo "TODO: fetch_yanked_and_validate" >&2
-    exit 1
+    url="${KOLT_TEST_YANKED_URL:-$DEFAULT_YANKED_URL}"
+    tempfile=$(mktemp)
+
+    if ! curl -fsSL -o "$tempfile" "$url"; then
+        rm -f "$tempfile"
+        echo "fetch_yanked: failed to fetch $url" >&2
+        exit 6
+    fi
+
+    if ! err=$(awk -F'\t' '
+        {
+            if (length($0) == 0) { msg = "blank line not allowed" }
+            else if ($0 ~ /^#/) { msg = "comments not allowed" }
+            else if ($0 ~ /^[ \t]/ || $0 ~ /[ \t]$/) { msg = "leading or trailing whitespace not allowed" }
+            else if (NF != 3) { msg = "expected 3 tab-separated fields, got " NF }
+            else if ($1 == "" || $2 == "" || $3 == "") { msg = "empty field" }
+            else { next }
+            print "YANKED parse error at line " NR ": " msg
+            exit 1
+        }
+    ' "$tempfile"); then
+        rm -f "$tempfile"
+        echo "$err" >&2
+        exit 2
+    fi
+
+    echo "$tempfile"
 }
 
 is_yanked() {

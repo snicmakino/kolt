@@ -39,7 +39,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
   - _Boundary: install.sh_
 
-- [ ] 2.3 fetch_yanked_and_validate 関数の実装
+- [x] 2.3 fetch_yanked_and_validate 関数の実装
   - `KOLT_TEST_YANKED_URL` 設定時はそれを、未設定時は raw GitHub URL を curl で fetch
   - HTTP error → exit 6 + URL と HTTP error をメッセージに含める
   - 各非空行に対し、`awk -F'\t' 'NF != 3 || $1=="" || $2=="" || $3==""'` 相当で format validation。コメント行 (`#` 始まり) と空行と先頭末尾空白を全て reject (ADR 0028 §5)
@@ -207,3 +207,7 @@
   - 手動 GHA UI 操作のため optional 扱い (本タスクは実装の完了条件ではなく first tag 前の pre-flight として実行を推奨)
   - Observable: GHA UI に dry_run 起動の workflow run が記録され、`dist/kolt-...sha256` 生成までは成功、Release が作成されていない (Releases ページに新 entry なし)
   - _Depends: 3.3_
+
+## Implementation Notes
+
+- POSIX sh (dash) の strict `set -eu` 下では `var=$(failing-cmd)` 形式の assignment が即時 abort する (bash と異なる)。`if ! var=$(cmd); then ... fi` の form を使えば command-substitution の non-zero exit が if context で吸収され、$var に capture した stdout を以降の error path で使える (task 2.3 で hit、後続の 2.4-2.8 でも同パターンを採る)。
