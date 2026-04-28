@@ -28,7 +28,7 @@
   - Observable: `sh install.sh` が `platform_detect` stub に到達して exit 1 する (set -u で env var の参照ミスが起きない)
   - _Boundary: install.sh_
 
-- [ ] 2.2 platform_detect 関数の実装
+- [x] 2.2 platform_detect 関数の実装
   - `uname -s` + `uname -m` を case 文 1 箇所で読む
   - `Linux` + `x86_64` → "linux-x64" を stdout、続行
   - `Darwin/*` → exit 1 + "macOS support is tracked in #82, not yet released" を stderr

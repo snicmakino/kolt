@@ -22,8 +22,25 @@ DEFAULT_YANKED_URL="https://raw.githubusercontent.com/snicmakino/kolt/main/YANKE
 DEFAULT_RELEASES_API="https://api.github.com/repos/snicmakino/kolt/releases?per_page=100"
 
 platform_detect() {
-    echo "TODO: platform_detect" >&2
-    exit 1
+    os=$(uname -s)
+    arch=$(uname -m)
+    case "$os/$arch" in
+        Linux/x86_64)
+            echo "linux-x64"
+            ;;
+        Darwin/*)
+            echo "macOS support is tracked in #82, not yet released" >&2
+            exit 1
+            ;;
+        Linux/*)
+            echo "linuxArm64 support is tracked in #83, not yet released" >&2
+            exit 1
+            ;;
+        *)
+            echo "unsupported platform: $os/$arch" >&2
+            exit 1
+            ;;
+    esac
 }
 
 fetch_yanked_and_validate() {
