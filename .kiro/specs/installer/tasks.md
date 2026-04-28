@@ -2,7 +2,7 @@
 
 ## 1. Foundation: YANKED manifest と assemble-dist.sh extension
 
-- [ ] 1.1 (P) repo root に空の YANKED ファイルを commit
+- [x] 1.1 (P) repo root に空の YANKED ファイルを commit
   - 0 bytes (改行を含まない) のファイルを `YANKED` として追加
   - `.gitignore` 対象外
   - `git add YANKED` + commit でファイルが repo HEAD に出現する
