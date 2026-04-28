@@ -41,7 +41,7 @@ it would cost startup speed, auditability, or mental-model simplicity.
 
 ## Current Maturity
 
-Pre-1.0 (current: v0.15.0). Breaking changes are expected and explicitly permitted.
+Pre-1.0 (current: v0.16.0). Breaking changes are expected and explicitly permitted.
 kolt does not ship migration shims or legacy probes for its own earlier versions —
 v1.0 is the first stability anchor.
 
