@@ -27,6 +27,10 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
       eprintln("error: $it")
       return Err(EXIT_FORMAT_ERROR)
     }
+  val managedJdkBins =
+    ensureJdkBinsFromConfig(config, paths).getOrElse {
+      return Err(it)
+    }
 
   val files = mutableListOf<String>()
   for (dir in config.build.sources) {
@@ -55,7 +59,14 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
     return Ok(Unit)
   }
 
-  val cmd = formatCommand(ktfmtPath, files, checkOnly, style = config.fmt.style)
+  val cmd =
+    formatCommand(
+      ktfmtPath,
+      files,
+      checkOnly,
+      style = config.fmt.style,
+      javaPath = managedJdkBins.java,
+    )
 
   if (checkOnly) {
     println("checking format...")

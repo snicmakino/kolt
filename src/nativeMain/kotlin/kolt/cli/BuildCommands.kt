@@ -7,6 +7,7 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.*
+import kolt.build.daemon.BOOTSTRAP_JDK_VERSION
 import kolt.build.daemon.DaemonCompilerBackend
 import kolt.build.daemon.DaemonPreconditionError
 import kolt.build.daemon.DaemonSetup
@@ -41,6 +42,9 @@ internal data class BuildResult(
   val config: KoltConfig,
   val classpath: String?,
   val javaPath: String? = null,
+  // JDK install root, propagated as `JAVA_HOME` to any downstream kotlinc
+  // subprocess. Null on Native builds where no JVM is provisioned.
+  val javaHome: String? = null,
   val testClasspath: String? = null,
 )
 
@@ -158,6 +162,10 @@ private fun doCheckInner(useDaemon: Boolean, profile: Profile): Result<Unit, Int
       eprintln("error: ${it.message}")
       return Err(EXIT_BUILD_ERROR)
     }
+  val managedJdkBins =
+    ensureJdkBinsFromConfig(config, paths).getOrElse {
+      return Err(it)
+    }
 
   val classpath =
     resolveDependencies(config)
@@ -173,7 +181,7 @@ private fun doCheckInner(useDaemon: Boolean, profile: Profile): Result<Unit, Int
   val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
   println("checking ${config.name}...")
-  executeCommand(cmd).getOrElse { error ->
+  executeCommand(cmd, mapOf("JAVA_HOME" to managedJdkBins.home)).getOrElse { error ->
     eprintln("error: " + formatProcessError(error, "check"))
     return Err(EXIT_BUILD_ERROR)
   }
@@ -243,10 +251,12 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
       eprintln("error: $it")
       return Err(EXIT_BUILD_ERROR)
     }
-  val (managedJavaBin, managedJarBin) =
+  val managedJdkBins =
     ensureJdkBinsFromConfig(config, paths).getOrElse {
       return Err(it)
     }
+  val managedJavaBin = managedJdkBins.java
+  val managedJarBin = managedJdkBins.jar
 
   // BuildState.classesDirMtime tracks `build/classes/` (profile-naive on JVM
   // because kotlinc args are profile-independent). The active profile's jar
@@ -264,6 +274,7 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
         config = config,
         classpath = cachedState!!.classpath,
         javaPath = managedJavaBin,
+        javaHome = managedJdkBins.home,
         testClasspath = cachedState.testClasspath,
       )
     )
@@ -302,7 +313,8 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
         return Err(EXIT_BUILD_ERROR)
       }
 
-  val subprocessBackend = SubprocessCompilerBackend(kotlincBin = managedKotlincBin)
+  val subprocessBackend =
+    SubprocessCompilerBackend(kotlincBin = managedKotlincBin, javaHome = managedJdkBins.home)
   val backend: CompilerBackend =
     resolveCompilerBackend(
       config = config,
@@ -400,6 +412,7 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
       config = config,
       classpath = mainClasspath,
       javaPath = managedJavaBin,
+      javaHome = managedJdkBins.home,
       testClasspath = testClasspath,
     )
   )
@@ -756,6 +769,7 @@ private fun doTestInner(
   // union collapses to the main closure).
   val testClasspath = buildResult.testClasspath ?: buildResult.classpath
   val javaPath = buildResult.javaPath
+  val javaHome = buildResult.javaHome
 
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
   if (existingTestSources.isEmpty()) {
@@ -798,7 +812,8 @@ private fun doTestInner(
       profile = profile,
     )
   println("compiling tests...")
-  executeCommand(testCmd.args).getOrElse { error ->
+  val testCompileEnv = if (javaHome != null) mapOf("JAVA_HOME" to javaHome) else emptyMap()
+  executeCommand(testCmd.args, testCompileEnv).getOrElse { error ->
     eprintln("error: " + formatProcessError(error, "test compilation"))
     return Err(EXIT_BUILD_ERROR)
   }
@@ -952,8 +967,15 @@ private fun doNativeTest(
   return Ok(Unit)
 }
 
-internal fun ensureJdkBinsFromConfig(config: KoltConfig, paths: KoltPaths): Result<JdkBins, Int> {
-  val version = config.build.jdk ?: return Ok(JdkBins(null, null))
+// Falls back to the bootstrap JDK (ADR 0017) when `[build] jdk` is unset so
+// downstream consumers always have a managed `java`/`jar` available. The
+// pin in `kolt.toml` still wins; this only fills the unset case.
+internal fun ensureJdkBinsFromConfig(
+  config: KoltConfig,
+  paths: KoltPaths,
+  ensureJdkBins: (String, KoltPaths) -> Result<JdkBins, ToolchainError> = ::ensureJdkBins,
+): Result<JdkBins, Int> {
+  val version = config.build.jdk ?: BOOTSTRAP_JDK_VERSION
   return ensureJdkBins(version, paths)
     .getOrElse { err ->
       eprintln("error: ${err.message}")

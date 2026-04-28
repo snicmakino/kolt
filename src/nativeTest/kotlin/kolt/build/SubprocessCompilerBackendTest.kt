@@ -11,6 +11,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.toKString
 
 class SubprocessCompilerBackendArgvTest {
 
@@ -212,5 +214,58 @@ class SubprocessCompilerBackendIntegrationTest {
     val error = assertNotNull(result.getError())
     val failure = assertIs<CompileError.CompilationFailed>(error)
     assertEquals(1, failure.exitCode)
+  }
+
+  // The backend probes are driven through `sh` because subprocessArgv appends
+  // `-d <outputPath>` after sources; sh consumes the trailing pair as $0/$1
+  // positional args and ignores them, so the `-c <script>` injection still
+  // governs the child's exit code.
+  @Test
+  fun compileSetsJavaHomeWhenSupplied() {
+    val backend = SubprocessCompilerBackend(kotlincBin = "sh", javaHome = "/managed/jdk/home")
+    val request =
+      CompileRequest(
+        workingDir = "",
+        classpath = emptyList(),
+        sources = listOf("-c", "[ \"\$JAVA_HOME\" = \"/managed/jdk/home\" ]"),
+        outputPath = "/dev/null",
+        moduleName = "probe",
+        extraArgs = emptyList(),
+      )
+    val error = backend.compile(request).getError()
+    if (error != null) {
+      kotlin.test.fail("expected sh to see JAVA_HOME, got error: $error")
+    }
+  }
+
+  @OptIn(ExperimentalForeignApi::class)
+  @Test
+  fun compileLeavesParentJavaHomeUntouchedWhenUnset() {
+    // Parent stamps a sentinel JAVA_HOME; with javaHome=null the backend
+    // must not setenv, so the child must inherit the sentinel verbatim.
+    // Stronger than asserting "$JAVA_HOME unset" because that variant
+    // passes vacuously when CI happens to have JAVA_HOME pre-set.
+    val sentinel = "/kolt-test-sentinel/home"
+    val previous = platform.posix.getenv("JAVA_HOME")?.toKString()
+    platform.posix.setenv("JAVA_HOME", sentinel, 1)
+    try {
+      val backend = SubprocessCompilerBackend(kotlincBin = "sh", javaHome = null)
+      val request =
+        CompileRequest(
+          workingDir = "",
+          classpath = emptyList(),
+          sources = listOf("-c", "[ \"\$JAVA_HOME\" = \"$sentinel\" ]"),
+          outputPath = "/dev/null",
+          moduleName = "probe",
+          extraArgs = emptyList(),
+        )
+      val error = backend.compile(request).getError()
+      if (error != null) {
+        kotlin.test.fail("expected child to inherit parent JAVA_HOME, got: $error")
+      }
+    } finally {
+      if (previous != null) platform.posix.setenv("JAVA_HOME", previous, 1)
+      else platform.posix.unsetenv("JAVA_HOME")
+    }
   }
 }

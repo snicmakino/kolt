@@ -7,11 +7,19 @@ import com.github.michaelbull.result.getOrElse
 import kolt.infra.ProcessError
 import kolt.infra.executeCommand
 
-class SubprocessCompilerBackend(private val kotlincBin: String) : CompilerBackend {
+// kotlinc is a shell wrapper that resolves java through `$JAVA_HOME` first;
+// without it, the wrapper falls back to whatever `java` is on PATH and exits
+// 127 when that lookup also fails. `javaHome` injects the env var into the
+// child so the wrapper does not depend on the host's PATH.
+class SubprocessCompilerBackend(
+  private val kotlincBin: String,
+  private val javaHome: String? = null,
+) : CompilerBackend {
 
   override fun compile(request: CompileRequest): Result<CompileOutcome, CompileError> {
     val argv = subprocessArgv(kotlincBin, request)
-    executeCommand(argv).getOrElse { err ->
+    val env = if (javaHome != null) mapOf("JAVA_HOME" to javaHome) else emptyMap()
+    executeCommand(argv, env).getOrElse { err ->
       return Err(mapProcessErrorToCompileError(err))
     }
     return Ok(CompileOutcome(stdout = "", stderr = ""))

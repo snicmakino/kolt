@@ -31,7 +31,10 @@ fun formatProcessError(error: ProcessError, context: String): String =
   }
 
 @OptIn(ExperimentalForeignApi::class)
-fun executeCommand(args: List<String>): Result<Int, ProcessError> {
+fun executeCommand(
+  args: List<String>,
+  extraEnv: Map<String, String> = emptyMap(),
+): Result<Int, ProcessError> {
   if (args.isEmpty()) return Err(ProcessError.EmptyArgs)
 
   val pid = fork()
@@ -40,6 +43,11 @@ fun executeCommand(args: List<String>): Result<Int, ProcessError> {
   }
   if (pid == 0) {
     memScoped {
+      // After fork the child has its own process image, so setenv here does
+      // not contaminate the parent's env or any sibling subprocess.
+      for ((key, value) in extraEnv) {
+        setenv(key, value, 1)
+      }
       val argv = allocArray<CPointerVar<ByteVar>>(args.size + 1)
       for (i in args.indices) {
         argv[i] = args[i].cstr.ptr

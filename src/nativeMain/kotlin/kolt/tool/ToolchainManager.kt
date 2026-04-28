@@ -199,13 +199,16 @@ internal fun ensureKotlincBin(version: String, paths: KoltPaths): Result<String,
     ?: Err(ToolchainError("kotlinc $version not found after installation"))
 }
 
-internal data class JdkBins(val java: String?, val jar: String?)
+// `home` is the JDK install root (parent of `bin/`), surfaced so callers
+// can hand it off as `JAVA_HOME` to the kotlinc shell wrapper.
+internal data class JdkBins(val home: String, val java: String, val jar: String?)
 
 internal fun ensureJdkBins(version: String, paths: KoltPaths): Result<JdkBins, ToolchainError> {
+  val home = paths.jdkPath(version)
   val javaBin = resolveJavaBinPath(version, paths)
   if (javaBin != null) {
     val jarBin = resolveJarBinPath(version, paths)
-    return Ok(JdkBins(javaBin, jarBin))
+    return Ok(JdkBins(home = home, java = javaBin, jar = jarBin))
   }
   installJdkToolchain(version, paths).getOrElse {
     return Err(it)
@@ -213,7 +216,7 @@ internal fun ensureJdkBins(version: String, paths: KoltPaths): Result<JdkBins, T
   val java =
     resolveJavaBinPath(version, paths)
       ?: return Err(ToolchainError("java binary not found after installation"))
-  return Ok(JdkBins(java, resolveJarBinPath(version, paths)))
+  return Ok(JdkBins(home = home, java = java, jar = resolveJarBinPath(version, paths)))
 }
 
 internal fun installKotlincToolchain(

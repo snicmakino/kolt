@@ -7,9 +7,10 @@ fun formatCommand(
   files: List<String>,
   checkOnly: Boolean,
   style: String = "google",
+  javaPath: String? = null,
 ): FormatCommand {
   val args = buildList {
-    add("java")
+    add(javaPath ?: "java")
     add("-jar")
     add(ktfmtJarPath)
     add("--${style}-style")

@@ -14,46 +14,90 @@ import kolt.build.nativeLibraryCommand
 import kolt.build.nativeLinkCommand
 import kolt.config.CinteropConfig
 import kolt.config.KoltPaths
-import kolt.infra.ensureDirectoryRecursive
-import kolt.infra.removeDirectoryRecursive
-import kolt.infra.writeFileAsString
 import kolt.testConfig
+import kolt.tool.JdkBins
+import kolt.tool.ToolchainError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EnsureJdkBinsFromConfigTest {
 
   @Test
-  fun jdkNullInConfigReturnsNullBins() {
+  fun jdkNullInConfigFallsBackToBootstrapVersion() {
     val config = testConfig(jdk = null)
     val paths = KoltPaths("/tmp/kolt_ensure_jdk_bins_null")
+    val seen = mutableListOf<String>()
 
-    val result = assertNotNull(ensureJdkBinsFromConfig(config, paths).get())
+    val result =
+      assertNotNull(
+        ensureJdkBinsFromConfig(
+            config,
+            paths,
+            ensureJdkBins = { version, _ ->
+              seen.add(version)
+              Ok(
+                JdkBins(
+                  home = paths.jdkPath(version),
+                  java = paths.javaBin(version),
+                  jar = paths.jarBin(version),
+                )
+              )
+            },
+          )
+          .get()
+      )
 
-    assertNull(result.java)
-    assertNull(result.jar)
+    assertEquals(listOf(kolt.build.daemon.BOOTSTRAP_JDK_VERSION), seen)
+    assertEquals(paths.javaBin(kolt.build.daemon.BOOTSTRAP_JDK_VERSION), result.java)
+    assertEquals(paths.jarBin(kolt.build.daemon.BOOTSTRAP_JDK_VERSION), result.jar)
   }
 
   @Test
-  fun jdkSpecifiedAndInstalledReturnsBinPaths() {
+  fun jdkSpecifiedInConfigUsesPinnedVersion() {
     val config = testConfig(jdk = "21")
-    val paths = KoltPaths("/tmp/kolt_ensure_jdk_bins_installed")
-    val binDir = "${paths.toolchainsDir}/jdk/21/bin"
-    ensureDirectoryRecursive(binDir)
-    writeFileAsString("$binDir/java", "#!/bin/sh")
-    writeFileAsString("$binDir/jar", "#!/bin/sh")
-    try {
-      val result = assertNotNull(ensureJdkBinsFromConfig(config, paths).get())
+    val paths = KoltPaths("/tmp/kolt_ensure_jdk_bins_pinned")
+    val seen = mutableListOf<String>()
 
-      assertEquals(paths.javaBin("21"), result.java)
-      assertEquals(paths.jarBin("21"), result.jar)
-    } finally {
-      removeDirectoryRecursive(paths.home + "/.kolt")
-    }
+    val result =
+      assertNotNull(
+        ensureJdkBinsFromConfig(
+            config,
+            paths,
+            ensureJdkBins = { version, _ ->
+              seen.add(version)
+              Ok(
+                JdkBins(
+                  home = paths.jdkPath(version),
+                  java = paths.javaBin(version),
+                  jar = paths.jarBin(version),
+                )
+              )
+            },
+          )
+          .get()
+      )
+
+    assertEquals(listOf("21"), seen)
+    assertEquals(paths.javaBin("21"), result.java)
+    assertEquals(paths.jarBin("21"), result.jar)
+  }
+
+  @Test
+  fun installFailureSurfacesAsBuildError() {
+    val config = testConfig(jdk = null)
+    val paths = KoltPaths("/tmp/kolt_ensure_jdk_bins_failure")
+
+    val result =
+      ensureJdkBinsFromConfig(
+        config,
+        paths,
+        ensureJdkBins = { _, _ -> Err(ToolchainError("download failed")) },
+      )
+
+    assertEquals(EXIT_BUILD_ERROR, result.getError())
   }
 }
 
