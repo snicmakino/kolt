@@ -122,7 +122,7 @@
   - _Requirements: 1.2, 1.4, 1.6, 6.5_
   - _Boundary: release.yml_
 
-- [ ] 3.3 release job: build + assemble + sha256 + publish
+- [x] 3.3 release job: build + assemble + sha256 + publish
   - Setup steps: `actions/checkout@v4` + `actions/setup-java@v4` (JDK 25 temurin) + libcurl4-openssl-dev install + `actions/cache@v4` 3 種 (gradle / konan / kolt)。self-host-smoke.yml と同じキャッシュキーを使い両 workflow で cache 共有
   - Bootstrap step: `./gradlew --no-daemon linkDebugExecutableLinuxX64`
   - Build step: 3 × `kolt build --release` (root / kolt-jvm-compiler-daemon / kolt-native-compiler-daemon)
