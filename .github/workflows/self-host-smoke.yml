@@ -148,19 +148,19 @@ jobs:
       - name: kolt build at root
         run: |
           set -euo pipefail
-          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build --release
 
       - name: kolt build at kolt-jvm-compiler-daemon
         run: |
           set -euo pipefail
           cd kolt-jvm-compiler-daemon
-          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build --release
 
       - name: kolt build at kolt-native-compiler-daemon
         run: |
           set -euo pipefail
           cd kolt-native-compiler-daemon
-          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build --release
 
       - name: Assemble tarball
         run: |
