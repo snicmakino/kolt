@@ -253,4 +253,12 @@ printf '%s\n' "$VERSION" > "$DIST_ROOT/VERSION"
 TARBALL="dist/kolt-${VERSION}-linux-x64.tar.gz"
 tar czf "$TARBALL" -C dist "kolt-${VERSION}-linux-x64"
 
+# Emit `<TARBALL>.sha256` in `sha256sum -c` input format (`<hex>  <basename>`).
+# install.sh fetches both the tarball and this digest file and verifies
+# integrity before extraction (ADR 0018 §4 + installer design §5).
+# `(cd dist && ...)` keeps the digest's `<basename>` as just the filename so
+# the file is install-location agnostic.
+(cd dist && sha256sum "kolt-${VERSION}-linux-x64.tar.gz" > "kolt-${VERSION}-linux-x64.tar.gz.sha256")
+
 echo "assemble-dist: wrote $TARBALL"
+echo "assemble-dist: wrote $TARBALL.sha256"

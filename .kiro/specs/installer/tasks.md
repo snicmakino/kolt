@@ -10,7 +10,7 @@
   - _Requirements: 6.1, 6.2_
   - _Boundary: YANKED file_
 
-- [ ] 1.2 (P) assemble-dist.sh に .sha256 生成 step を追加
+- [x] 1.2 (P) assemble-dist.sh に .sha256 生成 step を追加
   - 既存 `tar czf` 直後 (line 254 付近) に `(cd dist && sha256sum "kolt-${VERSION}-linux-x64.tar.gz" > "kolt-${VERSION}-linux-x64.tar.gz.sha256")` を追記
   - subshell 内で cd するので `.sha256` 内の filename は basename になる (絶対パス埋め込み無し)
   - 既存 cwd は `$ROOT_DIR` で `dist/...` 相対参照、subshell 統合に問題なし
