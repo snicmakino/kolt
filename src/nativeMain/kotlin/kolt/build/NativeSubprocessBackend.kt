@@ -12,11 +12,18 @@ import kolt.infra.executeCommand
 // retry here when the daemon is unreachable. stderr is not captured —
 // konanc inherits the parent process's stderr fd, same as the JVM-side
 // SubprocessCompilerBackend.
-class NativeSubprocessBackend(private val konancBin: String) : NativeCompilerBackend {
+//
+// run_konan is a shell wrapper that resolves `java` through `$JAVA_HOME`
+// first and falls back to PATH; without either it exits 127 on
+// `java: command not found`. `javaHome` injects the env var into the child
+// so the wrapper does not depend on the host's PATH (#285).
+class NativeSubprocessBackend(private val konancBin: String, private val javaHome: String? = null) :
+  NativeCompilerBackend {
 
   override fun compile(args: List<String>): Result<NativeCompileOutcome, NativeCompileError> {
     val argv = nativeSubprocessArgv(konancBin, args)
-    executeCommand(argv).getOrElse { err ->
+    val env = if (javaHome != null) mapOf("JAVA_HOME" to javaHome) else emptyMap()
+    executeCommand(argv, env).getOrElse { err ->
       return Err(mapProcessErrorToNativeCompileError(err))
     }
     return Ok(NativeCompileOutcome(stderr = ""))

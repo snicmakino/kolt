@@ -468,6 +468,16 @@ private fun doNativeBuildInner(
   // below leaves cached=null for the next run (#50).
   if (fileExists(BUILD_STATE_FILE)) deleteFile(BUILD_STATE_FILE)
 
+  // run_konan / cinterop are shell wrappers that resolve `java` through
+  // `$JAVA_HOME/bin/java` first and fall back to PATH; on a clean host
+  // with no system Java the wrapper exits 127 (#285). Provision a managed
+  // JDK before spawning any konanc subprocess. Lazy: kept after the
+  // up-to-date branch so cache hits don't trigger an install.
+  val managedJdkBins =
+    ensureJdkBinsFromConfig(config, paths).getOrElse {
+      return Err(it)
+    }
+
   // Resolve after the up-to-date check (#57) so cache hits don't walk
   // the dependency graph and re-hash every cached klib.
   val depKlibs =
@@ -487,7 +497,7 @@ private fun doNativeBuildInner(
   }
 
   val cinteropKlibs =
-    runCinterop(config, paths).getOrElse {
+    runCinterop(config, paths, javaHome = managedJdkBins.home).getOrElse {
       return Err(it)
     }
   val klibs = depKlibs + cinteropKlibs
@@ -498,7 +508,8 @@ private fun doNativeBuildInner(
         eprintln("error: could not determine current working directory")
         return Err(EXIT_BUILD_ERROR)
       }
-  val subprocessBackend = NativeSubprocessBackend(konancBin = managedKonancBin)
+  val subprocessBackend =
+    NativeSubprocessBackend(konancBin = managedKonancBin, javaHome = managedJdkBins.home)
   val backend: NativeCompilerBackend =
     resolveNativeCompilerBackend(
       config = config,
@@ -619,9 +630,14 @@ private fun newestDefMtime(config: KoltConfig): Long? {
   return if (mtimes.isEmpty()) null else mtimes.max()
 }
 
-private fun runCinterop(config: KoltConfig, paths: KoltPaths): Result<List<String>, Int> {
+private fun runCinterop(
+  config: KoltConfig,
+  paths: KoltPaths,
+  javaHome: String? = null,
+): Result<List<String>, Int> {
   if (config.cinterop.isEmpty()) return Ok(emptyList())
   val managedCinteropBin = paths.cinteropBin(config.kotlin.effectiveCompiler)
+  val cinteropEnv = if (javaHome != null) mapOf("JAVA_HOME" to javaHome) else emptyMap()
   val klibs = mutableListOf<String>()
   for (entry in config.cinterop) {
     val klibPath = cinteropOutputKlibPath(entry)
@@ -640,7 +656,7 @@ private fun runCinterop(config: KoltConfig, paths: KoltPaths): Result<List<Strin
     val cmd =
       cinteropCommand(entry, target = config.build.target, cinteropPath = managedCinteropBin)
     println("generating cinterop klib for ${entry.name}...")
-    executeCommand(cmd.args).getOrElse { error ->
+    executeCommand(cmd.args, cinteropEnv).getOrElse { error ->
       eprintln("error: " + formatProcessError(error, "cinterop (${entry.name})"))
       return Err(EXIT_BUILD_ERROR)
     }
@@ -886,6 +902,11 @@ private fun doNativeTest(
         eprintln("error: ${it.message}")
         return Err(EXIT_TEST_ERROR)
       }
+    val managedJdkBins =
+      ensureJdkBinsFromConfig(config, paths).getOrElse {
+        return Err(it)
+      }
+    val konancEnv = mapOf("JAVA_HOME" to managedJdkBins.home)
     val nativePluginArgs =
       resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
         eprintln("error: ${it.message}")
@@ -903,7 +924,7 @@ private fun doNativeTest(
     }
 
     val cinteropKlibs =
-      runCinterop(config, paths).getOrElse {
+      runCinterop(config, paths, javaHome = managedJdkBins.home).getOrElse {
         return Err(it)
       }
     val klibs = depKlibs + cinteropKlibs
@@ -921,7 +942,7 @@ private fun doNativeTest(
       return Err(EXIT_BUILD_ERROR)
     }
     println("compiling tests (native)...")
-    executeCommand(libraryCmd.args).getOrElse { error ->
+    executeCommand(libraryCmd.args, konancEnv).getOrElse { error ->
       eprintln("error: " + formatProcessError(error, "test compilation"))
       return Err(EXIT_BUILD_ERROR)
     }
@@ -934,7 +955,7 @@ private fun doNativeTest(
         profile = profile,
       )
     println("linking tests (native)...")
-    executeCommand(linkCmd.args).getOrElse { error ->
+    executeCommand(linkCmd.args, konancEnv).getOrElse { error ->
       eprintln("error: " + formatProcessError(error, "test linking"))
       return Err(EXIT_BUILD_ERROR)
     }
