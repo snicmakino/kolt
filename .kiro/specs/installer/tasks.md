@@ -20,7 +20,7 @@
 
 ## 2. install.sh の実装
 
-- [ ] 2.1 install.sh の skeleton + env var contract
+- [x] 2.1 install.sh の skeleton + env var contract
   - `#!/bin/sh` shebang + `set -eu`
   - `KOLT_VERSION` / `KOLT_ALLOW_YANKED` / `KOLT_TEST_BASE_URL` / `KOLT_TEST_YANKED_URL` の default 値設定 (default URL は raw GitHub URL / GitHub Release URL)
   - 7 関数の stub (各 stub は echo "TODO: <name>" + exit 1) と main flow の関数 call 順序
