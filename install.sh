@@ -139,8 +139,47 @@ yank_check() {
 }
 
 download_and_verify() {
-    echo "TODO: download_and_verify" >&2
-    exit 1
+    dv_version="$1"
+    dv_platform="$2"
+
+    if [ -n "$KOLT_TEST_BASE_URL" ]; then
+        dv_base="$KOLT_TEST_BASE_URL"
+    else
+        dv_base="https://github.com/snicmakino/kolt/releases/download/v${dv_version}"
+    fi
+
+    dv_tarball_name="kolt-${dv_version}-${dv_platform}.tar.gz"
+    dv_tarball_url="${dv_base}/${dv_tarball_name}"
+    dv_sha256_url="${dv_tarball_url}.sha256"
+
+    dv_tempdir=$(mktemp -d)
+    dv_tarball_path="${dv_tempdir}/${dv_tarball_name}"
+    dv_sha256_path="${dv_tarball_path}.sha256"
+
+    if ! curl -fsSL -o "$dv_tarball_path" "$dv_tarball_url"; then
+        rm -rf "$dv_tempdir"
+        echo "download_and_verify: failed to fetch $dv_tarball_url" >&2
+        echo "(version $dv_version may predate the installer rollout — see #230)" >&2
+        exit 4
+    fi
+
+    if ! curl -fsSL -o "$dv_sha256_path" "$dv_sha256_url"; then
+        rm -rf "$dv_tempdir"
+        echo "download_and_verify: failed to fetch $dv_sha256_url" >&2
+        exit 4
+    fi
+
+    if ! (cd "$dv_tempdir" && sha256sum -c "${dv_tarball_name}.sha256" >/dev/null 2>&1); then
+        dv_expected=$(awk '{print $1}' "$dv_sha256_path")
+        dv_actual=$(sha256sum "$dv_tarball_path" | awk '{print $1}')
+        rm -rf "$dv_tempdir"
+        echo "download_and_verify: SHA-256 mismatch for $dv_tarball_name" >&2
+        echo "  expected: $dv_expected" >&2
+        echo "  actual:   $dv_actual" >&2
+        exit 5
+    fi
+
+    echo "$dv_tarball_path"
 }
 
 extract_and_link() {

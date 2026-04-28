@@ -70,7 +70,7 @@
   - _Requirements: 3.1, 3.2_
   - _Boundary: install.sh_
 
-- [ ] 2.6 download_and_verify 関数の実装
+- [x] 2.6 download_and_verify 関数の実装
   - `KOLT_TEST_BASE_URL` 設定時はそれを base、未設定時は `https://github.com/snicmakino/kolt/releases/download/v<v>` を base にする
   - tarball (`kolt-<v>-<platform>.tar.gz`) と `.sha256` を curl で fetch
   - HTTP 404 / error → exit 4 + URL と HTTP status をメッセージに含める。tarball が無い version (pre-#230 release) のケースに「the installer was introduced in #230, earlier releases predate it」相当の hint を 404 時に追加
