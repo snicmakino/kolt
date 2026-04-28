@@ -104,7 +104,7 @@
 
 ## 3. release.yml の実装
 
-- [ ] 3.1 (P) workflow file の skeleton + triggers + permissions
+- [x] 3.1 (P) workflow file の skeleton + triggers + permissions
   - `.github/workflows/release.yml` を新規作成
   - `on: push: tags: ['v*']` および `on: workflow_dispatch: inputs: dry_run: {type: boolean, default: true, required: true}`
   - `permissions: contents: write`

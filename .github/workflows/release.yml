@@ -1,0 +1,50 @@
+name: Release
+
+# Tag push (v*) is the production trigger. workflow_dispatch with dry_run
+# defaults to true so a manual run only exercises the gates and build,
+# without publishing assets — used to validate release.yml end-to-end before
+# the first real tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Skip gh release create and smoke job'
+        type: boolean
+        default: true
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gates (3.2), build + assemble + sha256 + publish (3.3) land in
+      # subsequent tasks. This step is a placeholder so the skeleton
+      # validates as a complete workflow definition.
+      - name: Skeleton placeholder
+        run: echo "release.yml skeleton; gates/build/publish in tasks 3.2 / 3.3"
+
+  smoke:
+    name: Smoke
+    needs: release
+    if: github.event_name == 'push' || !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Real curl|sh smoke against the published assets lands in 3.4.
+      - name: Skeleton placeholder
+        run: echo "smoke skeleton; real curl|sh in task 3.4"
