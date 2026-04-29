@@ -212,6 +212,57 @@ jobs:
           done
           echo "guard: all daemon deps match their runtime classpath manifests"
 
+      # Issue #291 regression guard: BTA `-impl` is staged from a
+      # hand-maintained `BTA_IMPL_JARS` array in `scripts/assemble-dist.sh`,
+      # not the resolver. A stale entry (drift from upstream Kotlin's
+      # transitive set, missed update on a Kotlin bump, fat-finger edit)
+      # would break daemon classloading the same way #287 did. Diffs the
+      # filename column of `BTA_IMPL_JARS` against
+      # `libexec/kolt-bta-impl/*.jar`, then verifies each filename is on
+      # the argfile `-cp` line under `libexec/kolt-bta-impl/`.
+      - name: Verify libexec/kolt-bta-impl matches BTA_IMPL_JARS
+        run: |
+          set -euo pipefail
+          DIST_ROOT="dist/kolt-${KOLT_TOML_VERSION}-linux-x64"
+          # Parse `BTA_IMPL_JARS=( … )` block: each entry is a quoted
+          # `group:artifact:version:filename` string; extract field 4.
+          expected=$(awk '
+            /^BTA_IMPL_JARS=\(/ { in_block = 1; next }
+            in_block && /^\)/ { exit }
+            in_block {
+              sub(/^[[:space:]]*"/, "")
+              sub(/"[[:space:]]*$/, "")
+              n = split($0, parts, ":")
+              if (n == 4) print parts[4]
+            }
+          ' scripts/assemble-dist.sh | sort)
+          if [ -z "$expected" ]; then
+            echo "guard: BTA_IMPL_JARS parsed as empty — assemble-dist.sh format changed?" >&2
+            exit 1
+          fi
+          actual=$(find "$DIST_ROOT/libexec/kolt-bta-impl" -maxdepth 1 -name '*.jar' -printf '%f\n' | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "guard: libexec/kolt-bta-impl/ does not match BTA_IMPL_JARS" >&2
+            diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          fi
+          # Both daemons embed the same kolt-bta-impl/ entries on their
+          # argfile -cp; spot-check from the JVM daemon (the native
+          # daemon shape is identical per write_argfile in assemble-dist.sh).
+          argfile="$DIST_ROOT/libexec/classpath/kolt-jvm-compiler-daemon.argfile"
+          cp_line=$(awk 'NR == 2' "$argfile")
+          while IFS= read -r base; do
+            [ -z "$base" ] && continue
+            case "$cp_line" in
+              *"/kolt-bta-impl/${base}"*) ;;
+              *)
+                echo "guard: argfile $argfile missing kolt-bta-impl entry for $base" >&2
+                exit 1
+                ;;
+            esac
+          done < <(printf '%s\n' "$expected")
+          echo "guard: libexec/kolt-bta-impl matches BTA_IMPL_JARS and is present on the argfile"
+
       # Local HTTP server lets install.sh exercise its real download +
       # SHA-256 + extract + sed + symlink path against the assembled tarball
       # without needing a published GitHub Release.
