@@ -16,7 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class InfoCommandTest {
   private val withProject =
     InfoSnapshot(
-      koltVersion = "0.16.2",
+      koltVersion = "0.16.3",
       koltPath = "/usr/local/bin/kolt",
       koltHomeDisplay = "~/.kolt",
       koltHomeBytes = 142L * 1024 * 1024,
@@ -68,7 +68,7 @@ class InfoCommandTest {
   fun formatsAllFieldsWhenInsideProject() {
     val lines = formatInfo(withProject).lines()
 
-    assertEquals("kolt        v0.16.2 (/usr/local/bin/kolt)", lines[0])
+    assertEquals("kolt        v0.16.3 (/usr/local/bin/kolt)", lines[0])
     assertEquals("kolt home   ~/.kolt (142.0 MB)", lines[1])
     assertEquals(
       "kotlin      2.3.20 (daemon, ~/.kolt/toolchains/kotlinc/2.3.20/bin/kotlinc)",
@@ -87,7 +87,7 @@ class InfoCommandTest {
     val snap = withProject.copy(kotlin = null, jdk = null, project = null)
     val lines = formatInfo(snap).lines()
 
-    assertTrue(lines[0].startsWith("kolt        v0.16.2"))
+    assertTrue(lines[0].startsWith("kolt        v0.16.3"))
     assertTrue(lines.any { it.startsWith("host") })
     assertFalse(lines.any { it.startsWith("kotlin") })
     assertFalse(lines.any { it.startsWith("project") })
@@ -244,7 +244,7 @@ class InfoCommandTest {
   fun jsonFormatEmitsAllFields() {
     val json = formatInfoJson(verboseProject)
 
-    assertTrue(json.contains("\"version\": \"0.16.2\""))
+    assertTrue(json.contains("\"version\": \"0.16.3\""))
     assertTrue(json.contains("\"homeBytes\""))
     assertTrue(json.contains("\"cacheBytes\": 104857600"))
     assertTrue(json.contains("\"requestedVersion\": \"2.3.0\""))
@@ -318,7 +318,7 @@ class InfoCommandTest {
     val parsed = Json.parseToJsonElement(formatInfoJson(verboseProject)).jsonObject
 
     val kolt = parsed["kolt"]?.jsonObject ?: fail("missing kolt object")
-    assertEquals("0.16.2", kolt["version"]?.jsonPrimitive?.content)
+    assertEquals("0.16.3", kolt["version"]?.jsonPrimitive?.content)
     val kotlin = parsed["kotlin"]?.jsonObject ?: fail("missing kotlin object")
     assertEquals("2.3.20", kotlin["resolvedVersion"]?.jsonPrimitive?.content)
     val project = parsed["project"]?.jsonObject ?: fail("missing project object")

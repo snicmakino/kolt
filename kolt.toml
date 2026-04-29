@@ -1,5 +1,5 @@
 name = "kolt"
-version = "0.16.2"
+version = "0.16.3"
 
 [kotlin]
 version = "2.3.20"
