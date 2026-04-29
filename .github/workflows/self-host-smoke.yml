@@ -396,10 +396,16 @@ jobs:
       # `FallbackReporter` warning so that a daemon that fails to bind
       # within the connect budget is caught here rather than masquerading
       # as a passing build via the subprocess fallback rail.
+      #
+      # `~/.kolt/daemon/` is wiped first so the smoke always exercises the
+      # cold spawn-and-bind path: `~/.kolt` is restored from the toolchain
+      # cache (line ~128) and any stale daemon state files there could let
+      # the spawn rail short-circuit before the bind path that #287 broke.
       - name: Smoke-build fixture with installed kolt
         run: |
           set -euo pipefail
           INSTALL_DIR="$HOME/.local/share/kolt/$KOLT_TOML_VERSION"
+          rm -rf "$HOME/.kolt/daemon"
           cd spike/daemon-self-host-smoke
           rm -rf build
           "${INSTALL_DIR}/bin/kolt" build 2> kolt-build.stderr
