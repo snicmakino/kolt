@@ -173,6 +173,45 @@ jobs:
           VERSION=$(grep -E '^version = "' kolt.toml | head -n 1 | sed -E 's/^version = "(.*)"/\1/')
           echo "KOLT_TOML_VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      # Issue #286 regression guard: assemble-dist.sh reads each daemon's
+      # runtime classpath manifest with `while IFS= read -r`, which silently
+      # drops the alphabetical-last entry (ADR 0027 §1 pins the manifest as
+      # "no trailing blank line"). Cross-checks that every manifest entry
+      # landed in `libexec/<daemon>/deps/` and is present on the argfile
+      # `-cp` line — both sides of the regression.
+      - name: Verify daemon deps match runtime classpath manifest
+        run: |
+          set -euo pipefail
+          DIST_ROOT="dist/kolt-${KOLT_TOML_VERSION}-linux-x64"
+          for daemon in kolt-jvm-compiler-daemon kolt-native-compiler-daemon; do
+            manifest="$daemon/build/release/$daemon-runtime.classpath"
+            if [ ! -f "$manifest" ]; then
+              echo "guard: missing manifest $manifest" >&2
+              exit 1
+            fi
+            expected=$(awk -F/ 'NF { print $NF }' "$manifest" | sort)
+            deps_dir="$DIST_ROOT/libexec/$daemon/deps"
+            actual=$(find "$deps_dir" -maxdepth 1 -name '*.jar' -printf '%f\n' | sort)
+            if [ "$expected" != "$actual" ]; then
+              echo "guard: $daemon deps/ does not match runtime classpath manifest" >&2
+              diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+              exit 1
+            fi
+            argfile="$DIST_ROOT/libexec/classpath/$daemon.argfile"
+            cp_line=$(awk 'NR == 2' "$argfile")
+            while IFS= read -r base; do
+              [ -z "$base" ] && continue
+              case "$cp_line" in
+                *"/${daemon}/deps/${base}"*) ;;
+                *)
+                  echo "guard: argfile $argfile missing entry for $base" >&2
+                  exit 1
+                  ;;
+              esac
+            done < <(printf '%s\n' "$expected")
+          done
+          echo "guard: all daemon deps match their runtime classpath manifests"
+
       # Local HTTP server lets install.sh exercise its real download +
       # SHA-256 + extract + sed + symlink path against the assembled tarball
       # without needing a published GitHub Release.

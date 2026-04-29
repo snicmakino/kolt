@@ -149,12 +149,19 @@ LIBEXEC_PLACEHOLDER="@KOLT_LIBEXEC@"
 # manifest into `<target_dir>/` preserving its file name. Manifest entries
 # are absolute paths (one per line, ADR 0027 §1); duplicates are flagged as
 # a bug in the resolver rather than silently overwriting.
+#
+# The `|| [[ -n "$jar" ]]` keeps the last entry: ADR 0027 §1 pins the
+# manifest format as "no trailing blank line", so the final line is
+# unterminated and a vanilla `while IFS= read -r` would silently drop it.
+# Issue #286: dropping the last entry left `kotlinx-serialization-json-jvm`
+# out of the native daemon's deps/ and `ktoml-core-jvm` out of the JVM
+# daemon's, which are precisely the alphabetical-last entries.
 copy_manifest_deps() {
   local manifest="$1"
   local target_dir="$2"
   mkdir -p "$target_dir"
   local jar base
-  while IFS= read -r jar; do
+  while IFS= read -r jar || [[ -n "$jar" ]]; do
     [[ -z "$jar" ]] && continue
     base="$(basename "$jar")"
     if [[ -e "$target_dir/$base" ]]; then
@@ -180,7 +187,8 @@ write_argfile() {
   local cp_entries=()
   cp_entries+=("${LIBEXEC_PLACEHOLDER}/${daemon}/${daemon}.jar")
   local jar base
-  while IFS= read -r jar; do
+  # See `copy_manifest_deps` for why the last-line guard is required.
+  while IFS= read -r jar || [[ -n "$jar" ]]; do
     [[ -z "$jar" ]] && continue
     base="$(basename "$jar")"
     cp_entries+=("${LIBEXEC_PLACEHOLDER}/${daemon}/deps/${base}")
