@@ -95,6 +95,14 @@ Rules:
 
 - **Plain text, UTF-8, LF line endings, no trailing blank line.** No
   header, no comment syntax. One jar per line.
+- **Consumers must read the unterminated final line.** "No trailing
+  blank line" means the last jar path is not LF-terminated, so a vanilla
+  POSIX `while IFS= read -r line; do … done` loop silently drops it
+  (issue #286 — `assemble-dist.sh` shipped each daemon without its
+  alphabetical-last jar). Consumers in shell must use
+  `while IFS= read -r line || [ -n "$line" ]; do … done`; tools that
+  delimit on LF (e.g. `awk` records, `xargs -d $'\n'`) handle the
+  unterminated record correctly.
 - **Absolute paths.** The jars live under `~/.kolt/cache` after
   resolution; the consumer does not need to walk the cache.
 - **Deps only.** `build/<name>.jar` is NOT listed; its path is a
