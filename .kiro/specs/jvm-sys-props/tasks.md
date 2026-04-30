@@ -94,7 +94,7 @@
 
 ## 4. Validation: end-to-end 検証と dogfood
 
-- [ ] 4.1 KOLT_INTEGRATION gate 付き end-to-end test を追加する
+- [x] 4.1 KOLT_INTEGRATION gate 付き end-to-end test を追加する
   - `JvmTestSysPropIT` を新設、 fixture プロジェクトに `[classpaths.foo]` (任意の小さい dep) と `[test.sys_props]` (literal / classpath / project_dir 各 1 個) を declare する
   - 実 `kolt test` を起動し、 fixture テストが `System.getProperty(...)` で 3 値を取得し assert する
   - KOLT_INTEGRATION env gate の既存 pattern (例: `ConcurrentBuildIT`) に従う
