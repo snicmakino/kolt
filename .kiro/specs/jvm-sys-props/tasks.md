@@ -111,21 +111,21 @@
 
 ## 5. Out-of-code deliverables: ADR と follow-up issues
 
-- [ ] 5.1 (P) follow-up issue を open: CLI -D flag for kolt test/run
+- [x] 5.1 (P) follow-up issue を open: CLI -D flag for kolt test/run
   - title: `Add CLI -D<key>=<value> flag to kolt test and kolt run`
   - body: 問題 (env-specific 値を kolt.toml に書けない、 ad-hoc override が欲しい場面)、 完了条件 (両コマンドで `-D` を accept、 kolt.toml 宣言の value を override)、 スコープ (`-D` のみ、 `-X` 系の他 JVM flag は別 issue)
   - label: `size: M`
   - 観察可能完了条件: GitHub issue が open 状態で URL を取得済み、 ADR 0032 の Follow-ups 節で参照可能
   - _Requirements: 6.4_
 
-- [ ] 5.2 (P) follow-up issue を open: per-user kolt.local.toml override file
+- [x] 5.2 (P) follow-up issue を open: per-user kolt.local.toml override file
   - title: `Per-user kolt.local.toml override file for environment-specific values`
   - body: 問題 (env-agnostic な kolt.toml と env-specific 値の分離、 .gitignore 推奨)、 完了条件 (`kolt.local.toml` が存在する場合 kolt.toml の上に overlay される)、 スコープ (overlay 範囲は `[test.sys_props]` / `[run.sys_props]` の値のみ、 `[classpaths]` 上書きは別議論)
   - label: `size: L`
   - 観察可能完了条件: GitHub issue が open 状態で URL を取得済み、 ADR 0032 の Follow-ups 節で参照可能
   - _Requirements: 6.4_
 
-- [ ] 5.3 ADR 0032 を発行する
+- [x] 5.3 ADR 0032 を発行する
   - `docs/adr/0032-kolt-toml-env-agnostic.md` を新設、 Status / Summary / Context / Decision / Alternatives Considered / Consequences / Follow-ups の standard ADR shape で書く
   - Decision 節で `${env.X}` interpolation 不採用を明記する
   - Alternatives Considered 節で Maven 流 interpolation / Cargo 流 separate file / CLI flag escape hatch を比較する
