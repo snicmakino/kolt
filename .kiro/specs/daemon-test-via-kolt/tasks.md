@@ -63,7 +63,7 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   - _Boundary: src/nativeMain/kotlin/kolt/build/{TestBuilder,SubprocessCompilerBackend}.kt, src/nativeTest/kotlin/kolt/build/_
 
-- [ ] 4.2 IcModuleBoundaryInvariantTest を作成
+- [x] 4.2 IcModuleBoundaryInvariantTest を作成
   - `kolt-jvm-compiler-daemon/src/test/kotlin/kolt/daemon/IcModuleBoundaryInvariantTest.kt` を新設、 既存 `AdapterBoundaryInvariantTest` の `Files.walk(sourceRoot)` パターンを踏襲
   - sysprop `kolt.daemon.icTestSourceRoot` から source root を受け、 不在時は明示的な error message で fail
   - `import kolt.daemon.Main`、 `import kolt.daemon.server.`、 `import kolt.daemon.reaper.` のいずれかの prefix を含む行を violations として収集、 空でないなら fail message に違反 file / 行 / 行番号を列挙
