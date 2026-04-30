@@ -85,10 +85,24 @@ jobs:
             -C "$BOOTSTRAP_DIR" --strip-components=1
           "$BOOTSTRAP_KOLT" --version
 
+      # Native daemon canary: `kolt build` for kolt itself is a Native
+      # target build, so it routes through `resolveNativeCompilerBackend`
+      # and the K2Native sidecar daemon (ADR 0024). Mirrors the JVM-side
+      # canary in `unit-tests.yml`: assert `starting native compiler
+      # daemon` reached stderr — i.e. the daemon code path was exercised.
+      # Spawn-to-connect timing is orthogonal (#310).
+      #
+      # `kolt test` does not engage the native daemon today (#312); use
+      # `kolt build` here instead.
       - name: Self-host build (kolt builds itself from kolt.toml)
         run: |
           set -euo pipefail
-          "$BOOTSTRAP_KOLT" build
+          "$BOOTSTRAP_KOLT" build 2> >(tee kolt-build.stderr >&2)
+          if ! grep -q 'starting native compiler daemon' kolt-build.stderr; then
+            echo "Canary failed: bootstrap kolt did not reach the native daemon spawn path" >&2
+            exit 1
+          fi
+          echo "Canary OK: native daemon spawn path was reached"
 
       - name: Verify self-hosted binary
         run: |
