@@ -14,8 +14,12 @@ jvm_target = "25"
 jdk = "25"
 main = "kolt.nativedaemon.main"
 sources = ["src/main/kotlin"]
-test_sources = []
+test_sources = ["src/test/kotlin"]
 
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
 "com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
+
+[test-dependencies]
+"org.junit.jupiter:junit-jupiter" = "5.11.3"
+"org.junit.platform:junit-platform-launcher" = "1.11.3"

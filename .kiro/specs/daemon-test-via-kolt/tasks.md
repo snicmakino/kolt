@@ -45,7 +45,7 @@
   - _Boundary: kolt-jvm-compiler-daemon/kolt.lock_
 
 - [ ] 3. (P) Native daemon kolt.toml 整備
-- [ ] 3.1 (P) test_sources / test-deps 追加 + lockfile 再生成
+- [x] 3.1 (P) test_sources / test-deps 追加 + lockfile 再生成
   - `kolt-native-compiler-daemon/kolt.toml` の `[build]` に `test_sources = ["src/test/kotlin"]` を追加
   - `[test-dependencies]` で `org.junit.jupiter:junit-jupiter = "5.11.3"` / `org.junit.platform:junit-platform-launcher = "1.11.3"` を pin
   - `cd kolt-native-compiler-daemon && kolt deps install` で `kolt.lock` を再生成
