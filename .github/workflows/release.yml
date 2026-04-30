@@ -32,6 +32,12 @@ permissions:
 
 env:
   KOLT_BOOTSTRAP_TAG: v0.16.3
+  # Run the bootstrap kolt from inside the extracted release tree so
+  # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
+  # spawn the warm daemon. Copying the binary out (as the original
+  # bootstrap step did) detached it from libexec/ and silently forced
+  # subprocess compile. See #302.
+  BOOTSTRAP_KOLT: /tmp/kolt-bootstrap/bin/kolt
 
 jobs:
   release:
@@ -157,9 +163,7 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
-          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
-            "$GITHUB_WORKSPACE/bootstrap-kolt"
-          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
+          "$BOOTSTRAP_KOLT" --version
 
       # assemble-dist.sh runs the 3 × kolt build --release internally and
       # emits both the tarball and .sha256. The KOLT env var points the
@@ -168,7 +172,7 @@ jobs:
       - name: Assemble tarball + sha256
         run: |
           set -euo pipefail
-          KOLT="$GITHUB_WORKSPACE/bootstrap-kolt" \
+          KOLT="$BOOTSTRAP_KOLT" \
             ./scripts/assemble-dist.sh
 
       - name: Publish to GitHub Release

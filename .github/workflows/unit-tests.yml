@@ -27,6 +27,12 @@ permissions:
 
 env:
   KOLT_BOOTSTRAP_TAG: v0.16.3
+  # Run the bootstrap kolt from inside the extracted release tree so
+  # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
+  # spawn the warm daemon. Copying the binary out (as the original
+  # bootstrap step did) detached it from libexec/ and silently forced
+  # subprocess compile. See #302.
+  BOOTSTRAP_KOLT: /tmp/kolt-bootstrap/bin/kolt
 
 jobs:
   linuxX64-test:
@@ -76,9 +82,7 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
-          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
-            "$GITHUB_WORKSPACE/bootstrap-kolt"
-          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
+          "$BOOTSTRAP_KOLT" --version
 
       # `--ktest_logger=SILENT` collapses the per-test GTEST output (~2k
       # lines for the full suite) down to a summary; failure stack traces
@@ -88,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::kolt test"
-          "$GITHUB_WORKSPACE/bootstrap-kolt" test -- --ktest_logger=SILENT
+          "$BOOTSTRAP_KOLT" test -- --ktest_logger=SILENT
           echo "::endgroup::"
 
       # Early-detection guard: build the JVM daemon project standalone with
@@ -96,9 +100,22 @@ jobs:
       # smoke job 2 covers the same surface end-to-end, but running it here
       # at the PR-gating job catches a `kolt build` regression in the daemon
       # subproject before the smoke workflow's longer path.
+      #
+      # Daemon-path canary: this step builds a JVM target and therefore
+      # exercises the JVM compiler daemon. If the bootstrap kolt cannot
+      # resolve daemon jars from its sibling libexec/, every fallback path
+      # writes "falling back to subprocess" to stderr (#302). Failing the
+      # job on that string keeps a regression from silently re-introducing
+      # the ~30–60s subprocess penalty across CI.
       - name: Verify daemon thin jar builds standalone
         run: |
           set -euo pipefail
           cd kolt-jvm-compiler-daemon
-          "$GITHUB_WORKSPACE/bootstrap-kolt" build
+          "$BOOTSTRAP_KOLT" build 2> kolt-build.stderr
+          cat kolt-build.stderr
           test -f build/debug/kolt-jvm-compiler-daemon.jar
+          if grep -q 'falling back to subprocess' kolt-build.stderr; then
+            echo "Canary failed: bootstrap kolt fell back to subprocess compile" >&2
+            exit 1
+          fi
+          echo "Canary OK: daemon path engaged"

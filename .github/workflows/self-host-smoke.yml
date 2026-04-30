@@ -29,6 +29,12 @@ permissions:
 
 env:
   KOLT_BOOTSTRAP_TAG: v0.16.3
+  # Run the bootstrap kolt from inside the extracted release tree so
+  # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
+  # spawn the warm daemon. Copying the binary out (as the original
+  # bootstrap step did) detached it from libexec/ and silently forced
+  # subprocess compile. See #302.
+  BOOTSTRAP_KOLT: /tmp/kolt-bootstrap/bin/kolt
 
 jobs:
   self-host:
@@ -77,14 +83,12 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
-          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
-            "$GITHUB_WORKSPACE/bootstrap-kolt"
-          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
+          "$BOOTSTRAP_KOLT" --version
 
       - name: Self-host build (kolt builds itself from kolt.toml)
         run: |
           set -euo pipefail
-          "$GITHUB_WORKSPACE/bootstrap-kolt" build
+          "$BOOTSTRAP_KOLT" build
 
       - name: Verify self-hosted binary
         run: |
