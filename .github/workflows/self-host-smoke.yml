@@ -2,9 +2,16 @@ name: Self-host smoke test
 
 # Builds kolt.kexe from its own kolt.toml as a smoke test against HEAD.
 # See #61 — this is the minimum signal that the self-host path stays
-# unbroken across changes. A Gradle-built kolt.kexe bootstraps itself
-# to rebuild kolt from kolt.toml, and we verify the resulting binary
-# responds to `--version`.
+# unbroken across changes. A prebuilt kolt.kexe from a past release
+# bootstraps the build, kolt rebuilds itself from kolt.toml, and we
+# verify the resulting binary responds to `--version`.
+#
+# Bootstrap policy: KOLT_BOOTSTRAP_TAG pins the past kolt release whose
+# kolt.kexe is used to build current HEAD. The pin must always trail
+# HEAD by at least one published release. If a build fails because the
+# pinned tag is broken, roll back to the previous working tag in the env
+# below (one-line PR). The tag must be reachable via `gh release
+# download` and ship `kolt-<version>-linux-x64.tar.gz`.
 
 on:
   push:
@@ -19,6 +26,9 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  KOLT_BOOTSTRAP_TAG: v0.16.3
 
 jobs:
   self-host:
@@ -44,28 +54,6 @@ jobs:
       - name: Install libarchive dev headers
         run: sudo apt-get install -y --no-install-recommends libarchive-dev
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      # Gradle's Kotlin Native plugin downloads konanc (~500 MB) into ~/.konan.
-      # Caching keeps runs under ~2 minutes after the first cold build. Keyed
-      # on build.gradle.kts because that's where the Kotlin (and therefore
-      # konanc) version lives for the Gradle path.
-      - name: Cache Gradle Kotlin Native
-        uses: actions/cache@v4
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-${{ hashFiles('build.gradle.kts') }}
-          restore-keys: |
-            konan-${{ runner.os }}-
-
       # kolt downloads its own kotlinc / konanc / JDK into ~/.kolt on first
       # run. Cache keyed on the Kotlin version from kolt.toml.
       - name: Cache kolt toolchains
@@ -76,11 +64,27 @@ jobs:
           restore-keys: |
             kolt-${{ runner.os }}-
 
-      - name: Bootstrap kolt.kexe via Gradle
-        run: ./gradlew --no-daemon linkDebugExecutableLinuxX64
+      - name: Download bootstrap kolt.kexe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DIR=/tmp/kolt-bootstrap
+          mkdir -p "$BOOTSTRAP_DIR"
+          gh release download "$KOLT_BOOTSTRAP_TAG" \
+            --repo snicmakino/kolt \
+            --pattern 'kolt-*-linux-x64.tar.gz' \
+            --dir "$BOOTSTRAP_DIR"
+          tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
+            -C "$BOOTSTRAP_DIR" --strip-components=1
+          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
+            "$GITHUB_WORKSPACE/bootstrap-kolt"
+          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
 
       - name: Self-host build (kolt builds itself from kolt.toml)
-        run: ./build/bin/linuxX64/debugExecutable/kolt.kexe build
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/bootstrap-kolt" build
 
       - name: Verify self-hosted binary
         run: |
@@ -89,11 +93,14 @@ jobs:
           echo "$version"
           echo "$version" | grep -Eq '^kolt [0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 
+      # Upload the HEAD-built kexe so the self-host-post job exercises
+      # current HEAD (not the bootstrap tag) against the 3-daemon build +
+      # assemble-dist + install.sh chain.
       - name: Upload kolt kexe artifact
         uses: actions/upload-artifact@v4
         with:
           name: kolt-kexe
-          path: ./build/bin/linuxX64/debugExecutable/kolt.kexe
+          path: ./build/debug/kolt.kexe
           if-no-files-found: error
           retention-days: 1
 

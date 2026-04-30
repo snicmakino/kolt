@@ -1,9 +1,16 @@
 name: Unit tests
 
-# Runs the linuxX64Test gradle task on every push and PR. Complements the
-# self-host smoke workflow: smoke verifies the build pipeline end-to-end,
-# this job catches unit-level regressions in build / resolve / config /
-# infra logic before they reach main.
+# Runs `kolt test` on every push and PR. Complements the self-host smoke
+# workflow: smoke verifies the build pipeline end-to-end, this job catches
+# unit-level regressions in build / resolve / config / infra logic before
+# they reach main.
+#
+# Bootstrap policy: KOLT_BOOTSTRAP_TAG pins the past kolt release whose
+# kolt.kexe is used to build/test current HEAD. The pin must always
+# trail HEAD by at least one published release. If a build fails because
+# the pinned tag is broken, roll back to the previous working tag in the
+# env below (one-line PR). The tag must be reachable via `gh release
+# download` and ship `kolt-<version>-linux-x64.tar.gz`.
 
 on:
   push:
@@ -17,6 +24,9 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  KOLT_BOOTSTRAP_TAG: v0.16.3
 
 jobs:
   linuxX64-test:
@@ -43,38 +53,46 @@ jobs:
       - name: Install libarchive dev headers
         run: sudo apt-get install -y --no-install-recommends libarchive-dev
 
-      # Cache keys deliberately mirror self-host-smoke.yml so the two
-      # workflows share underlying cache entries (keyed per repo, not per
-      # workflow). First run of either populates the caches for both.
-      - name: Cache Gradle
+      # kolt downloads its own kotlinc / konanc / JDK into ~/.kolt on first
+      # run. Cache keyed on the Kotlin version from kolt.toml.
+      - name: Cache kolt toolchains
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          path: ~/.kolt
+          key: kolt-${{ runner.os }}-${{ hashFiles('kolt.toml') }}
           restore-keys: |
-            gradle-${{ runner.os }}-
+            kolt-${{ runner.os }}-
 
-      - name: Cache Gradle Kotlin Native
-        uses: actions/cache@v4
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-${{ hashFiles('build.gradle.kts') }}
-          restore-keys: |
-            konan-${{ runner.os }}-
-
-      - name: Run linuxX64Test
-        run: ./gradlew --no-daemon linuxX64Test
-
-      # Regression guard for the root `build` → `:kolt-jvm-compiler-daemon:build`
-      # wiring added in #99 (ADR 0018). If a future edit drops the `dependsOn`
-      # in build.gradle.kts, the dev-fallback path in DaemonJarResolver.kt
-      # would silently pick up a stale jar — the failure mode is invisible to
-      # self-host-smoke because the daemon falls back to subprocess compile on
-      # any error. Asserting the thin jar exists after `./gradlew build` keeps
-      # the wiring honest.
-      - name: Verify root build produces daemon thin jar
+      - name: Download bootstrap kolt.kexe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ./gradlew --no-daemon build
-          test -f kolt-jvm-compiler-daemon/build/libs/kolt-jvm-compiler-daemon.jar
+          set -euo pipefail
+          BOOTSTRAP_DIR=/tmp/kolt-bootstrap
+          mkdir -p "$BOOTSTRAP_DIR"
+          gh release download "$KOLT_BOOTSTRAP_TAG" \
+            --repo snicmakino/kolt \
+            --pattern 'kolt-*-linux-x64.tar.gz' \
+            --dir "$BOOTSTRAP_DIR"
+          tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
+            -C "$BOOTSTRAP_DIR" --strip-components=1
+          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
+            "$GITHUB_WORKSPACE/bootstrap-kolt"
+          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
+
+      - name: Run kolt test
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/bootstrap-kolt" test
+
+      # Early-detection guard: build the JVM daemon project standalone with
+      # the bootstrap kolt and assert the thin jar materializes. self-host-
+      # smoke job 2 covers the same surface end-to-end, but running it here
+      # at the PR-gating job catches a `kolt build` regression in the daemon
+      # subproject before the smoke workflow's longer path.
+      - name: Verify daemon thin jar builds standalone
+        run: |
+          set -euo pipefail
+          cd kolt-jvm-compiler-daemon
+          "$GITHUB_WORKSPACE/bootstrap-kolt" build
+          test -f build/debug/kolt-jvm-compiler-daemon.jar

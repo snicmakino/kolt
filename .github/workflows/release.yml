@@ -4,6 +4,13 @@ name: Release
 # defaults to true so a manual run only exercises the gates and build,
 # without publishing assets — used to validate release.yml end-to-end before
 # the first real tag.
+#
+# Bootstrap policy: KOLT_BOOTSTRAP_TAG pins the past kolt release whose
+# kolt.kexe drives `assemble-dist.sh` for the new release. The pin must
+# always trail HEAD by at least one published release. Self-bootstrap
+# means a broken pinned tag blocks releases — roll back to the previous
+# working tag in the env below (one-line PR). The tag must be reachable
+# via `gh release download` and ship `kolt-<version>-linux-x64.tar.gz`.
 
 on:
   push:
@@ -22,6 +29,9 @@ concurrency:
 
 permissions:
   contents: write
+
+env:
+  KOLT_BOOTSTRAP_TAG: v0.16.3
 
 jobs:
   release:
@@ -126,26 +136,6 @@ jobs:
       - name: Install libarchive dev headers
         run: sudo apt-get install -y --no-install-recommends libarchive-dev
 
-      # Cache keys mirror self-host-smoke.yml so both workflows share warm
-      # caches keyed per-repo, not per-workflow.
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      - name: Cache Gradle Kotlin Native
-        uses: actions/cache@v4
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-${{ hashFiles('build.gradle.kts') }}
-          restore-keys: |
-            konan-${{ runner.os }}-
-
       - name: Cache kolt toolchains
         uses: actions/cache@v4
         with:
@@ -154,16 +144,31 @@ jobs:
           restore-keys: |
             kolt-${{ runner.os }}-
 
-      - name: Bootstrap kolt.kexe via Gradle
-        run: ./gradlew --no-daemon linkDebugExecutableLinuxX64
+      - name: Download bootstrap kolt.kexe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DIR=/tmp/kolt-bootstrap
+          mkdir -p "$BOOTSTRAP_DIR"
+          gh release download "$KOLT_BOOTSTRAP_TAG" \
+            --repo snicmakino/kolt \
+            --pattern 'kolt-*-linux-x64.tar.gz' \
+            --dir "$BOOTSTRAP_DIR"
+          tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
+            -C "$BOOTSTRAP_DIR" --strip-components=1
+          install -m 0755 "$BOOTSTRAP_DIR/bin/kolt" \
+            "$GITHUB_WORKSPACE/bootstrap-kolt"
+          "$GITHUB_WORKSPACE/bootstrap-kolt" --version
 
       # assemble-dist.sh runs the 3 × kolt build --release internally and
-      # emits both the tarball and .sha256 (PR #228 + task 1.2). The KOLT
-      # env var overrides its default releaseExecutable path so the
-      # bootstrapped debug kexe drives the 3 release builds.
+      # emits both the tarball and .sha256. The KOLT env var points the
+      # script at the prebuilt bootstrap kexe instead of its default
+      # `build/release/kolt.kexe` lookup.
       - name: Assemble tarball + sha256
         run: |
-          KOLT="$GITHUB_WORKSPACE/build/bin/linuxX64/debugExecutable/kolt.kexe" \
+          set -euo pipefail
+          KOLT="$GITHUB_WORKSPACE/bootstrap-kolt" \
             ./scripts/assemble-dist.sh
 
       - name: Publish to GitHub Release
