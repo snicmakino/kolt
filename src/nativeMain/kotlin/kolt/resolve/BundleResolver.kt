@@ -11,7 +11,15 @@ import kolt.config.KoltConfig
 // builds its own graph from `bundleSeeds` alone — main/test/other-bundle state
 // is never threaded in, so there is no leakage path at the function-contract
 // level. See design.md §Resolver (extended) — Bundle resolver.
-internal data class BundleResolution(val jars: List<ResolvedJar>, val classpath: String)
+// `deps` carries the per-bundle ResolvedDep list so callers can persist bundle
+// entries into kolt.lock.classpathBundles via buildLockfileFromResolved without
+// re-deriving sha256 / transitive flags. `jars` and `classpath` are the
+// downstream-friendly views consumed by SysPropResolver and outcome assembly.
+internal data class BundleResolution(
+  val jars: List<ResolvedJar>,
+  val classpath: String,
+  val deps: List<ResolvedDep>,
+)
 
 internal fun resolveBundle(
   config: KoltConfig,
@@ -51,6 +59,10 @@ internal fun resolveBundle(
             groupArtifactVersion = "${dep.groupArtifact}:${dep.version}",
           )
         }
-      BundleResolution(jars = jars, classpath = buildClasspath(jars.map { it.cachePath }))
+      BundleResolution(
+        jars = jars,
+        classpath = buildClasspath(jars.map { it.cachePath }),
+        deps = result.deps,
+      )
     }
 }

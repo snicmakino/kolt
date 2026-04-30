@@ -65,7 +65,7 @@
 
 ## 3. Integration: resolution pipeline と CLI への配線
 
-- [ ] 3.1 JvmResolutionOutcome と resolveDependencies に bundle を統合する
+- [x] 3.1 JvmResolutionOutcome と resolveDependencies に bundle を統合する
   - `JvmResolutionOutcome` に `bundleClasspaths: Map<String, String>` と `bundleJars: Map<String, List<ResolvedJar>>` を追加する
   - `resolveDependencies` を拡張: 既存 main/test resolve の後に config の各 bundle を `resolveBundle` で順に解き、 outcome と lockfile の `classpathBundles` 双方に書き込む
   - bundle declaration の hash 変更時のみ当該 bundle を再 resolve する logic を追加する

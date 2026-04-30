@@ -134,7 +134,11 @@ fun resolve(
       testSeeds = testSeeds,
     )
 
-fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lockfile {
+fun buildLockfileFromResolved(
+  config: KoltConfig,
+  deps: List<ResolvedDep>,
+  bundleDeps: Map<String, List<ResolvedDep>> = emptyMap(),
+): Lockfile {
   return Lockfile(
     version = LOCKFILE_VERSION,
     kotlin = config.kotlin.version,
@@ -149,6 +153,19 @@ fun buildLockfileFromResolved(config: KoltConfig, deps: List<ResolvedDep>): Lock
             test = it.origin == Origin.TEST,
           )
       },
-    classpathBundles = emptyMap(),
+    classpathBundles =
+      bundleDeps.mapValues { (_, bundle) ->
+        bundle.associate {
+          it.groupArtifact to
+            LockEntry(
+              version = it.version,
+              sha256 = it.sha256,
+              transitive = it.transitive,
+              // Bundle entries are scope-distinct from test deps; the test bit
+              // applies only to [test-dependencies] origin within `dependencies`.
+              test = false,
+            )
+        }
+      },
   )
 }
