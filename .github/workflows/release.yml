@@ -182,14 +182,17 @@ jobs:
             *-rc.*|*-beta.*) PRERELEASE_FLAG="--prerelease" ;;
           esac
 
-          # --generate-notes auto-populates the body with merged PRs since
-          # the previous tag. Maintainers can still `gh release edit` to
-          # curate the wording afterwards.
+          NOTES_FILE="docs/release-notes/${TAG}.md"
+          if [[ ! -f "$NOTES_FILE" ]]; then
+            echo "Release notes file missing: $NOTES_FILE" >&2
+            exit 1
+          fi
+
           # shellcheck disable=SC2086 # PRERELEASE_FLAG is intentionally split
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
             --title "$TAG" \
-            --generate-notes \
+            --notes-file "$NOTES_FILE" \
             $PRERELEASE_FLAG \
             "$TARBALL" \
             "$SHA"

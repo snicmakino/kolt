@@ -27,6 +27,7 @@ Reads `kolt.toml`, compiles with `kotlinc`, and runs with `java -jar`.
 - Issues: problem, definition of done, scope. Skip project background and tech prerequisites — the reader already knows what kolt is.
 - PRs: what changed and where the reviewer should focus (judgment calls, places to double-check). Don't restate what the diff shows. Don't repeat the issue's background.
 - Write prose, not checklists. Don't mechanically fill a `## Summary` / `## Test plan` template — default `gh pr create` scaffolding is fine to discard.
+- Release notes: hand-write `docs/release-notes/v<X>.md` in the bump-version PR. `release.yml` consumes it via `--notes-file`; do not rely on `--generate-notes`. PR-title autoenum is internal-voiced and not user-facing.
 
 ## Skills
 
