@@ -103,11 +103,15 @@ artifacts coexist on disk. See ADR 0030.
 
 Development (for working on kolt itself):
 ```
-./gradlew build                                # build native binary + daemon JARs
-./gradlew linuxX64Test                          # unit tests
-./gradlew check                                # tests + daemon version verification
+kolt build                                                  # native binary
+kolt test                                                   # unit tests
+cd kolt-jvm-compiler-daemon && kolt build                   # JVM daemon thin jar
+cd kolt-native-compiler-daemon && kolt build                # Native daemon thin jar
+
+# Special-purpose (kept until kolt-native equivalents land):
+./gradlew check                                             # tests + daemon version verification
 ./gradlew linkDebugExecutableLinuxX64 \
-  && ./build/bin/linuxX64/debugExecutable/kolt.kexe build   # self-host smoke test
+  && ./build/bin/linuxX64/debugExecutable/kolt.kexe build   # CI bootstrap self-host smoke
 ```
 
 ## Key Technical Decisions

@@ -6,9 +6,10 @@ Reads `kolt.toml`, compiles with `kotlinc`, and runs with `java -jar`.
 ## Build & Test
 
 ```bash
-./gradlew build              # Build + test + binary
-./gradlew linuxX64Test       # Tests only
-./gradlew compileKotlinLinuxX64  # Compile only
+kolt build                                       # Build binary
+kolt test                                        # Run tests
+cd kolt-jvm-compiler-daemon && kolt build        # Build JVM daemon thin jar
+cd kolt-native-compiler-daemon && kolt build     # Build Native daemon thin jar
 ```
 
 ## Key Rules

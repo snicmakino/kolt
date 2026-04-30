@@ -358,18 +358,18 @@ See [docs/architecture.md](docs/architecture.md) ([日本語](docs/architecture.
 
 ## Building from source
 
-Contributors and platforms not yet covered by the installer can build kolt from source:
+Contributors and platforms not yet covered by the installer can build kolt from source. Requires kolt to be installed first (currently linux-x64 only — see [Installation](#installation)):
 
 ```sh
 git clone https://github.com/snicmakino/kolt.git
 cd kolt
-./gradlew build
+kolt build
 ```
 
-The binary is produced at `build/bin/linuxX64/debugExecutable/kolt.kexe`. Copy it to a directory on your PATH:
+The binary is produced at `build/debug/kolt.kexe`. Copy it to a directory on your PATH:
 
 ```sh
-cp build/bin/linuxX64/debugExecutable/kolt.kexe ~/.local/bin/kolt
+cp build/debug/kolt.kexe ~/.local/bin/kolt
 ```
 
 ## Claude Code Integration

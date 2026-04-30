@@ -86,7 +86,7 @@ dependency direction: **cli → build → resolve / infra**.
   references rather than hidden in framework code.
 - **Daemon version sync**: Kotlin version pins, daemon main-class FQNs, and the
   bootstrap JDK pin each fan out across multiple files. `DriftGuardsTest`
-  asserts all three triangles under `./gradlew linuxX64Test` and `kolt test`.
+  asserts all three triangles under `kolt test`.
 - **ADR citations in code**: when a block encodes a non-obvious decision (link
   stages, fallback routing, retry budgets), reference the ADR number in a comment so
   a reader can pull the rationale without git archaeology.
