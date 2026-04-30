@@ -61,7 +61,7 @@
   - _Requirements: 1.2, 3.2, 4.1, 4.2, 4.3_
   - _Depends: 3.1_
 
-- [ ] 3.3 Replace konanc tar callsite with extractArchive
+- [x] 3.3 Replace konanc tar callsite with extractArchive
   - `installKonancToolchain` 内 `executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir))` を `extractArchive(tarPath, extractTempDir)` に置換、`formatExtractError(error, "konanc", version)` を再利用
   - 観測条件: `ToolchainManagerTest` が pass、`grep -nE 'executeCommand\(listOf\("(unzip|tar)"' src/nativeMain/kotlin/kolt/tool/ToolchainManager.kt` が空 (`mv` は対象外なので残る)
   - _Requirements: 1.3, 3.3, 4.1, 4.2, 4.3_
