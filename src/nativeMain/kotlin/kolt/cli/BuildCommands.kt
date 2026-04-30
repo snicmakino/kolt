@@ -688,13 +688,19 @@ internal fun rejectIfLibrary(
   return Err(EXIT_CONFIG_ERROR)
 }
 
+// `doRun` does not acquire the project lock. ADR 0029 §1's contract
+// limits the lock to `kolt.lock` rewrite plus `build/` finalisation;
+// `doRunInner` performs neither, only reading prebuilt artifacts and
+// spawning the child. Holding the lock through the child's lifetime
+// would deadlock nested `kolt` invocations from inside the run target
+// (#303).
 internal fun doRun(
   config: KoltConfig,
   classpath: String?,
   appArgs: List<String> = emptyList(),
   javaPath: String? = null,
   profile: Profile = Profile.Debug,
-): Result<Unit, Int> = withProjectLock { doRunInner(config, classpath, appArgs, javaPath, profile) }
+): Result<Unit, Int> = doRunInner(config, classpath, appArgs, javaPath, profile)
 
 private fun doRunInner(
   config: KoltConfig,
@@ -759,19 +765,20 @@ internal fun doTest(
   testArgs: List<String> = emptyList(),
   useDaemon: Boolean = true,
   profile: Profile = Profile.Debug,
-): Result<Unit, Int> = withProjectLock { doTestInner(testArgs, useDaemon, profile) }
+): Result<Unit, Int> = withProjectLock { lock -> doTestInner(testArgs, useDaemon, profile, lock) }
 
 private fun doTestInner(
   testArgs: List<String>,
   useDaemon: Boolean,
   profile: Profile,
+  lock: LockHandle,
 ): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
     }
   if (config.build.target in NATIVE_TARGETS) {
-    return doNativeTest(config, testArgs, useDaemon, profile)
+    return doNativeTest(config, testArgs, useDaemon, profile, lock)
   }
   // doBuildInner (not doBuild) — the outer lock acquired by doTest
   // already covers the build; calling doBuild would attempt a second
@@ -845,6 +852,11 @@ private fun doTestInner(
       testArgs = testArgs,
       javaPath = javaPath,
     )
+  // Release the project lock before spawning the test child. Test compile
+  // above wrote build/classes/ under the lock; the test runner is a pure
+  // child spawn that does not need lock-protected state, and a held lock
+  // would deadlock nested kolt invocations from inside the test (#303).
+  lock.close()
   println("running tests...")
   executeCommand(runCmd.args).getOrElse { error ->
     when (error) {
@@ -866,6 +878,7 @@ private fun doNativeTest(
   testArgs: List<String>,
   useDaemon: Boolean,
   profile: Profile,
+  lock: LockHandle,
 ): Result<Unit, Int> {
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
   if (existingTestSources.isEmpty()) {
@@ -991,6 +1004,12 @@ private fun doNativeTest(
   }
 
   val runCmd = nativeTestRunCommand(testConfig, testArgs, profile)
+  // Release the project lock before spawning the test child. The build
+  // / link / state-file write above ran under the lock; the test kexe
+  // run is a pure child spawn that does not need lock-protected state,
+  // and a held lock would deadlock nested kolt invocations from inside
+  // the test (#303).
+  lock.close()
   println("running tests...")
   executeCommand(runCmd.args).getOrElse { error ->
     when (error) {
@@ -1194,7 +1213,17 @@ internal fun parseLockTimeoutMs(): Long {
 // that holds it for longer than the (env-overridable) timeout exits via
 // EXIT_LOCK_TIMEOUT; a flock(2) IO failure (FS read-only, EBADF, ...)
 // drops to EXIT_BUILD_ERROR with errno + message on stderr.
-private inline fun <T> withProjectLock(crossinline body: () -> Result<T, Int>): Result<T, Int> {
+//
+// The handle is passed to `body` so callers that spawn long-running
+// children (`kolt test` runner, `kolt run` target) can release the lock
+// before the spawn. Without an early release the lock survives the
+// child's lifetime, deadlocking nested kolt invocations from inside the
+// child against the parent's still-held lock (#303). `LockHandle.close`
+// is idempotent, so the outer `use { }` cleanup remains correct on the
+// happy path and on early-error returns.
+private inline fun <T> withProjectLock(
+  crossinline body: (LockHandle) -> Result<T, Int>
+): Result<T, Int> {
   ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
     eprintln("error: could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
@@ -1204,7 +1233,7 @@ private inline fun <T> withProjectLock(crossinline body: () -> Result<T, Int>): 
     ProjectLock.acquire(BUILD_DIR, timeoutMs).getOrElse { lockError ->
       return Err(mapLockErrorToExitCode(lockError, timeoutMs))
     }
-  return handle.use { body() }
+  return handle.use { body(handle) }
 }
 
 private fun mapLockErrorToExitCode(error: LockError, requestedTimeoutMs: Long): Int =

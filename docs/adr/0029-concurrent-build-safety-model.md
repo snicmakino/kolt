@@ -11,7 +11,10 @@ date: 2026-04-27
   `flock(2)` over `build/.kolt-build.lock`. The critical section is
   the `kolt.lock` rewrite plus `build/` finalisation; CLI startup,
   `kolt.toml` parse, and read-only commands (`deps tree`, `fmt`,
-  `--help`, `--version`) are not lock-protected (§1).
+  `--help`, `--version`) are not lock-protected. The lock is also
+  released before any post-build child-process spawn (`kolt run`
+  target, `kolt test` runner) so the child's lifetime does not pin the
+  lock and nested `kolt` invocations from inside it can proceed (§1).
 - Wait protocol: `flock(LOCK_EX|LOCK_NB)` polled at 100 ms with a 30 s
   default upper bound. On first peer detection a single stderr line
   "another kolt is running, waiting..." is emitted; on timeout kolt
@@ -92,7 +95,7 @@ The lock file is `build/.kolt-build.lock`:
 
 Critical-section scope:
 
-- **Locked**: `doBuild`, `doNativeBuild`, `doCheck`, `doTest`, `doRun`,
+- **Locked**: `doBuild`, `doNativeBuild`, `doCheck`, `doTest`,
   `doAdd`, `doInstall`, `doUpdate`. The `lock.use { ... }` wrap covers
   dependency resolution (which rewrites `kolt.lock`), compile, and
   `build/` finalisation (`build/classes/`, `build/<name>.jar`,
@@ -102,10 +105,20 @@ Critical-section scope:
   delegate to private `*Inner` functions so call chains like
   `doCheck → doBuildInner` and `doTest → doBuildInner` do not
   re-acquire under the same OFD.
+- **Released before child-process spawn**: `doTest` releases the lock
+  after the build / test-compile / state-file write phase finishes
+  and before `executeCommand` for the JUnit (JVM) or test-kexe
+  (native) runner. Holding the lock through the test child's
+  lifetime would deadlock any nested `kolt` invocation from inside
+  the test (#303), and the test runner itself does not write
+  lock-protected state. `doRun` is not locked at all — it only reads
+  prebuilt artifacts and spawns the run target, with no `kolt.lock`
+  rewrite or `build/` finalisation in its body.
 - **Not locked**: `kolt --help`, `kolt --version`, `kolt deps tree`,
-  `kolt fmt`. These are read-only or write only to source files
-  outside `build/` and `kolt.lock`, and locking them would block IDE
-  on-save formatting against an in-progress build for no safety gain.
+  `kolt fmt`, `kolt run`. These are read-only or write only to source
+  files outside `build/` and `kolt.lock`, and locking them would
+  block IDE on-save formatting or a running app against an in-progress
+  build for no safety gain.
 - `kolt watch` does not hold the lock for the lifetime of the watch
   loop. Each rebuild inside the loop acquires and releases the lock
   per iteration, so a watch process does not block manual `kolt`
