@@ -14,6 +14,7 @@ kotlin {
         compilations.getByName("main") {
             cinterops {
                 val libcurl by creating
+                val libarchive by creating
             }
         }
         binaries {

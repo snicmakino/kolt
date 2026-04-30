@@ -1,0 +1,4 @@
+headers = archive.h archive_entry.h
+compilerOpts.linux = -I/usr/include -I/usr/include/x86_64-linux-gnu
+linkerOpts.linux = -L/usr/lib/x86_64-linux-gnu -larchive
+linkerOpts.osx = -larchive

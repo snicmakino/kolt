@@ -60,6 +60,9 @@ private fun formatDownloadError(
     is DownloadError.NetworkError -> "network error downloading $tool $version: ${err.message}"
   }
 
+private fun formatExtractError(error: ExtractError, tool: String, version: String): ToolchainError =
+  ToolchainError("could not extract $tool $version: ${error.message}")
+
 internal fun installJdkToolchain(
   version: String,
   paths: KoltPaths,
@@ -132,12 +135,12 @@ internal fun installJdkToolchain(
   }
 
   progressSink("extracting jdk $version...")
-  executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir)).getOrElse { error ->
+  extractArchive(tarPath, extractTempDir).getOrElse { error ->
     deleteFile(tarPath)
     removeDirectoryRecursive(extractTempDir).getOrElse { e ->
       eprintln("warning: could not remove temp directory ${e.path}")
     }
-    return Err(ToolchainError(formatProcessError(error, "tar")))
+    return Err(formatExtractError(error, "jdk", version))
   }
   deleteFile(tarPath)
 
@@ -288,12 +291,12 @@ internal fun installKotlincToolchain(
   }
 
   progressSink("extracting kotlinc $version...")
-  executeCommand(listOf("unzip", "-q", zipPath, "-d", extractTempDir)).getOrElse { error ->
+  extractArchive(zipPath, extractTempDir).getOrElse { error ->
     deleteFile(zipPath)
     removeDirectoryRecursive(extractTempDir).getOrElse { e ->
       eprintln("warning: could not remove temp directory ${e.path}")
     }
-    return Err(ToolchainError(formatProcessError(error, "unzip")))
+    return Err(formatExtractError(error, "kotlinc", version))
   }
   deleteFile(zipPath)
 
@@ -406,12 +409,12 @@ internal fun installKonancToolchain(
   }
 
   progressSink("extracting konanc $version...")
-  executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir)).getOrElse { error ->
+  extractArchive(tarPath, extractTempDir).getOrElse { error ->
     deleteFile(tarPath)
     removeDirectoryRecursive(extractTempDir).getOrElse { e ->
       eprintln("warning: could not remove temp directory ${e.path}")
     }
-    return Err(ToolchainError(formatProcessError(error, "tar")))
+    return Err(formatExtractError(error, "konanc", version))
   }
   deleteFile(tarPath)
 

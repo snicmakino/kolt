@@ -40,6 +40,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
 
+      - name: Install libarchive dev headers
+        run: sudo apt-get install -y --no-install-recommends libarchive-dev
+
       # Cache keys deliberately mirror self-host-smoke.yml so the two
       # workflows share underlying cache entries (keyed per repo, not per
       # workflow). First run of either populates the caches for both.

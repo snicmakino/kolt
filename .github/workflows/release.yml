@@ -123,6 +123,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
 
+      - name: Install libarchive dev headers
+        run: sudo apt-get install -y --no-install-recommends libarchive-dev
+
       # Cache keys mirror self-host-smoke.yml so both workflows share warm
       # caches keyed per-repo, not per-workflow.
       - name: Cache Gradle

@@ -41,6 +41,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
 
+      - name: Install libarchive dev headers
+        run: sudo apt-get install -y --no-install-recommends libarchive-dev
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -121,6 +124,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+
+      - name: Install libarchive dev headers
+        run: sudo apt-get install -y --no-install-recommends libarchive-dev
 
       # kolt downloads its own kotlinc / konanc / JDK into ~/.kolt on first
       # run. Share the cache key with the native self-host job so warm runs

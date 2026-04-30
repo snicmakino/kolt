@@ -33,6 +33,7 @@ Only the libraries that shape development patterns — not the full dependency s
   the project convention (ADR 0001). Note: kotlin-result 2.x is a value class, so
   `is Ok` / `is Err` do not work — use `getOrElse`, `getError`, `isErr`.
 - **libcurl cinterop** — HTTP in native contexts (ADR 0006, chosen over ktor-client).
+- **libarchive cinterop** — toolchain archive extraction in native contexts (ADR 0031, replaces `unzip` / `tar` shell-outs).
 - **kotlincrypto.hash sha2-256** — lockfile SHA-256 verification.
 - **kotlinx.serialization** — JSON lockfile format, daemon wire protocol
   (`@Serializable` sealed Message types).
@@ -74,6 +75,7 @@ the repo is English-first.
 - **konanc** — auto-installed on first native build; also provisioned by Gradle
   during development.
 - **libcurl** (Linux native build): `libcurl4-openssl-dev` headers.
+- **libarchive** (Linux native build): `libarchive-dev` headers; `libarchive13` runtime.
 - **Gradle 8.12** — only for building the daemon JARs / doing dev work; end users of
   kolt never see Gradle.
 

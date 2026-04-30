@@ -22,3 +22,7 @@ test_sources = ["src/nativeTest/kotlin"]
 [[cinterop]]
 name = "libcurl"
 def = "src/nativeInterop/cinterop/libcurl.def"
+
+[[cinterop]]
+name = "libarchive"
+def = "src/nativeInterop/cinterop/libarchive.def"
