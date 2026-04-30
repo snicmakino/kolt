@@ -26,10 +26,19 @@ internal fun createResolverDeps(): ResolverDeps = defaultResolverDeps()
 // while `kolt test` can still build its compile/run classpath from the union.
 // `allJars` is the disjoint concatenation `mainJars + testJars` (the kernel
 // guarantees disjoint-ness via main-wins-on-overlap).
+//
+// `bundleClasspaths` and `bundleJars` carry the per-bundle resolution result
+// for [classpaths.<name>] declarations. They never affect mainClasspath /
+// mainJars / allJars — bundles are scope-isolated from main/test (Req 4.5).
+// SysPropResolver consumes `bundleClasspaths` to materialise `-Dkey=path`
+// values for `{ classpath = "<bundle>" }` sysprops; `bundleJars` is exposed
+// for `kolt deps tree` and similar tooling.
 internal data class JvmResolutionOutcome(
   val mainClasspath: String?,
   val mainJars: List<ResolvedJar>,
   val allJars: List<ResolvedJar>,
+  val bundleClasspaths: Map<String, String> = emptyMap(),
+  val bundleJars: Map<String, List<ResolvedJar>> = emptyMap(),
 )
 
 internal data class OverlappingDep(
@@ -48,7 +57,10 @@ internal fun findOverlappingDependencies(
     .map { OverlappingDep(it, mainDeps[it], testDeps[it]) }
 }
 
-internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcome, Int> {
+internal fun resolveDependencies(
+  config: KoltConfig,
+  allowLockfileMigration: Boolean = false,
+): Result<JvmResolutionOutcome, Int> {
   for (dep in findOverlappingDependencies(config.dependencies, config.testDependencies)) {
     eprintln(
       "warning: '${dep.groupArtifact}' is in both [dependencies] (${dep.mainVersion}) and [test-dependencies] (${dep.testVersion}); using ${dep.mainVersion}"
@@ -72,32 +84,46 @@ internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcom
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  val existingLock =
+  val lockJsonOnDisk =
     if (fileExists(LOCK_FILE)) {
-      val lockJson =
-        readFileAsString(LOCK_FILE).getOrElse { error ->
-          eprintln("warning: could not read $LOCK_FILE: ${error.path}")
-          null
-        }
-      lockJson?.let {
-        parseLockfile(it).getOrElse { error ->
-          when (error) {
-            is LockfileError.ParseFailed -> eprintln("warning: ${error.message}")
-            is LockfileError.UnsupportedVersion ->
-              eprintln("warning: unsupported lock file version ${error.version}")
-          }
-          null
-        }
+      readFileAsString(LOCK_FILE).getOrElse { error ->
+        eprintln("warning: could not read $LOCK_FILE: ${error.path}")
+        null
       }
     } else null
 
+  val existingLock =
+    when (
+      val outcome = classifyLockfileLoad(lockJsonOnDisk, allowMigration = allowLockfileMigration)
+    ) {
+      is LockfileLoadResult.Loaded -> outcome.lockfile
+      is LockfileLoadResult.Absent -> null
+      is LockfileLoadResult.Corrupt -> {
+        eprintln("warning: ${outcome.message}")
+        null
+      }
+      is LockfileLoadResult.UnsupportedAndMigrationAllowed -> {
+        eprintln(
+          "warning: kolt.lock v${outcome.version} detected, regenerating as v$LOCKFILE_VERSION (one-time migration for v0.X)"
+        )
+        null
+      }
+      is LockfileLoadResult.UnsupportedAndMigrationDenied -> {
+        eprintln(
+          "error: kolt.lock v${outcome.version} is no longer supported, run 'kolt deps install' to regenerate"
+        )
+        return Err(EXIT_DEPENDENCY_ERROR)
+      }
+    }
+
   println("resolving dependencies...")
+  val resolverDeps = createResolverDeps()
   val resolveResult =
     resolve(
         config,
         existingLock,
         paths.cacheBase,
-        createResolverDeps(),
+        resolverDeps,
         mainSeeds = mainSeeds,
         testSeeds = testSeeds,
       )
@@ -109,8 +135,21 @@ internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcom
         return Err(EXIT_DEPENDENCY_ERROR)
       }
 
-  if (resolveResult.lockChanged) {
-    val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
+  val bundleResolutions =
+    resolveAllBundles(config, existingLock, paths.cacheBase, resolverDeps).getOrElse { error ->
+      eprintln(formatResolveError(error))
+      if (error is ResolveError.Sha256Mismatch) {
+        eprintln("delete the cached jar and rebuild to re-download")
+      }
+      return Err(EXIT_DEPENDENCY_ERROR)
+    }
+
+  val bundleDeps = bundleResolutions.mapValues { it.value.deps }
+  val lockfileChanged =
+    resolveResult.lockChanged ||
+      bundleLockChanged(existingLock, bundleResolutions, config.classpaths.keys)
+  if (lockfileChanged) {
+    val lockfile = buildLockfileFromResolved(config, resolveResult.deps, bundleDeps)
     val lockJson = serializeLockfile(lockfile)
     writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
       eprintln("error: could not write ${error.path}")
@@ -118,11 +157,137 @@ internal fun resolveDependencies(config: KoltConfig): Result<JvmResolutionOutcom
     }
   }
 
-  if (resolveResult.lockChanged || !fileExists(WORKSPACE_JSON)) {
+  if (lockfileChanged || !fileExists(WORKSPACE_JSON)) {
     writeWorkspaceFiles(config, paths, resolveResult.deps)
   }
 
-  return Ok(splitJvmOutcome(resolveResult.deps))
+  val baseOutcome = splitJvmOutcome(resolveResult.deps)
+  return Ok(integrateBundleClasspaths(baseOutcome, bundleResolutions))
+}
+
+// Detects whether the bundle section of the lockfile must be rewritten. Even
+// when no bundle was freshly re-resolved, declaration changes can drop a bundle
+// (config.classpaths shrinks) or rename it; both require rewriting the lock.
+private fun bundleLockChanged(
+  existingLock: Lockfile?,
+  bundleResolutions: Map<String, BundleResolution>,
+  declaredBundleNames: Set<String>,
+): Boolean {
+  if (existingLock == null) return bundleResolutions.isNotEmpty()
+  if (existingLock.classpathBundles.keys != declaredBundleNames) return true
+  for ((bundleName, resolution) in bundleResolutions) {
+    val locked = existingLock.classpathBundles[bundleName] ?: return true
+    if (locked.size != resolution.deps.size) return true
+    for (dep in resolution.deps) {
+      val lockEntry = locked[dep.groupArtifact] ?: return true
+      if (lockEntry.version != dep.version) return true
+      if (lockEntry.sha256 != dep.sha256) return true
+      if (lockEntry.transitive != dep.transitive) return true
+    }
+  }
+  return false
+}
+
+// Pure projection: bundle resolutions are layered onto a base outcome derived
+// from main/test resolve. Bundle data never mutates main/test fields (Req 4.5).
+internal fun integrateBundleClasspaths(
+  base: JvmResolutionOutcome,
+  bundleResolutions: Map<String, BundleResolution>,
+): JvmResolutionOutcome =
+  base.copy(
+    bundleClasspaths = bundleResolutions.mapValues { it.value.classpath },
+    bundleJars = bundleResolutions.mapValues { it.value.jars },
+  )
+
+// Resolves every [classpaths.<name>] declaration. When the locked direct
+// entries match the declared GAV-version map exactly, the bundle is reused
+// from the lock without invoking the resolver kernel (Req 4.4 — "re-resolve
+// only on declaration change"). Locked transitives are projected back into the
+// reused BundleResolution so the outcome and the rewritten lockfile stay
+// stable.
+internal fun resolveAllBundles(
+  config: KoltConfig,
+  existingLock: Lockfile?,
+  cacheBase: String,
+  resolverDeps: ResolverDeps,
+): Result<Map<String, BundleResolution>, ResolveError> {
+  if (config.classpaths.isEmpty()) return Ok(emptyMap())
+
+  val out = LinkedHashMap<String, BundleResolution>(config.classpaths.size)
+  for ((bundleName, bundleSeeds) in config.classpaths) {
+    val cached = reuseBundleFromLock(bundleName, bundleSeeds, existingLock, cacheBase)
+    if (cached != null) {
+      out[bundleName] = cached
+      continue
+    }
+    val resolution =
+      resolveBundle(
+          config = config,
+          bundleName = bundleName,
+          bundleSeeds = bundleSeeds,
+          existingLock = existingLock,
+          cacheBase = cacheBase,
+          deps = resolverDeps,
+        )
+        .getOrElse { error ->
+          return Err(error)
+        }
+    out[bundleName] = resolution
+  }
+  return Ok(out)
+}
+
+// Returns a BundleResolution reconstructed from the lockfile when (and only
+// when) the declared seeds match the locked direct entries exactly. Direct
+// entries are LockEntry rows with `transitive = false`. Locked transitives are
+// preserved verbatim into the reconstructed deps so the outcome includes them.
+private fun reuseBundleFromLock(
+  bundleName: String,
+  bundleSeeds: Map<String, String>,
+  existingLock: Lockfile?,
+  cacheBase: String,
+): BundleResolution? {
+  val locked = existingLock?.classpathBundles?.get(bundleName) ?: return null
+  val lockedDirect = locked.filterValues { !it.transitive }
+  if (lockedDirect.size != bundleSeeds.size) return null
+  for ((ga, declaredVersion) in bundleSeeds) {
+    val entry = lockedDirect[ga] ?: return null
+    if (entry.version != declaredVersion) return null
+  }
+  // Declaration matches lock — rebuild the resolution view from locked
+  // entries. Each entry keeps its locked transitive bit; cache paths are
+  // computed from coordinates (no I/O, no SHA verification — the lockfile is
+  // trusted while it remains in sync with kolt.toml).
+  val reconstructed = mutableListOf<ResolvedDep>()
+  for ((ga, entry) in locked) {
+    val coord =
+      parseCoordinate(ga, entry.version).getOrElse {
+        return null
+      }
+    val cachePath = "$cacheBase/${buildCachePath(coord)}"
+    reconstructed.add(
+      ResolvedDep(
+        groupArtifact = ga,
+        version = entry.version,
+        sha256 = entry.sha256,
+        cachePath = cachePath,
+        transitive = entry.transitive,
+        origin = Origin.MAIN,
+      )
+    )
+  }
+  val jars =
+    reconstructed.map {
+      ResolvedJar(
+        cachePath = it.cachePath,
+        groupArtifactVersion = "${it.groupArtifact}:${it.version}",
+      )
+    }
+  return BundleResolution(
+    jars = jars,
+    classpath = buildClasspath(jars.map { it.cachePath }),
+    deps = reconstructed,
+  )
 }
 
 internal fun splitByOrigin(deps: List<ResolvedDep>): Pair<List<ResolvedDep>, List<ResolvedDep>> =

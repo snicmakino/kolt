@@ -3,6 +3,11 @@
 /build/
 **/build/
 !gradle/wrapper/gradle-wrapper.jar
+# `**/build/` is meant to ignore Gradle output in subprojects, but it
+# also matches the kolt source domain package at src/**/kolt/build/.
+# Re-include those explicitly so new files there can be tracked.
+!src/**/kolt/build/
+!src/**/kolt/build/**
 
 # assemble-dist.sh release staging
 /dist/

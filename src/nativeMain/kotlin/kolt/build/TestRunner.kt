@@ -10,6 +10,7 @@ fun testRunCommand(
   classpath: String? = null,
   testArgs: List<String> = emptyList(),
   javaPath: String? = null,
+  sysProps: List<Pair<String, String>> = emptyList(),
 ): TestRunCommand {
   val cp =
     buildList {
@@ -21,6 +22,7 @@ fun testRunCommand(
       .joinToString(":")
   val args = buildList {
     add(javaPath ?: "java")
+    for ((k, v) in sysProps) add("-D$k=$v")
     add("-jar")
     add(consoleLauncherPath)
     add("--class-path")

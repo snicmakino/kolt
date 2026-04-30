@@ -11,11 +11,11 @@ import kotlin.test.assertTrue
 class LockfileTest {
 
   @Test
-  fun parseValidV3Lockfile() {
+  fun parseValidV4Lockfile() {
     val json =
       """
             {
-                "version": 3,
+                "version": 4,
                 "kotlin": "2.1.0",
                 "jvm_target": "17",
                 "dependencies": {
@@ -28,7 +28,7 @@ class LockfileTest {
         """
         .trimIndent()
     val lockfile = assertNotNull(parseLockfile(json).get())
-    assertEquals(3, lockfile.version)
+    assertEquals(4, lockfile.version)
     assertEquals("2.1.0", lockfile.kotlin)
     assertEquals("17", lockfile.jvmTarget)
     assertEquals(1, lockfile.dependencies.size)
@@ -45,7 +45,7 @@ class LockfileTest {
     val json =
       """
             {
-                "version": 3,
+                "version": 4,
                 "kotlin": "2.1.0",
                 "jvm_target": "17",
                 "dependencies": {}
@@ -115,11 +115,11 @@ class LockfileTest {
   }
 
   @Test
-  fun parseV3EntryWithTestTrueAndTransitiveTrue() {
+  fun parseV4EntryWithTestTrueAndTransitiveTrue() {
     val json =
       """
             {
-                "version": 3,
+                "version": 4,
                 "kotlin": "2.1.0",
                 "jvm_target": "17",
                 "dependencies": {
@@ -149,11 +149,11 @@ class LockfileTest {
   }
 
   @Test
-  fun parseV3EntryWithTestFieldAbsentDefaultsToFalse() {
+  fun parseV4EntryWithTestFieldAbsentDefaultsToFalse() {
     val json =
       """
             {
-                "version": 3,
+                "version": 4,
                 "kotlin": "2.1.0",
                 "jvm_target": "17",
                 "dependencies": {
@@ -173,7 +173,7 @@ class LockfileTest {
   fun serializeSortsDependenciesAlphabetically() {
     val lockfile =
       Lockfile(
-        version = 3,
+        version = 4,
         kotlin = "2.1.0",
         jvmTarget = "17",
         dependencies =
@@ -192,10 +192,10 @@ class LockfileTest {
   }
 
   @Test
-  fun serializeV3RoundTripPreservesTestFlag() {
+  fun serializeV4RoundTripPreservesTestFlag() {
     val lockfile =
       Lockfile(
-        version = 3,
+        version = 4,
         kotlin = "2.1.0",
         jvmTarget = "17",
         dependencies =
@@ -211,17 +211,17 @@ class LockfileTest {
     val serialized = serializeLockfile(lockfile)
     val reparsed = assertNotNull(parseLockfile(serialized).get())
     assertEquals(lockfile, reparsed)
-    assertEquals(3, reparsed.version)
+    assertEquals(4, reparsed.version)
     assertEquals(false, reparsed.dependencies["org.example:main-lib"]!!.test)
     assertEquals(true, reparsed.dependencies["org.example:test-lib"]!!.test)
     assertEquals(true, reparsed.dependencies["org.example:test-transitive"]!!.test)
   }
 
   @Test
-  fun serializedV3OutputContainsVersionAndTestTrueField() {
+  fun serializedV4OutputContainsVersionAndTestTrueField() {
     val lockfile =
       Lockfile(
-        version = 3,
+        version = 4,
         kotlin = "2.1.0",
         jvmTarget = "17",
         dependencies =
@@ -231,7 +231,7 @@ class LockfileTest {
           ),
       )
     val serialized = serializeLockfile(lockfile)
-    assertTrue(serialized.contains("\"version\": 3"), "must emit schema version 3")
+    assertTrue(serialized.contains("\"version\": 4"), "must emit schema version 4")
     assertTrue(serialized.contains("\"test\": true"), "must emit per-entry test flag when true")
   }
 }

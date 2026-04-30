@@ -141,7 +141,11 @@ private fun doInstallInner(): Result<Unit, Int> {
     loadProjectConfig().getOrElse {
       return Err(it)
     }
-  resolveDependencies(config).getOrElse {
+  // `kolt deps install` is the single command that may rewrite a v3
+  // kolt.lock as v4 (with a stderr warning). All other commands surface
+  // an error and exit so build behavior never silently re-resolves on
+  // a stale lockfile. See spec jvm-sys-props design.md, Migration Strategy.
+  resolveDependencies(config, allowLockfileMigration = true).getOrElse {
     return Err(it)
   }
   println("install complete")
@@ -157,7 +161,11 @@ private fun doUpdateInner(): Result<Unit, Int> {
     }
   val mainSeeds = autoInjectedMainDeps(config) + config.dependencies
   val testSeeds = autoInjectedTestDeps(config) + config.testDependencies
-  val allSeeds = mainSeeds + testSeeds
+  // Bundle seeds are deleted from cache and re-resolved with `existingLock = null`
+  // so [classpaths.<name>] follow the same update policy as main / test (Req 4.3).
+  val bundleSeedsAll =
+    config.classpaths.values.fold(emptyMap<String, String>()) { acc, m -> acc + m }
+  val allSeeds = mainSeeds + testSeeds + bundleSeedsAll
   if (allSeeds.isEmpty()) {
     println("no dependencies to update")
     return Ok(Unit)
@@ -178,12 +186,13 @@ private fun doUpdateInner(): Result<Unit, Int> {
   }
 
   println("updating dependencies...")
+  val resolverDeps = createResolverDeps()
   val resolveResult =
     resolve(
         config,
         null,
         paths.cacheBase,
-        createResolverDeps(),
+        resolverDeps,
         mainSeeds = mainSeeds,
         testSeeds = testSeeds,
       )
@@ -192,13 +201,22 @@ private fun doUpdateInner(): Result<Unit, Int> {
         return Err(EXIT_DEPENDENCY_ERROR)
       }
 
-  val lockfile = buildLockfileFromResolved(config, resolveResult.deps)
+  val bundleResolutions =
+    resolveAllBundles(config, existingLock = null, paths.cacheBase, resolverDeps).getOrElse { error
+      ->
+      eprintln(formatResolveError(error))
+      return Err(EXIT_DEPENDENCY_ERROR)
+    }
+  val bundleDeps = bundleResolutions.mapValues { it.value.deps }
+
+  val lockfile = buildLockfileFromResolved(config, resolveResult.deps, bundleDeps)
   val lockJson = serializeLockfile(lockfile)
   writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
     eprintln("error: could not write ${error.path}")
     return Err(EXIT_DEPENDENCY_ERROR)
   }
-  println("updated ${resolveResult.deps.size} dependencies")
+  val bundleEntryCount = bundleDeps.values.sumOf { it.size }
+  println("updated ${resolveResult.deps.size + bundleEntryCount} dependencies")
   return Ok(Unit)
 }
 
@@ -273,7 +291,39 @@ internal fun doTree(): Result<Unit, Int> {
     val testTree = buildDependencyTree(seeds.testSeeds, pomLookup)
     println(formatDependencyTree(testTree))
   }
+  val bundlesSection = buildBundlesSection(config.classpaths, pomLookup)
+  if (bundlesSection.isNotEmpty()) {
+    if (seeds.mainSeeds.isNotEmpty() || seeds.testSeeds.isNotEmpty()) println()
+    println(bundlesSection)
+  }
   return Ok(Unit)
+}
+
+// Renders the [classpaths.<name>] block of `kolt deps tree` (Req 4.2). Pure
+// projection over the bundle declarations + a JVM POM lookup; the only
+// reason this is internal-and-public-to-the-test is so we can assert the
+// format without invoking `createPomLookup` (which hits the network).
+//
+// Empty bundle map yields an empty string so the caller skips the section
+// entirely (no header, no separator).
+internal fun buildBundlesSection(
+  bundles: Map<String, Map<String, String>>,
+  pomLookup: (groupArtifact: String, version: String) -> PomInfo?,
+): String {
+  if (bundles.isEmpty()) return ""
+  val parts = mutableListOf<String>()
+  parts.add("bundles:")
+  val perBundle =
+    bundles.entries.map { (bundleName, seeds) ->
+      val tree = buildDependencyTree(seeds, pomLookup)
+      "$bundleName:\n${formatDependencyTree(tree)}"
+    }
+  // Blank line between the section header and the first bundle, plus blank
+  // lines between subsequent bundles. Mirrors the visual cadence of the
+  // existing main / test sections (which the caller separates with `println()`).
+  parts.add("")
+  parts.add(perBundle.joinToString("\n\n"))
+  return parts.joinToString("\n")
 }
 
 private val DEPS_SUBCOMMANDS = setOf("add", "install", "update", "tree")

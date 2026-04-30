@@ -306,7 +306,7 @@ class ResolverTest {
         ResolvedDep("org.example:other", "2.0.0", "def456", "/cache/other.jar", transitive = true),
       )
     val lockfile = buildLockfileFromResolved(config, deps)
-    assertEquals(3, lockfile.version)
+    assertEquals(4, lockfile.version)
     assertEquals("2.1.0", lockfile.kotlin)
     assertEquals("17", lockfile.jvmTarget)
     assertEquals(2, lockfile.dependencies.size)

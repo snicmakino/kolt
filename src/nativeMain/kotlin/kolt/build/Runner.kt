@@ -15,9 +15,18 @@ fun runCommand(
   appArgs: List<String> = emptyList(),
   javaPath: String? = null,
   @Suppress("UNUSED_PARAMETER") profile: Profile = Profile.Debug,
+  sysProps: List<Pair<String, String>> = emptyList(),
 ): RunCommand {
   val cp = if (!classpath.isNullOrEmpty()) "$CLASSES_DIR:$classpath" else CLASSES_DIR
-  return RunCommand(args = listOf(javaPath ?: "java", "-cp", cp, jvmMainClass(main)) + appArgs)
+  val args = buildList {
+    add(javaPath ?: "java")
+    for ((k, v) in sysProps) add("-D$k=$v")
+    add("-cp")
+    add(cp)
+    add(jvmMainClass(main))
+    addAll(appArgs)
+  }
+  return RunCommand(args = args)
 }
 
 fun nativeRunCommand(

@@ -38,6 +38,11 @@ internal const val KOLT_TOML = "kolt.toml"
 // split lets doRun / watch-run launch against main-only while doTest
 // compiles and runs against the union without a second resolver walk.
 // Both are null for native targets.
+//
+// `bundleClasspaths` carries the per-`[classpaths.<name>]` resolved colon-
+// joined classpath strings forward from doBuild to doTest / doRun, so
+// SysPropResolver can materialise `-Dkey=path` for `{ classpath = ... }`
+// values without re-running the resolver. Always empty for native targets.
 internal data class BuildResult(
   val config: KoltConfig,
   val classpath: String?,
@@ -46,7 +51,67 @@ internal data class BuildResult(
   // subprocess. Null on Native builds where no JVM is provisioned.
   val javaHome: String? = null,
   val testClasspath: String? = null,
+  val bundleClasspaths: Map<String, String> = emptyMap(),
 )
+
+// Pure JVM-test argv builder: resolves declared `[test.sys_props]` against
+// `projectRoot` and `bundleClasspaths`, then produces the `java ...`
+// argv for the JUnit Console Launcher. Lifted out of `doTestInner` so the
+// sysprop wiring (config selection + resolver + runner) can be tested
+// without spinning up a build pipeline. Req 3.1 (test JVM `-D`).
+internal fun jvmTestArgv(
+  config: KoltConfig,
+  projectRoot: String,
+  bundleClasspaths: Map<String, String>,
+  classesDir: String,
+  testClassesDir: String,
+  consoleLauncherPath: String,
+  testResourceDirs: List<String>,
+  testClasspath: String?,
+  testArgs: List<String>,
+  javaPath: String?,
+): List<String> {
+  val sysProps = resolveSysProps(config.testSection.sysProps, projectRoot, bundleClasspaths)
+  return testRunCommand(
+      classesDir = classesDir,
+      testClassesDir = testClassesDir,
+      consoleLauncherPath = consoleLauncherPath,
+      testResourceDirs = testResourceDirs,
+      classpath = testClasspath,
+      testArgs = testArgs,
+      javaPath = javaPath,
+      sysProps = sysProps,
+    )
+    .args
+}
+
+// Pure JVM-run argv builder: mirror of `jvmTestArgv` for `[run.sys_props]`.
+// Req 3.2 (run JVM `-D`).
+internal fun jvmRunArgv(
+  config: KoltConfig,
+  projectRoot: String,
+  bundleClasspaths: Map<String, String>,
+  classpath: String?,
+  appArgs: List<String>,
+  javaPath: String?,
+  profile: Profile,
+): List<String> {
+  // Parser invariant `kind == "app" ⇒ main != null`; lib kind is gated by
+  // `rejectIfLibrary` upstream of every doRun-class path. The `?: error`
+  // is ADR 0001 safety against a future caller that forgets the gate.
+  val main = config.build.main ?: error("invariant: jvmRunArgv requires config.build.main")
+  val sysProps = resolveSysProps(config.runSection.sysProps, projectRoot, bundleClasspaths)
+  return runCommand(
+      config,
+      main = main,
+      classpath = classpath,
+      appArgs = appArgs,
+      javaPath = javaPath,
+      profile = profile,
+      sysProps = sysProps,
+    )
+    .args
+}
 
 // ADR 0027 §4 kind/target matrix: JVM `kind = "app"` emits
 // `build/<name>-runtime.classpath`; every other combination (JVM lib,
@@ -269,6 +334,20 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
     // Invariant: the up-to-date path must stay a pure mtime compare —
     // no plugin jar resolution or toolchain provisioning — so offline
     // cached builds don't hard-exit on a failed fetch.
+    //
+    // bundleClasspaths is required by SysPropResolver when [classpaths.X]
+    // is declared. Skip the resolve call when no bundles exist so the
+    // common offline-cached path stays pure mtime compare; with bundles
+    // present, resolveDependencies reads kolt.lock and short-circuits
+    // without network when declarations match the lock (Req 4.4).
+    val cachedBundleClasspaths =
+      if (config.classpaths.isEmpty()) emptyMap()
+      else
+        resolveDependencies(config)
+          .getOrElse {
+            return Err(it)
+          }
+          .bundleClasspaths
     return Ok(
       BuildResult(
         config = config,
@@ -276,6 +355,7 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
         javaPath = managedJavaBin,
         javaHome = managedJdkBins.home,
         testClasspath = cachedState.testClasspath,
+        bundleClasspaths = cachedBundleClasspaths,
       )
     )
   }
@@ -414,6 +494,7 @@ private fun doBuildInner(useDaemon: Boolean, profile: Profile): Result<BuildResu
       javaPath = managedJavaBin,
       javaHome = managedJdkBins.home,
       testClasspath = testClasspath,
+      bundleClasspaths = resolutionOutcome.bundleClasspaths,
     )
   )
 }
@@ -700,7 +781,8 @@ internal fun doRun(
   appArgs: List<String> = emptyList(),
   javaPath: String? = null,
   profile: Profile = Profile.Debug,
-): Result<Unit, Int> = doRunInner(config, classpath, appArgs, javaPath, profile)
+  bundleClasspaths: Map<String, String> = emptyMap(),
+): Result<Unit, Int> = doRunInner(config, classpath, appArgs, javaPath, profile, bundleClasspaths)
 
 private fun doRunInner(
   config: KoltConfig,
@@ -708,6 +790,7 @@ private fun doRunInner(
   appArgs: List<String>,
   javaPath: String?,
   profile: Profile,
+  bundleClasspaths: Map<String, String>,
 ): Result<Unit, Int> {
   // ADR 0023 §1 kind gate: reject libraries before any artifact lookup
   // or process launch. Target-agnostic by design (R4.3).
@@ -738,19 +821,25 @@ private fun doRunInner(
   }
 
   // Parser invariant `kind == "app" ⇒ main != null` guarantees non-null;
-  // the kind gate above pre-empts libs, so this `?: return` is ADR 0001
-  // safety for the parser invariant and is unreachable on apps at runtime.
-  val jvmMain = config.build.main ?: return Err(EXIT_BUILD_ERROR)
-  val cmd =
-    runCommand(
-      config,
-      main = jvmMain,
+  // the kind gate above pre-empts libs, so the failing branch in
+  // `jvmRunArgv` is ADR 0001 safety for the parser invariant.
+  val projectRoot =
+    currentWorkingDirectory()
+      ?: run {
+        eprintln("error: could not determine current working directory")
+        return Err(EXIT_BUILD_ERROR)
+      }
+  val args =
+    jvmRunArgv(
+      config = config,
+      projectRoot = projectRoot,
+      bundleClasspaths = bundleClasspaths,
       classpath = classpath,
       appArgs = appArgs,
       javaPath = javaPath,
       profile = profile,
     )
-  executeCommand(cmd.args).getOrElse { error ->
+  executeCommand(args).getOrElse { error ->
     return Err(
       when (error) {
         is ProcessError.NonZeroExit -> error.exitCode
@@ -842,13 +931,22 @@ private fun doTestInner(
   }
 
   val existingTestResourceDirs = filterExistingDirs(config.build.testResources, "test resource")
-  val runCmd =
-    testRunCommand(
+  val projectRoot =
+    currentWorkingDirectory()
+      ?: run {
+        eprintln("error: could not determine current working directory")
+        return Err(EXIT_TEST_ERROR)
+      }
+  val runArgs =
+    jvmTestArgv(
+      config = config,
+      projectRoot = projectRoot,
+      bundleClasspaths = buildResult.bundleClasspaths,
       classesDir = CLASSES_DIR,
       testClassesDir = testCmd.outputPath,
       consoleLauncherPath = consoleLauncherPath,
       testResourceDirs = existingTestResourceDirs,
-      classpath = testClasspath,
+      testClasspath = testClasspath,
       testArgs = testArgs,
       javaPath = javaPath,
     )
@@ -858,7 +956,7 @@ private fun doTestInner(
   // would deadlock nested kolt invocations from inside the test (#303).
   lock.close()
   println("running tests...")
-  executeCommand(runCmd.args).getOrElse { error ->
+  executeCommand(runArgs).getOrElse { error ->
     when (error) {
       is ProcessError.NonZeroExit -> {
         val elapsed = testStartMark.elapsedNow()

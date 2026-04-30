@@ -234,7 +234,7 @@ class BuildLockfileFromResolvedTest {
 
     val lockfile = buildLockfileFromResolved(config, deps)
 
-    assertEquals(3, lockfile.version)
+    assertEquals(4, lockfile.version)
     val entry = lockfile.dependencies["com.example:lib"]
     assertNotNull(entry)
     assertFalse(entry.test)
@@ -263,7 +263,7 @@ class BuildLockfileFromResolvedTest {
   }
 
   @Test
-  fun serializedLockfileCarriesVersion3AndTestFlagForTestEntries() {
+  fun serializedLockfileCarriesVersion4AndTestFlagForTestEntries() {
     val config = testConfig()
     val deps =
       listOf(
@@ -285,7 +285,7 @@ class BuildLockfileFromResolvedTest {
 
     val lockfile = buildLockfileFromResolved(config, deps)
     val serialized = serializeLockfile(lockfile)
-    assertTrue(serialized.contains("\"version\": 3"))
+    assertTrue(serialized.contains("\"version\": 4"))
     assertTrue(serialized.contains("\"test\": true"))
 
     val parsed = parseLockfile(serialized).getOrElse { error("parseLockfile failed: $it") }

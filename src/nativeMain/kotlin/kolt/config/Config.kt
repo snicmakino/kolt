@@ -79,6 +79,16 @@ data class BuildSection(
 @Serializable data class FmtSection(val style: String = "google")
 
 @Serializable
+data class TestSection(
+  @SerialName("sys_props") val sysProps: Map<String, SysPropValue> = emptyMap()
+)
+
+@Serializable
+data class RunSection(
+  @SerialName("sys_props") val sysProps: Map<String, SysPropValue> = emptyMap()
+)
+
+@Serializable
 data class KoltConfig(
   val name: String,
   val version: String,
@@ -90,6 +100,14 @@ data class KoltConfig(
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
   val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
   val cinterop: List<CinteropConfig> = emptyList(),
+  // [classpaths.<name>] declares a named, resolvable jar bundle independent
+  // of [dependencies]. Bundles feed sysprop values via SysPropValue.ClasspathRef
+  // and are persisted into kolt.lock under classpathBundles. The TOML shape is
+  // identical to [dependencies] (`"group:artifact" = "version"`), so the value
+  // type stays a plain Map<String, String> rather than a wrapper data class.
+  val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  @SerialName("test") val testSection: TestSection = TestSection(),
+  @SerialName("run") val runSection: RunSection = RunSection(),
 )
 
 private val toml = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = true))
@@ -113,6 +131,16 @@ private data class RawBuildSection(
 )
 
 @Serializable
+private data class RawTestSection(
+  @SerialName("sys_props") val sysProps: Map<String, RawSysPropValue> = emptyMap()
+)
+
+@Serializable
+private data class RawRunSection(
+  @SerialName("sys_props") val sysProps: Map<String, RawSysPropValue> = emptyMap()
+)
+
+@Serializable
 private data class RawKoltConfig(
   val name: String,
   val version: String,
@@ -124,6 +152,9 @@ private data class RawKoltConfig(
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
   val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
   val cinterop: List<CinteropConfig> = emptyList(),
+  val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  val test: RawTestSection? = null,
+  val run: RawRunSection? = null,
 )
 
 private fun validateKind(kind: String): Result<Unit, ConfigError> {
@@ -144,6 +175,180 @@ private fun validateTarget(target: String): Result<Unit, ConfigError> {
         "invalid target '$target' (valid targets: ${VALID_TARGETS.joinToString(", ")})"
       )
     )
+  }
+  return Ok(Unit)
+}
+
+// Lifts a Map<String, RawSysPropValue> (decoded with all-nullable fields) into
+// the typed Map<String, SysPropValue>, attaching offending-key context to any
+// shape error. Req 2.1 / 2.2: uniform inline-table value with exactly one of
+// { literal, classpath, project_dir } set; otherwise reject naming the key.
+private fun liftSysPropsMap(
+  raw: Map<String, RawSysPropValue>,
+  sectionLabel: String,
+): Result<Map<String, SysPropValue>, ConfigError> {
+  val out = LinkedHashMap<String, SysPropValue>(raw.size)
+  for ((rawKey, rawValue) in raw) {
+    val key = rawKey.removeSurrounding("\"")
+    val setFields =
+      listOfNotNull(
+        rawValue.literal?.let { "literal" },
+        rawValue.classpath?.let { "classpath" },
+        rawValue.projectDir?.let { "project_dir" },
+      )
+    if (setFields.size != 1) {
+      return Err(
+        ConfigError.ParseFailed(
+          "$sectionLabel \"$key\": value must set exactly one of " +
+            "{ literal, classpath, project_dir }, but ${setFields.size} were set: $setFields"
+        )
+      )
+    }
+    out[key] =
+      when (setFields.single()) {
+        "literal" -> SysPropValue.Literal(rawValue.literal!!)
+        "classpath" -> SysPropValue.ClasspathRef(rawValue.classpath!!)
+        "project_dir" -> SysPropValue.ProjectDir(rawValue.projectDir!!)
+        else -> error("unreachable")
+      }
+  }
+  return Ok(out)
+}
+
+// Validates a project-root-relative path string. Rejects: empty string,
+// absolute paths (leading "/"), and any sequence of segments that resolves
+// outside the project root via ".." (Req 2.4 / 2.5). Accepts ".", trailing
+// slashes, and non-existent directories (existence is consumer responsibility,
+// see design.md SysPropResolver corner-case table).
+internal fun validateProjectRelativePath(rel: String): Result<Unit, ConfigError> {
+  if (rel.isEmpty()) {
+    return Err(ConfigError.ParseFailed("project_dir must not be empty"))
+  }
+  if (rel.startsWith("/")) {
+    return Err(
+      ConfigError.ParseFailed(
+        "project_dir must be a project-root-relative path, got absolute path '$rel'"
+      )
+    )
+  }
+  val segments = rel.split("/").filter { it.isNotEmpty() }
+  var depth = 0
+  for (seg in segments) {
+    when (seg) {
+      "." -> Unit // same directory, no depth change
+      ".." -> {
+        depth -= 1
+        if (depth < 0) {
+          return Err(
+            ConfigError.ParseFailed(
+              "project_dir must stay within the project root, got escaping path '$rel'"
+            )
+          )
+        }
+      }
+      else -> depth += 1
+    }
+  }
+  return Ok(Unit)
+}
+
+// Native targets and library kinds reject the JVM-only schema additions
+// loudly rather than silently ignoring them, so configurations that have
+// no effect never ship (Req 5.1, 5.2). Library kinds may still declare
+// [test.sys_props] and [classpaths.X] (Req 5.3, 5.4) — only [run.sys_props]
+// is meaningless there.
+private fun validateNewSchemaTargetCompat(
+  target: String,
+  kind: String,
+  classpaths: Map<String, Map<String, String>>,
+  testSysProps: Map<String, SysPropValue>,
+  runSysProps: Map<String, SysPropValue>,
+): Result<Unit, ConfigError> {
+  if (target in NATIVE_TARGETS) {
+    if (classpaths.isNotEmpty()) {
+      return Err(
+        ConfigError.ParseFailed(
+          "[classpaths.*] is JVM-only and cannot be used with native target '$target'"
+        )
+      )
+    }
+    if (testSysProps.isNotEmpty()) {
+      return Err(
+        ConfigError.ParseFailed(
+          "[test.sys_props] is JVM-only and cannot be used with native target '$target'"
+        )
+      )
+    }
+    if (runSysProps.isNotEmpty()) {
+      return Err(
+        ConfigError.ParseFailed(
+          "[run.sys_props] is JVM-only and cannot be used with native target '$target'"
+        )
+      )
+    }
+  }
+  if (kind == "lib" && runSysProps.isNotEmpty()) {
+    return Err(
+      ConfigError.ParseFailed(
+        "[run.sys_props] has no effect for kind = \"lib\" (libraries cannot be run); remove it"
+      )
+    )
+  }
+  return Ok(Unit)
+}
+
+// Every SysPropValue.ClasspathRef must point at a declared bundle. The
+// offending sysprop key and the missing bundle name are both surfaced
+// (Req 2.3). Both [test.sys_props] and [run.sys_props] are checked against
+// the same single [classpaths] declaration scope.
+private fun validateBundleReferences(
+  testSysProps: Map<String, SysPropValue>,
+  runSysProps: Map<String, SysPropValue>,
+  classpaths: Map<String, Map<String, String>>,
+): Result<Unit, ConfigError> {
+  for ((key, value) in testSysProps) {
+    if (value is SysPropValue.ClasspathRef && value.bundleName !in classpaths) {
+      return Err(
+        ConfigError.ParseFailed(
+          "[test.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'"
+        )
+      )
+    }
+  }
+  for ((key, value) in runSysProps) {
+    if (value is SysPropValue.ClasspathRef && value.bundleName !in classpaths) {
+      return Err(
+        ConfigError.ParseFailed(
+          "[run.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'"
+        )
+      )
+    }
+  }
+  return Ok(Unit)
+}
+
+// Walks all SysPropValue.ProjectDir entries in [test.sys_props] and
+// [run.sys_props] and applies validateProjectRelativePath, attaching the
+// offending sysprop key to the error message (Req 2.4 / 2.5).
+private fun validateSysPropsProjectDirs(
+  testSysProps: Map<String, SysPropValue>,
+  runSysProps: Map<String, SysPropValue>,
+): Result<Unit, ConfigError> {
+  for ((key, value) in testSysProps) {
+    if (value is SysPropValue.ProjectDir) {
+      val err = validateProjectRelativePath(value.relativePath).getError()
+      if (err is ConfigError.ParseFailed) {
+        return Err(ConfigError.ParseFailed("[test.sys_props] \"$key\": ${err.message}"))
+      }
+    }
+  }
+  for ((key, value) in runSysProps) {
+    if (value is SysPropValue.ProjectDir) {
+      val err = validateProjectRelativePath(value.relativePath).getError()
+      if (err is ConfigError.ParseFailed) {
+        return Err(ConfigError.ParseFailed("[run.sys_props] \"$key\": ${err.message}"))
+      }
+    }
   }
   return Ok(Unit)
 }
@@ -223,6 +428,35 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
       raw.repositories
         .mapKeys { (key, _) -> key.removeSurrounding("\"") }
         .mapValues { (_, url) -> url.trimEnd('/') }
+    val cleanedClasspaths =
+      raw.classpaths
+        .mapKeys { (key, _) -> key.removeSurrounding("\"") }
+        .mapValues { (_, bundle) -> bundle.mapKeys { (k, _) -> k.removeSurrounding("\"") } }
+    val testSysProps =
+      liftSysPropsMap(raw.test?.sysProps ?: emptyMap(), "[test.sys_props]").getOrElse {
+        return Err(it)
+      }
+    val runSysProps =
+      liftSysPropsMap(raw.run?.sysProps ?: emptyMap(), "[run.sys_props]").getOrElse {
+        return Err(it)
+      }
+    validateNewSchemaTargetCompat(
+        target = effectiveTarget,
+        kind = raw.kind,
+        classpaths = cleanedClasspaths,
+        testSysProps = testSysProps,
+        runSysProps = runSysProps,
+      )
+      .getError()
+      ?.let {
+        return Err(it)
+      }
+    validateBundleReferences(testSysProps, runSysProps, cleanedClasspaths).getError()?.let {
+      return Err(it)
+    }
+    validateSysPropsProjectDirs(testSysProps, runSysProps).getError()?.let {
+      return Err(it)
+    }
     Ok(
       KoltConfig(
         name = raw.name,
@@ -245,6 +479,9 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
         testDependencies = cleanedTestDeps,
         repositories = cleanedRepos,
         cinterop = raw.cinterop,
+        classpaths = cleanedClasspaths,
+        testSection = TestSection(testSysProps),
+        runSection = RunSection(runSysProps),
       )
     )
   } catch (e: SerializationException) {
