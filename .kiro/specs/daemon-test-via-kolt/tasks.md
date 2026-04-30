@@ -54,7 +54,7 @@
   - _Boundary: kolt-native-compiler-daemon/kolt.toml, kolt-native-compiler-daemon/kolt.lock_
 
 - [ ] 4. Foundation fix + invariant test
-- [ ] 4.1 kolt CLI test compile に -module-name と -Xfriend-paths を forward
+- [x] 4.1 kolt CLI test compile に -module-name と -Xfriend-paths を forward
   - `src/nativeMain/kotlin/kolt/build/TestBuilder.kt` の `testBuildCommand` argv に `-module-name <config.name>` と `-Xfriend-paths=<classesDir>` を追加
   - `src/nativeMain/kotlin/kolt/build/SubprocessCompilerBackend.kt` の `subprocessArgv` で `request.moduleName` を `-module-name <moduleName>` として forward、 line 29 の "intentionally not forwarded" コメントは削除 / 更新
   - `src/nativeTest/kotlin/kolt/build/` に native unit test を追加 (`testBuildCommand` の argv に新 flag が含まれること、 `subprocessArgv` の argv に新 flag が含まれることを assert)

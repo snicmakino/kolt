@@ -19,6 +19,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -44,6 +47,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -68,6 +74,9 @@ class TestBuilderTest {
         "integration-test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -87,6 +96,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "21",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -126,6 +138,9 @@ class TestBuilderTest {
         "-jvm-target",
         "17",
         "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -154,6 +169,9 @@ class TestBuilderTest {
         "17",
         "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
         "-Xplugin=/usr/local/kotlinc/lib/allopen-compiler-plugin.jar",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -178,6 +196,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -204,6 +225,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -239,6 +263,9 @@ class TestBuilderTest {
         "test",
         "-jvm-target",
         "17",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -268,6 +295,9 @@ class TestBuilderTest {
         "-jvm-target",
         "17",
         "-Xplugin=/usr/local/kotlinc/lib/kotlinx-serialization-compiler-plugin.jar",
+        "-module-name",
+        "my-app",
+        "-Xfriend-paths=build/classes",
         "-d",
         "build/test-classes",
       ),
@@ -296,6 +326,30 @@ class TestBuilderTest {
     kotlin.test.assertTrue(langIdx >= 0)
     assertEquals("2.1", cmd.args[langIdx + 1])
     assertEquals("2.1", cmd.args[apiIdx + 1])
+  }
+
+  @Test
+  fun testBuildCommandForwardsModuleNameFromConfig() {
+    val cmd = testBuildCommand(config = testConfig(name = "my-app"), classesDir = "build/classes")
+
+    val moduleNameIdx = cmd.args.indexOf("-module-name")
+    kotlin.test.assertTrue(
+      moduleNameIdx >= 0,
+      "expected -module-name flag in argv but got: ${cmd.args}",
+    )
+    assertEquals("my-app", cmd.args[moduleNameIdx + 1])
+  }
+
+  @Test
+  fun testBuildCommandForwardsXfriendPathsFromClassesDir() {
+    val cmd = testBuildCommand(config = testConfig(), classesDir = "build/classes")
+
+    val friendArg = cmd.args.firstOrNull { it.startsWith("-Xfriend-paths=") }
+    kotlin.test.assertNotNull(
+      friendArg,
+      "expected -Xfriend-paths=<classesDir> flag in argv but got: ${cmd.args}",
+    )
+    assertEquals("-Xfriend-paths=build/classes", friendArg)
   }
 
   @Test

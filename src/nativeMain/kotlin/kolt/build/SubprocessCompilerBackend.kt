@@ -26,7 +26,6 @@ class SubprocessCompilerBackend(
   }
 }
 
-// moduleName intentionally not forwarded — subprocess path never set -module-name.
 internal fun subprocessArgv(kotlincBin: String, request: CompileRequest): List<String> = buildList {
   add(kotlincBin)
   if (request.classpath.isNotEmpty()) {
@@ -35,6 +34,11 @@ internal fun subprocessArgv(kotlincBin: String, request: CompileRequest): List<S
   }
   addAll(request.sources)
   addAll(request.extraArgs)
+  // Forward moduleName so the subprocess path produces the same Kotlin module
+  // identity as the daemon path; required for `internal` access from the test
+  // source set in `testBuildCommand`.
+  add("-module-name")
+  add(request.moduleName)
   add("-d")
   add(request.outputPath)
 }
