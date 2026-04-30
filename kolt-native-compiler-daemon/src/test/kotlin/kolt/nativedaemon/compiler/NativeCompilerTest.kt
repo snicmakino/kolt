@@ -18,51 +18,49 @@ import kotlin.test.assertNotNull
 // (e.g., reflection threw) become NativeCompileError.
 class NativeCompilerTest {
 
-    @Test
-    fun `compile returns Ok with exitCode 0 and empty stderr on success`() {
-        val compiler = FakeCompiler { args ->
-            assertEquals(listOf("-target", "linux_x64", "A.kt"), args)
-            Ok(NativeCompileOutcome(exitCode = 0, stderr = ""))
-        }
-
-        val result = compiler.compile(listOf("-target", "linux_x64", "A.kt"))
-
-        val outcome = assertNotNull(result.get())
-        assertEquals(0, outcome.exitCode)
-        assertEquals("", outcome.stderr)
+  @Test
+  fun `compile returns Ok with exitCode 0 and empty stderr on success`() {
+    val compiler = FakeCompiler { args ->
+      assertEquals(listOf("-target", "linux_x64", "A.kt"), args)
+      Ok(NativeCompileOutcome(exitCode = 0, stderr = ""))
     }
 
-    @Test
-    fun `non-zero exitCode is an Ok outcome not an error`() {
-        val compiler = FakeCompiler {
-            Ok(NativeCompileOutcome(exitCode = 1, stderr = "error: unresolved reference: foo"))
-        }
+    val result = compiler.compile(listOf("-target", "linux_x64", "A.kt"))
 
-        val result = compiler.compile(listOf("-target", "linux_x64", "A.kt"))
+    val outcome = assertNotNull(result.get())
+    assertEquals(0, outcome.exitCode)
+    assertEquals("", outcome.stderr)
+  }
 
-        val outcome = assertNotNull(result.get())
-        assertEquals(1, outcome.exitCode)
-        assertEquals("error: unresolved reference: foo", outcome.stderr)
+  @Test
+  fun `non-zero exitCode is an Ok outcome not an error`() {
+    val compiler = FakeCompiler {
+      Ok(NativeCompileOutcome(exitCode = 1, stderr = "error: unresolved reference: foo"))
     }
 
-    @Test
-    fun `reflective invocation failure surfaces as InvocationFailed`() {
-        val boom = RuntimeException("K2Native.exec threw")
-        val compiler = FakeCompiler {
-            Err(NativeCompileError.InvocationFailed(boom))
-        }
+    val result = compiler.compile(listOf("-target", "linux_x64", "A.kt"))
 
-        val err = compiler.compile(emptyList()).getError()
+    val outcome = assertNotNull(result.get())
+    assertEquals(1, outcome.exitCode)
+    assertEquals("error: unresolved reference: foo", outcome.stderr)
+  }
 
-        assertNotNull(err)
-        assertIs<NativeCompileError.InvocationFailed>(err)
-        assertEquals(boom, err.cause)
-    }
+  @Test
+  fun `reflective invocation failure surfaces as InvocationFailed`() {
+    val boom = RuntimeException("K2Native.exec threw")
+    val compiler = FakeCompiler { Err(NativeCompileError.InvocationFailed(boom)) }
 
-    private class FakeCompiler(
-        private val handler: (List<String>) -> Result<NativeCompileOutcome, NativeCompileError>,
-    ) : NativeCompiler {
-        override fun compile(args: List<String>): Result<NativeCompileOutcome, NativeCompileError> =
-            handler(args)
-    }
+    val err = compiler.compile(emptyList()).getError()
+
+    assertNotNull(err)
+    assertIs<NativeCompileError.InvocationFailed>(err)
+    assertEquals(boom, err.cause)
+  }
+
+  private class FakeCompiler(
+    private val handler: (List<String>) -> Result<NativeCompileOutcome, NativeCompileError>
+  ) : NativeCompiler {
+    override fun compile(args: List<String>): Result<NativeCompileOutcome, NativeCompileError> =
+      handler(args)
+  }
 }
