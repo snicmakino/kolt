@@ -35,7 +35,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 6.5_
   - _Boundary: kolt-jvm-compiler-daemon/kolt.toml_
 
-- [ ] 2.4 lockfile 再生成と Maven transitive cross-check
+- [x] 2.4 lockfile 再生成と Maven transitive cross-check
   - `cd kolt-jvm-compiler-daemon && kolt deps install` を実行し `kolt.lock` を再生成
   - `kolt deps tree` の bundle セクション出力と、 Gradle 側の `./gradlew :kolt-jvm-compiler-daemon:dependencies` / `./gradlew :ic:dependencies` の transitive を side-by-side で比較
   - 差分があれば bundle 内に explicit pin (転居 transitive を直接書き出し) を追加して再 install、 一致を確認
@@ -107,3 +107,4 @@
 
 - 2026-05-01 task 1.1: filter passthrough は JUnit Console Launcher 1.11.4 の `--scan-class-path` mutex 制約により動作不能。 #323 (`testRunCommand` の conditional `--scan-class-path` 抑止) で別途対応。 R1.2 関連 task (5.3) は deferred として close、 本 spec の DoD は filter なしの全 test 実行で完結させる。
 - 2026-05-01 task 2.1: `test_sources` を空から有効化したことで、 これまで kolt fmt の対象外だった test 配下の既存 file が ktfmt 0.54 と format 違反を持っていることが pre-commit hook で発覚。 26 ファイルを `kolt fmt` で apply して別 commit に分離。 task 3.1 (native daemon の test_sources 有効化) でも同じ現象が起きる可能性が高い、 同様に format apply を切り分ける。
+- 2026-05-01 task 2.4: PATH の `kolt` (`/home/makino/.local/bin/kolt`) は古い v3 binary で、 `kolt deps install` を実行すると lockfile を v3 に書き戻す。 v4 lockfile を生成するには dev-built `build/debug/kolt.kexe` を直接呼ぶ必要があった (bootstrap pinch、 #316 で解消予定)。 また kolt と Gradle の transitive 表示には platform-suffix の有無 (`-jvm`)、 declared vs resolved version 等の cosmetic 差があるが、 on-disk jar 集合は一致 (bundle 単位で byte-identical を確認)。 `apiguardian-api:1.1.2` は kolt が POM scope に従って `compile` として取り込み、 Gradle module metadata では `compileOnlyApi` として除外、 これは harmless な annotation jar の追加で test 動作に影響なし。

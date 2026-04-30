@@ -11,6 +11,12 @@
       "version": "2.3.1",
       "sha256": "96289c225b06d20156a0695432afc104f187ab68c84e9b8bed7af573e5194c83"
     },
+    "org.apiguardian:apiguardian-api": {
+      "version": "1.1.2",
+      "sha256": "b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38",
+      "transitive": true,
+      "test": true
+    },
     "org.jetbrains.kotlin:kotlin-build-tools-api": {
       "version": "2.3.20",
       "sha256": "22f1ab223854b949099f6b259cef541d5b58a3643df9a49c4577c63c416e843b"
@@ -18,6 +24,17 @@
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "version": "2.3.20",
       "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e"
+    },
+    "org.jetbrains.kotlin:kotlin-test": {
+      "version": "2.3.20",
+      "sha256": "d6c9ccf82f67e6cf7fdaf9e0cea419dac4dfa58620a1653d3dba45f544a289ac",
+      "transitive": true,
+      "test": true
+    },
+    "org.jetbrains.kotlin:kotlin-test-junit5": {
+      "version": "2.3.20",
+      "sha256": "90c554e254623cc49de7ae4c7c932a86287795e45875c47e1937c29c297eff02",
+      "test": true
     },
     "org.jetbrains.kotlinx:kotlinx-datetime-jvm": {
       "version": "0.7.1-0.6.x-compat",
@@ -37,6 +54,147 @@
       "version": "13.0",
       "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
       "transitive": true
+    },
+    "org.junit.jupiter:junit-jupiter": {
+      "version": "5.11.3",
+      "sha256": "ac7578efed162367c3ddc006338e07d4571510fd9866642ea93d5b9e4ed2f665",
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-api": {
+      "version": "5.11.3",
+      "sha256": "5d8147a60f49453973e250ed68701b7ff055964fe2462fc2cb1ec1d6d44889ba",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-engine": {
+      "version": "5.11.3",
+      "sha256": "e62420c99f7c0d59a2159a2ef63e61877e9c80bd722c03ca8bf3bdcea050a589",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-params": {
+      "version": "5.11.3",
+      "sha256": "0f798ebec744c4e6605fd4f2072f41a8e989e2d469e21db5aa67cf799c0b51ec",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-commons": {
+      "version": "1.11.3",
+      "sha256": "be262964b0b6b48de977c61d4f931df8cf61e80e750cc3f3a0a39cdd21c1008c",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-engine": {
+      "version": "1.11.3",
+      "sha256": "0043f72f611664735da8dc9a308bf12ecd2236b05339351c4741edb4d8fab0da",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-launcher": {
+      "version": "1.11.3",
+      "sha256": "b4727459201b0011beb0742bd807421a1fc8426b116193031ed87825bc2d4f04",
+      "test": true
+    },
+    "org.opentest4j:opentest4j": {
+      "version": "1.3.0",
+      "sha256": "48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b",
+      "transitive": true,
+      "test": true
+    }
+  },
+  "classpath_bundles": {
+    "bta_impl": {
+      "org.jetbrains.kotlin:kotlin-build-tools-api": {
+        "version": "2.3.20",
+        "sha256": "22f1ab223854b949099f6b259cef541d5b58a3643df9a49c4577c63c416e843b",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-build-tools-cri-impl": {
+        "version": "2.3.20",
+        "sha256": "54eced630f28124ccfe2e464e6cacc281e528a8a50a89725721554c9693548fe",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-build-tools-impl": {
+        "version": "2.3.20",
+        "sha256": "9681bc2164a8bd9f6ddf4c085cf4a836b92d27506667d73bab9f6d855336c910"
+      },
+      "org.jetbrains.kotlin:kotlin-compiler-embeddable": {
+        "version": "2.3.20",
+        "sha256": "976f989d0b5f5d80e8e8a8ad4b73da0bfc27fdd965b9fa38362b2be79ecc1337",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-compiler-runner": {
+        "version": "2.3.20",
+        "sha256": "c069f30a403be70c8152f8aa9f25eccba188eead54263ae02af14421437a2208",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-daemon-client": {
+        "version": "2.3.20",
+        "sha256": "c71a7c1be8fbff04e0af45c9ee8cb7a61d8953bca6b8bf225a5719c725a90b44",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-daemon-embeddable": {
+        "version": "2.3.20",
+        "sha256": "8870bab840b8087c96c4ddc06088b4aedf5131c408af3674306304f1f96af3f4",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-reflect": {
+        "version": "1.6.10",
+        "sha256": "3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-script-runtime": {
+        "version": "2.3.20",
+        "sha256": "6fcdb7da6e65cf8cc43e5aabab94bdcc48825e7933686f8a1bf694eb88f8e00e",
+        "transitive": true
+      },
+      "org.jetbrains.kotlin:kotlin-stdlib": {
+        "version": "2.3.20",
+        "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e",
+        "transitive": true
+      },
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": {
+        "version": "1.8.0",
+        "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5",
+        "transitive": true
+      },
+      "org.jetbrains:annotations": {
+        "version": "13.0",
+        "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+        "transitive": true
+      }
+    },
+    "fixture": {
+      "org.jetbrains.kotlin:kotlin-stdlib": {
+        "version": "2.3.20",
+        "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e"
+      },
+      "org.jetbrains:annotations": {
+        "version": "13.0",
+        "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+        "transitive": true
+      }
+    },
+    "serialization_plugin": {
+      "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": {
+        "version": "2.3.20",
+        "sha256": "178edb62cda3e255fc80e270656f2848b6e0752f7b4b4c27e4a88cc537bea674"
+      }
+    },
+    "serialization_runtime": {
+      "org.jetbrains.kotlin:kotlin-stdlib": {
+        "version": "2.3.20",
+        "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e"
+      },
+      "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
+        "version": "1.7.3",
+        "sha256": "f0adde45864144475385cf4aa7e0b7feb27f61fcf9472665ed98cc971b06b1eb"
+      },
+      "org.jetbrains:annotations": {
+        "version": "13.0",
+        "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+        "transitive": true
+      }
     }
   }
 }
