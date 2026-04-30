@@ -54,7 +54,7 @@
   - _Requirements: 1.1, 3.1, 4.1, 4.2, 4.3_
   - _Depends: 2.2_
 
-- [ ] 3.2 Replace JDK tar callsite with extractArchive
+- [x] 3.2 Replace JDK tar callsite with extractArchive
   - `installJdkToolchain` 内 `executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir))` を `extractArchive(tarPath, extractTempDir)` に置換、`formatExtractError(error, "jdk", version)` を再利用
   - `findSingleEntry` + `executeCommand(listOf("mv", ...))` の top-level dir 検出ロジックは本 spec 対象外なので不変
   - 観測条件: `ToolchainManagerTest` が pass、JDK callsite から `"tar"` 文字列が消える

@@ -135,12 +135,12 @@ internal fun installJdkToolchain(
   }
 
   progressSink("extracting jdk $version...")
-  executeCommand(listOf("tar", "xzf", tarPath, "-C", extractTempDir)).getOrElse { error ->
+  extractArchive(tarPath, extractTempDir).getOrElse { error ->
     deleteFile(tarPath)
     removeDirectoryRecursive(extractTempDir).getOrElse { e ->
       eprintln("warning: could not remove temp directory ${e.path}")
     }
-    return Err(ToolchainError(formatProcessError(error, "tar")))
+    return Err(formatExtractError(error, "jdk", version))
   }
   deleteFile(tarPath)
 
