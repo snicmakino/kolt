@@ -35,44 +35,50 @@ import kotlin.test.fail
 // symbol only exists if the plugin actually transformed the AST.
 class BtaSerializationPluginTest {
 
-    private val btaImplJars: List<Path> = systemClasspath("kolt.ic.btaImplClasspath")
-    private val serializationPluginJars: List<Path> =
-        systemClasspath("kolt.ic.serializationPluginClasspath")
-    private val serializationFixtureClasspath: List<Path> =
-        systemClasspath("kolt.ic.serializationRuntimeClasspath")
+  private val btaImplJars: List<Path> = systemClasspath("kolt.ic.btaImplClasspath")
+  private val serializationPluginJars: List<Path> =
+    systemClasspath("kolt.ic.serializationPluginClasspath")
+  private val serializationFixtureClasspath: List<Path> =
+    systemClasspath("kolt.ic.serializationRuntimeClasspath")
 
-    @Test
-    fun `Serializable data class compiles and the plugin generated serializer symbol`() {
-        val workRoot = Files.createTempDirectory("bta-serialization-")
-        val sourceFile = workRoot.resolve("Payload.kt").also {
-            it.writeText(
-                """
+  @Test
+  fun `Serializable data class compiles and the plugin generated serializer symbol`() {
+    val workRoot = Files.createTempDirectory("bta-serialization-")
+    val sourceFile =
+      workRoot.resolve("Payload.kt").also {
+        it.writeText(
+          """
                 package fixture
 
                 import kotlinx.serialization.Serializable
 
                 @Serializable
                 data class Payload(val name: String, val count: Int)
-                """.trimIndent(),
-            )
-        }
-        val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-        val workingDir = workRoot.resolve("ic-state")
+                """
+            .trimIndent()
+        )
+      }
+    val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+    val workingDir = workRoot.resolve("ic-state")
 
-        val resolverCalls = mutableListOf<String>()
-        val compiler = BtaIncrementalCompiler.create(
-            btaImplJars = btaImplJars,
-            pluginJarResolver = { alias ->
-                resolverCalls.add(alias)
-                if (alias == "serialization") serializationPluginJars else emptyList()
-            },
-        ).getOrElse { fail("failed to load BTA toolchain: $it") }
+    val resolverCalls = mutableListOf<String>()
+    val compiler =
+      BtaIncrementalCompiler.create(
+          btaImplJars = btaImplJars,
+          pluginJarResolver = { alias ->
+            resolverCalls.add(alias)
+            if (alias == "serialization") serializationPluginJars else emptyList()
+          },
+        )
+        .getOrElse { fail("failed to load BTA toolchain: $it") }
 
-        // kolt.toml enables the serialization plugin so PluginTranslator
-        // picks it up on its normal reading path — the test is not
-        // bypassing the translator, it is going through it.
-        workRoot.resolve("kolt.toml").writeText(
-            """
+    // kolt.toml enables the serialization plugin so PluginTranslator
+    // picks it up on its normal reading path — the test is not
+    // bypassing the translator, it is going through it.
+    workRoot
+      .resolve("kolt.toml")
+      .writeText(
+        """
             name = "demo"
             version = "0.1.0"
 
@@ -86,118 +92,127 @@ class BtaSerializationPluginTest {
             target = "jvm"
             main = "fixture.Payload"
             sources = ["."]
-            """.trimIndent(),
-        )
+            """
+          .trimIndent()
+      )
 
-        compiler.compile(
-            IcRequest(
-                projectId = "serialization-smoke",
-                projectRoot = workRoot,
-                sources = listOf(sourceFile),
-                classpath = serializationFixtureClasspath,
-                outputDir = outputDir,
-                workingDir = workingDir,
-            ),
-        ).getOrElse { fail("expected successful compile of @Serializable fixture, got: $it") }
-
-        assertTrue(
-            resolverCalls.contains("serialization"),
-            "PluginTranslator must have consulted the resolver for `serialization`, got: $resolverCalls",
+    compiler
+      .compile(
+        IcRequest(
+          projectId = "serialization-smoke",
+          projectRoot = workRoot,
+          sources = listOf(sourceFile),
+          classpath = serializationFixtureClasspath,
+          outputDir = outputDir,
+          workingDir = workingDir,
         )
+      )
+      .getOrElse { fail("expected successful compile of @Serializable fixture, got: $it") }
 
-        val classFiles = outputDir.walk().filter { it.extension == "class" }.toList()
-        assertTrue(
-            classFiles.any { it.fileName.toString() == "Payload.class" },
-            "expected fixture.Payload.class in output, got: $classFiles",
-        )
+    assertTrue(
+      resolverCalls.contains("serialization"),
+      "PluginTranslator must have consulted the resolver for `serialization`, got: $resolverCalls",
+    )
 
-        // The load-bearing signal that the plugin ran is the nested
-        // `${'$'}serializer` class — a singleton that implements
-        // `KSerializer<Payload>` and is synthesised only by the
-        // serialization compiler plugin. Plain kotlinc output of a
-        // `@Serializable data class` contains no such entry. The file
-        // name is `Payload${'$'}${'$'}serializer.class` because the
-        // first `${'$'}` is the Kotlin-to-JVM nested class separator
-        // and the second is the literal name. A future regression that
-        // silently skipped plugin attachment would leave this class
-        // absent — this assertion is the guard.
-        val serializerName = "Payload\$\$serializer.class"
-        val classFileNames = classFiles.map { it.fileName.toString() }
-        assertTrue(
-            serializerName in classFileNames,
-            "kotlinx.serialization plugin must have generated `$serializerName`; " +
-                "classFiles=$classFileNames",
-        )
-    }
+    val classFiles = outputDir.walk().filter { it.extension == "class" }.toList()
+    assertTrue(
+      classFiles.any { it.fileName.toString() == "Payload.class" },
+      "expected fixture.Payload.class in output, got: $classFiles",
+    )
 
-    @Test
-    fun `serialization plugin jars resolve from the classpath system property`() {
-        // Guard the build.gradle.kts wiring: if a future edit drops the
-        // serializationPluginClasspath configuration or misroutes the
-        // system property, we want the failure signal here rather than
-        // buried inside the compile test above.
-        assertTrue(
-            serializationPluginJars.isNotEmpty(),
-            "serialization compiler plugin classpath must be non-empty",
-        )
-        assertTrue(
-            serializationPluginJars.any { it.fileName.toString().contains("serialization") },
-            "expected a serialization-compiler-plugin jar on the resolved classpath, got: $serializationPluginJars",
-        )
-    }
+    // The load-bearing signal that the plugin ran is the nested
+    // `${'$'}serializer` class — a singleton that implements
+    // `KSerializer<Payload>` and is synthesised only by the
+    // serialization compiler plugin. Plain kotlinc output of a
+    // `@Serializable data class` contains no such entry. The file
+    // name is `Payload${'$'}${'$'}serializer.class` because the
+    // first `${'$'}` is the Kotlin-to-JVM nested class separator
+    // and the second is the literal name. A future regression that
+    // silently skipped plugin attachment would leave this class
+    // absent — this assertion is the guard.
+    val serializerName = "Payload\$\$serializer.class"
+    val classFileNames = classFiles.map { it.fileName.toString() }
+    assertTrue(
+      serializerName in classFileNames,
+      "kotlinx.serialization plugin must have generated `$serializerName`; " +
+        "classFiles=$classFileNames",
+    )
+  }
 
-    @Test
-    fun `serialization runtime classpath contains kotlinx-serialization-core`() {
-        assertTrue(
-            serializationFixtureClasspath.any {
-                it.fileName.toString().contains("kotlinx-serialization-core")
-            },
-            "expected kotlinx-serialization-core on the fixture runtime classpath, " +
-                "got: $serializationFixtureClasspath",
-        )
-    }
+  @Test
+  fun `serialization plugin jars resolve from the classpath system property`() {
+    // Guard the build.gradle.kts wiring: if a future edit drops the
+    // serializationPluginClasspath configuration or misroutes the
+    // system property, we want the failure signal here rather than
+    // buried inside the compile test above.
+    assertTrue(
+      serializationPluginJars.isNotEmpty(),
+      "serialization compiler plugin classpath must be non-empty",
+    )
+    assertTrue(
+      serializationPluginJars.any { it.fileName.toString().contains("serialization") },
+      "expected a serialization-compiler-plugin jar on the resolved classpath, got: $serializationPluginJars",
+    )
+  }
 
-    // #162 single-batch invariant guard. When both PluginTranslator and
-    // LanguageVersionTranslator return non-empty lists, BtaIncrementalCompiler
-    // must pass their concatenation to `applyArgumentStrings` in a *single*
-    // call — two sequential calls would reset the earlier batch's args back
-    // to parser defaults (see BtaIncrementalCompiler.kt header comment on
-    // ordering). A regression that splits the call into two would wipe the
-    // plugin freeArgs, silently producing non-serializable output. This test
-    // catches that: with compiler=2.3.20 / version=2.1.0 the language-version
-    // translator emits two arg pairs, and if plugin args lost the ordering
-    // race the `$$serializer.class` synthesis would disappear.
-    @Test
-    fun `plugin and language-version freeArgs coexist in a single applyArgumentStrings batch`() {
-        val workRoot = Files.createTempDirectory("bta-freeargs-batch-")
-        val sourceFile = workRoot.resolve("Payload.kt").also {
-            it.writeText(
-                """
+  @Test
+  fun `serialization runtime classpath contains kotlinx-serialization-core`() {
+    assertTrue(
+      serializationFixtureClasspath.any {
+        it.fileName.toString().contains("kotlinx-serialization-core")
+      },
+      "expected kotlinx-serialization-core on the fixture runtime classpath, " +
+        "got: $serializationFixtureClasspath",
+    )
+  }
+
+  // #162 single-batch invariant guard. When both PluginTranslator and
+  // LanguageVersionTranslator return non-empty lists, BtaIncrementalCompiler
+  // must pass their concatenation to `applyArgumentStrings` in a *single*
+  // call — two sequential calls would reset the earlier batch's args back
+  // to parser defaults (see BtaIncrementalCompiler.kt header comment on
+  // ordering). A regression that splits the call into two would wipe the
+  // plugin freeArgs, silently producing non-serializable output. This test
+  // catches that: with compiler=2.3.20 / version=2.1.0 the language-version
+  // translator emits two arg pairs, and if plugin args lost the ordering
+  // race the `$$serializer.class` synthesis would disappear.
+  @Test
+  fun `plugin and language-version freeArgs coexist in a single applyArgumentStrings batch`() {
+    val workRoot = Files.createTempDirectory("bta-freeargs-batch-")
+    val sourceFile =
+      workRoot.resolve("Payload.kt").also {
+        it.writeText(
+          """
                 package fixture
 
                 import kotlinx.serialization.Serializable
 
                 @Serializable
                 data class Payload(val name: String, val count: Int)
-                """.trimIndent(),
-            )
-        }
-        val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-        val workingDir = workRoot.resolve("ic-state")
+                """
+            .trimIndent()
+        )
+      }
+    val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+    val workingDir = workRoot.resolve("ic-state")
 
-        val compiler = BtaIncrementalCompiler.create(
-            btaImplJars = btaImplJars,
-            pluginJarResolver = { alias ->
-                if (alias == "serialization") serializationPluginJars else emptyList()
-            },
-        ).getOrElse { fail("failed to load BTA toolchain: $it") }
+    val compiler =
+      BtaIncrementalCompiler.create(
+          btaImplJars = btaImplJars,
+          pluginJarResolver = { alias ->
+            if (alias == "serialization") serializationPluginJars else emptyList()
+          },
+        )
+        .getOrElse { fail("failed to load BTA toolchain: $it") }
 
-        // version=2.1.0 with compiler=2.3.20 makes LanguageVersionTranslator
-        // emit `-language-version 2.1.0 -api-version 2.1.0`; plugin translator
-        // emits `-Xplugin=<serialization jar>`. The batch invariant is that
-        // both sets survive into the compile.
-        workRoot.resolve("kolt.toml").writeText(
-            """
+    // version=2.1.0 with compiler=2.3.20 makes LanguageVersionTranslator
+    // emit `-language-version 2.1.0 -api-version 2.1.0`; plugin translator
+    // emits `-Xplugin=<serialization jar>`. The batch invariant is that
+    // both sets survive into the compile.
+    workRoot
+      .resolve("kolt.toml")
+      .writeText(
+        """
             name = "demo"
             version = "0.1.0"
 
@@ -212,40 +227,39 @@ class BtaSerializationPluginTest {
             target = "jvm"
             main = "fixture.Payload"
             sources = ["."]
-            """.trimIndent(),
+            """
+          .trimIndent()
+      )
+
+    compiler
+      .compile(
+        IcRequest(
+          projectId = "freeargs-batch",
+          projectRoot = workRoot,
+          sources = listOf(sourceFile),
+          classpath = serializationFixtureClasspath,
+          outputDir = outputDir,
+          workingDir = workingDir,
         )
+      )
+      .getOrElse {
+        fail("expected successful compile with plugin + language-version flags, got: $it")
+      }
 
-        compiler.compile(
-            IcRequest(
-                projectId = "freeargs-batch",
-                projectRoot = workRoot,
-                sources = listOf(sourceFile),
-                classpath = serializationFixtureClasspath,
-                outputDir = outputDir,
-                workingDir = workingDir,
-            ),
-        ).getOrElse {
-            fail("expected successful compile with plugin + language-version flags, got: $it")
-        }
+    val classFileNames =
+      outputDir.walk().filter { it.extension == "class" }.map { it.fileName.toString() }.toList()
+    val serializerName = "Payload\$\$serializer.class"
+    assertTrue(
+      serializerName in classFileNames,
+      "plugin freeArgs must survive alongside language-version freeArgs in one batch; " +
+        "missing `$serializerName` signals a reset; classFiles=$classFileNames",
+    )
+  }
 
-        val classFileNames = outputDir.walk()
-            .filter { it.extension == "class" }
-            .map { it.fileName.toString() }
-            .toList()
-        val serializerName = "Payload\$\$serializer.class"
-        assertTrue(
-            serializerName in classFileNames,
-            "plugin freeArgs must survive alongside language-version freeArgs in one batch; " +
-                "missing `$serializerName` signals a reset; classFiles=$classFileNames",
-        )
-    }
-
-    private fun systemClasspath(key: String): List<Path> {
-        val raw = System.getProperty(key)
-            ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
-        return raw.split(File.pathSeparator)
-            .filter { it.isNotBlank() }
-            .map { Path.of(it) }
-    }
-
+  private fun systemClasspath(key: String): List<Path> {
+    val raw =
+      System.getProperty(key)
+        ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
+    return raw.split(File.pathSeparator).filter { it.isNotBlank() }.map { Path.of(it) }
+  }
 }

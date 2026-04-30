@@ -24,44 +24,43 @@ import kotlin.test.assertTrue
 // other regressions, and is easy to run in IDE.
 class AdapterBoundaryInvariantTest {
 
-    @Test
-    fun `no daemon core file imports kotlin buildtools types`() {
-        val sourceRoot = Path.of(
-            System.getProperty("kolt.daemon.coreMainSourceRoot")
-                ?: error(
-                    "kolt.daemon.coreMainSourceRoot system property not set — " +
-                        "check :kolt-jvm-compiler-daemon/build.gradle.kts `tasks.test`",
-                ),
-        )
-        assertTrue(
-            Files.isDirectory(sourceRoot),
-            "expected daemon core source root at $sourceRoot",
-        )
+  @Test
+  fun `no daemon core file imports kotlin buildtools types`() {
+    val sourceRoot =
+      Path.of(
+        System.getProperty("kolt.daemon.coreMainSourceRoot")
+          ?: error(
+            "kolt.daemon.coreMainSourceRoot system property not set — " +
+              "check :kolt-jvm-compiler-daemon/build.gradle.kts `tasks.test`"
+          )
+      )
+    assertTrue(Files.isDirectory(sourceRoot), "expected daemon core source root at $sourceRoot")
 
-        val offenders = mutableListOf<Pair<Path, String>>()
-        Files.walk(sourceRoot).use { stream ->
-            stream.asSequence()
-                .filter { it.toString().endsWith(".kt") }
-                .forEach { file ->
-                    Files.readAllLines(file).forEachIndexed { idx, line ->
-                        // `import org.jetbrains.kotlin.buildtools.` is
-                        // the shape we are forbidding. Substring match
-                        // is sufficient — there is no legitimate alias
-                        // form in kolt's style (stdlib wildcards are
-                        // not permitted by IntelliJ's formatter).
-                        if (line.contains("import org.jetbrains.kotlin.buildtools.")) {
-                            offenders += file to "${idx + 1}: $line"
-                        }
-                    }
-                }
+    val offenders = mutableListOf<Pair<Path, String>>()
+    Files.walk(sourceRoot).use { stream ->
+      stream
+        .asSequence()
+        .filter { it.toString().endsWith(".kt") }
+        .forEach { file ->
+          Files.readAllLines(file).forEachIndexed { idx, line ->
+            // `import org.jetbrains.kotlin.buildtools.` is
+            // the shape we are forbidding. Substring match
+            // is sufficient — there is no legitimate alias
+            // form in kolt's style (stdlib wildcards are
+            // not permitted by IntelliJ's formatter).
+            if (line.contains("import org.jetbrains.kotlin.buildtools.")) {
+              offenders += file to "${idx + 1}: $line"
+            }
+          }
         }
-
-        assertEquals(
-            emptyList<Pair<Path, String>>(),
-            offenders,
-            "ADR 0019 §3 violation: daemon core must not import kotlin.buildtools.* " +
-                "— see the :ic subproject for the adapter layer. Offenders:\n" +
-                offenders.joinToString("\n") { (p, l) -> "  $p:$l" },
-        )
     }
+
+    assertEquals(
+      emptyList<Pair<Path, String>>(),
+      offenders,
+      "ADR 0019 §3 violation: daemon core must not import kotlin.buildtools.* " +
+        "— see the :ic subproject for the adapter layer. Offenders:\n" +
+        offenders.joinToString("\n") { (p, l) -> "  $p:$l" },
+    )
+  }
 }
