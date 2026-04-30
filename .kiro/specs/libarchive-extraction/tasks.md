@@ -86,7 +86,7 @@
 
 - [ ] 5. Validation: end-to-end verification
 
-- [ ] 5.1 Verify full local build, test suite, and clean-toolchain smoke install
+- [x] 5.1 Verify full local build, test suite, and clean-toolchain smoke install
   - `./gradlew build linuxX64Test` 全 pass
   - `~/.kolt/toolchains/{kotlinc,jdk,konanc}/` を一時退避した上で、生成された `./build/bin/linuxX64/debugExecutable/kolt.kexe build` を kolt 自身の repo root で実行し、3 toolchain の自動インストールと最終 native binary 生成が完走することを確認
   - 観測条件: Gradle 全テスト pass + `kolt.kexe build` 完走 + `~/.kolt/toolchains/{kotlinc,jdk,konanc}/<version>/bin/<binary>` が `test -x` で実行可能、retry 用 `which unzip || true` を実行しても `command not found` 状態で `kolt build` が成功する PoC が手元で再現可能
@@ -104,3 +104,5 @@
 - ADR 0031 citation コメントは task 4.1 で ADR が書かれた後に `extractArchive` の cinterop lifecycle ブロックへ追加する。
 - libarchive.def に Ubuntu 24.04 multiarch include path (`-I/usr/include/x86_64-linux-gnu`) が必要。`bits/timesize.h` 経路で libcurl.def と同じ修正パターン。
 - libarchive の `ARCHIVE_EXTRACT_SECURE_SYMLINKS` は新規 symlink エントリの **target 文字列** を検証しない。`archive_write_disk_posix.c:2388` の `symlink(linkname, a->name)` は target 検証なしで呼ばれる。Req 4.7 を満たすために `extractArchive` 側で entry-depth-aware な `symlinkTargetEscapes` 検査を `archive_write_header` の前に行う実装を入れている (タスク 2.3 で追加)。design.md の "外部 symlink 拒否は libarchive のフラグに完全委譲" は不正確で、実際は kolt 側に手書きチェックが必要。
+- 5.1 観測条件は `kolt.toml` の `target = "linuxX64"` のため kolt repo root で全 3 toolchain を install できない (kotlinc.zip 経路は走らない)。検証時は別途 `target = "jvm"` の小プロジェクトを scaffold して kotlinc 経路を駆動する。
+- 5.1 の "unzip 不在 PATH" PoC は libarchive 展開後の `mv` シェルアウトで失敗する (3 箇所、本 spec の Out of Boundary)。PoC は libarchive 展開そのものは shell tool 非依存になっていることのみ検証する。`mv` 除去は別 issue で扱う。
