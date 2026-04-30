@@ -46,7 +46,7 @@
   - _Depends: 1.2_
   - _Boundary: BundleResolver_
 
-- [ ] 2.2 (P) SysPropResolver: pure function で 3 形態 value を解決する
+- [x] 2.2 (P) SysPropResolver: pure function で 3 形態 value を解決する
   - `resolveSysProps(sysProps, projectRoot, bundleClasspaths): List<Pair<String, String>>` を新設、 戻り値は `Result` 型を **使わない** (invariant 違反は `error()` で fail-fast、 ADR 0001 引用)
   - 解決規則: `Literal(v)` → verbatim、 `ClasspathRef(name)` → `bundleClasspaths[name]` の colon-joined string、 `ProjectDir(rel)` → `<projectRoot>/<rel>` を `absolutise` で絶対化
   - 環境変数展開を一切行わないこと、 declaration order を保つことを test で固定する
@@ -142,3 +142,4 @@
 - **Task 1.2**: `LockfileLoadResult` を sealed 5 variant にして v3 detection 結果を caller policy で分岐。pure 関数 `classifyLockfileLoad` で eprintln から切り離して unit test 可能にし、 stderr message 自体は call site の visual review で検証する pattern を採用
 - **Task 1.3**: design.md の `ClasspathBundle` data class wrapper は実装しなかった。 `[classpaths.<name>]` の TOML shape は `[dependencies]` と同形 (`"GAV" = "version"`) なので、 ラッパなしの `Map<String, Map<String, String>>` 直書きで型情報も意味も損なわない。 wrapper を将来必要にする要素 (per-bundle excludes 等) が出た時点で導入する
 - **Task 1.3**: parseConfig 経由の sysprop decode は `RawSysPropValue`-based の `liftSysPropsMap` を使い、 `SysPropValueSerializer` (1.1 の custom serializer) は通らない。 これは production path で offending key 名を error message に組み込むため。 1.1 の serializer + test は 「decode shape の単体テスト」用に残す 2 path 共存設計 (どちらも `RawSysPropValue` を共有するため整合は保たれる)
+- **Task 2.2**: `.gitignore` の `**/build/` パターンが `src/**/kolt/build/` の source package を silently 巻き込んでいた (新規ファイルが untracked にすら出ない)。 task 2.2 commit で `!src/**/kolt/build/` + `!src/**/kolt/build/**` の re-include 規則を追加。 同根の問題は `src/**/kolt/build/` 配下に新規ファイルを置く 2.3 / 3.2 / その他で再発しないよう確定済
