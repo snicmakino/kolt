@@ -22,7 +22,7 @@
   - _Requirements: 4.1, 4.4_
   - _Boundary: Lockfile, DependencyCommands_
 
-- [ ] 1.3 KoltConfig schema 拡張と validator 4 種を実装する
+- [x] 1.3 KoltConfig schema 拡張と validator 4 種を実装する
   - `RawKoltConfig` に `classpaths: Map<String, ClasspathBundle> = emptyMap()`、 `test: RawTestSection? = null`、 `run: RawRunSection? = null` を追加する
   - `KoltConfig` に対応 non-null フィールド (default empty) を投影、 不在時に既存挙動が完全に保たれることを test で確認する
   - `validateNewSchemaTargetCompat` を追加: native target × 新 table 非空 reject、 lib + `[run.sys_props]` 非空 reject、 lib + `[test.sys_props]` 受理、 lib + `[classpaths.X]` (target=jvm) 受理
@@ -140,3 +140,5 @@
 - **Task 1.1**: ktoml 0.7.1 の標準 `KSerializer` 表面では「TOML string OR inline-table」polymorphism を扱えない (TomlNode 内部型 cast が必須で fragile)。 `SysPropValue` は uniform inline-table (`{ literal | classpath | project_dir = "..." }`) で確定、 Req 2.1 amendment 済
 - **Task 1.2**: `kolt deps install` だけが v3 → v4 自動 migration を許す pattern を `allowLockfileMigration: Boolean = false` でカプセル化。 build path (`BuildCommands.kt:171, 291`) は default false を引き継ぐので silent re-resolve は構造的に発生しない。 `doUpdate` は元から `existingLock = null` 固定なので干渉なし
 - **Task 1.2**: `LockfileLoadResult` を sealed 5 variant にして v3 detection 結果を caller policy で分岐。pure 関数 `classifyLockfileLoad` で eprintln から切り離して unit test 可能にし、 stderr message 自体は call site の visual review で検証する pattern を採用
+- **Task 1.3**: design.md の `ClasspathBundle` data class wrapper は実装しなかった。 `[classpaths.<name>]` の TOML shape は `[dependencies]` と同形 (`"GAV" = "version"`) なので、 ラッパなしの `Map<String, Map<String, String>>` 直書きで型情報も意味も損なわない。 wrapper を将来必要にする要素 (per-bundle excludes 等) が出た時点で導入する
+- **Task 1.3**: parseConfig 経由の sysprop decode は `RawSysPropValue`-based の `liftSysPropsMap` を使い、 `SysPropValueSerializer` (1.1 の custom serializer) は通らない。 これは production path で offending key 名を error message に組み込むため。 1.1 の serializer + test は 「decode shape の単体テスト」用に残す 2 path 共存設計 (どちらも `RawSysPropValue` を共有するため整合は保たれる)

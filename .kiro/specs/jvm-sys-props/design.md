@@ -304,25 +304,9 @@ flowchart TB
 - Validation: 不正 shape の input は `SerializationException` → `ConfigError.ParseFailed` に翻訳
 - Risks: ktoml decoder の structure/string dispatch の細部 — research §1 + §SysPropValue polymorphic decoding に記述
 
-#### ClasspathBundle
+#### ClasspathBundle (not introduced)
 
-| Field | Detail |
-|-------|--------|
-| Intent | `[classpaths.<name>]` の宣言値の type 表現 |
-| Requirements | 1.1, 1.5 |
-
-**Responsibilities & Constraints**
-
-- `Map<String, String>` (`"group:artifact" -> "version"`) を保持する thin wrapper data class
-- 既存 `[dependencies]` と同じ key shape
-
-**Dependencies**
-
-- Inbound: Config (P0)
-- Outbound: Resolver (P0) — bundle seeds として渡される
-- External: なし
-
-**Contracts**: State [x]
+実装段階 (task 1.3) で wrapper data class を入れない判断に到達。 `[classpaths.<name>]` の TOML shape は `[dependencies]` と同形 (`"group:artifact" = "version"`) のため、 `KoltConfig.classpaths: Map<String, Map<String, String>>` の plain nested Map で十分。 per-bundle excludes など将来 attribute が必要になった時点で wrapper を導入する。 Req 1.1 / 1.5 は Config (extended) が直接担う。
 
 #### Config (extended)
 
