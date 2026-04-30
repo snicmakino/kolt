@@ -771,7 +771,7 @@ private fun doTestInner(
       return Err(it)
     }
   if (config.build.target in NATIVE_TARGETS) {
-    return doNativeTest(config, testArgs, profile)
+    return doNativeTest(config, testArgs, useDaemon, profile)
   }
   // doBuildInner (not doBuild) — the outer lock acquired by doTest
   // already covers the build; calling doBuild would attempt a second
@@ -864,6 +864,7 @@ private fun doTestInner(
 private fun doNativeTest(
   config: KoltConfig,
   testArgs: List<String>,
+  useDaemon: Boolean,
   profile: Profile,
 ): Result<Unit, Int> {
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
@@ -906,7 +907,6 @@ private fun doNativeTest(
       ensureJdkBinsFromConfig(config, paths).getOrElse {
         return Err(it)
       }
-    val konancEnv = mapOf("JAVA_HOME" to managedJdkBins.home)
     val nativePluginArgs =
       resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
         eprintln("error: ${it.message}")
@@ -929,6 +929,23 @@ private fun doNativeTest(
       }
     val klibs = depKlibs + cinteropKlibs
 
+    val cwd =
+      currentWorkingDirectory()
+        ?: run {
+          eprintln("error: could not determine current working directory")
+          return Err(EXIT_BUILD_ERROR)
+        }
+    val subprocessBackend =
+      NativeSubprocessBackend(konancBin = managedKonancBin, javaHome = managedJdkBins.home)
+    val backend: NativeCompilerBackend =
+      resolveNativeCompilerBackend(
+        config = config,
+        paths = paths,
+        subprocessBackend = subprocessBackend,
+        useDaemon = useDaemon,
+        absProjectPath = cwd,
+      )
+
     val libraryCmd =
       nativeTestLibraryCommand(
         testConfig,
@@ -942,8 +959,10 @@ private fun doNativeTest(
       return Err(EXIT_BUILD_ERROR)
     }
     println("compiling tests (native)...")
-    executeCommand(libraryCmd.args, konancEnv).getOrElse { error ->
-      eprintln("error: " + formatProcessError(error, "test compilation"))
+    // ADR 0024 §4: backend.compile takes konanc args *after* the binary;
+    // mirror doNativeBuildInner's drop(1).
+    backend.compile(libraryCmd.args.drop(1)).getOrElse { error ->
+      reportNativeCompileError(error, "test compilation")
       return Err(EXIT_BUILD_ERROR)
     }
 
@@ -955,8 +974,8 @@ private fun doNativeTest(
         profile = profile,
       )
     println("linking tests (native)...")
-    executeCommand(linkCmd.args, konancEnv).getOrElse { error ->
-      eprintln("error: " + formatProcessError(error, "test linking"))
+    backend.compile(linkCmd.args.drop(1)).getOrElse { error ->
+      reportNativeCompileError(error, "test linking")
       return Err(EXIT_BUILD_ERROR)
     }
 
