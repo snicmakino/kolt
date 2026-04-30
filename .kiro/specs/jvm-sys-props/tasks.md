@@ -74,7 +74,7 @@
   - _Depends: 1.2, 2.1_
   - _Boundary: DependencyResolution_
 
-- [ ] 3.2 doTestInner と doRunInner に SysPropResolver を組み込む
+- [x] 3.2 doTestInner と doRunInner に SysPropResolver を組み込む
   - `BuildCommands.doTestInner` で `resolveSysProps(config.testSection.sysProps, projectRoot, outcome.bundleClasspaths)` を呼び、 結果を `testRunCommand(..., sysProps = ...)` に渡す
   - `doRunInner` も同形で `runCommand` に渡す
   - argv 順序が deterministic であることを assertion 付きで test する
@@ -143,3 +143,4 @@
 - **Task 1.3**: design.md の `ClasspathBundle` data class wrapper は実装しなかった。 `[classpaths.<name>]` の TOML shape は `[dependencies]` と同形 (`"GAV" = "version"`) なので、 ラッパなしの `Map<String, Map<String, String>>` 直書きで型情報も意味も損なわない。 wrapper を将来必要にする要素 (per-bundle excludes 等) が出た時点で導入する
 - **Task 1.3**: parseConfig 経由の sysprop decode は `RawSysPropValue`-based の `liftSysPropsMap` を使い、 `SysPropValueSerializer` (1.1 の custom serializer) は通らない。 これは production path で offending key 名を error message に組み込むため。 1.1 の serializer + test は 「decode shape の単体テスト」用に残す 2 path 共存設計 (どちらも `RawSysPropValue` を共有するため整合は保たれる)
 - **Task 2.2**: `.gitignore` の `**/build/` パターンが `src/**/kolt/build/` の source package を silently 巻き込んでいた (新規ファイルが untracked にすら出ない)。 task 2.2 commit で `!src/**/kolt/build/` + `!src/**/kolt/build/**` の re-include 規則を追加。 同根の問題は `src/**/kolt/build/` 配下に新規ファイルを置く 2.3 / 3.2 / その他で再発しないよう確定済
+- **Task 3.2**: `kolt run --watch` 経路 (`WatchLoop.kt`) は `runCommand(...)` を直呼びしているため `[run.sys_props]` を thread しない。 task 3.2 の boundary は `BuildCommands` だったので out-of-scope として document 化、 follow-up issue を後で立てる

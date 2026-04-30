@@ -45,13 +45,21 @@ fun main(args: Array<String>) {
         // for defense-in-depth when called through other paths.
         val parsed = loadProjectConfig().getOrElse { exitProcess(it) }
         rejectIfLibrary(parsed).getOrElse { exitProcess(it) }
-        val (config, classpath, javaPath) =
+        val buildResult =
           doBuild(useDaemon = useDaemon, profile = profile).getOrElse { exitProcess(it) }
         // The build lock is released between doBuild and doRun. Safe today
         // because classpath is in-memory; if doRun ever re-reads
         // build/<name>-runtime.classpath, fold the doRun acquire into
         // doBuild or hold the lock across both calls.
-        doRun(config, classpath, appArgs, javaPath, profile = profile).getOrElse { exitProcess(it) }
+        doRun(
+            buildResult.config,
+            buildResult.classpath,
+            appArgs,
+            buildResult.javaPath,
+            profile = profile,
+            bundleClasspaths = buildResult.bundleClasspaths,
+          )
+          .getOrElse { exitProcess(it) }
       }
     }
     "test" -> {
