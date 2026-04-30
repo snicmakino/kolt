@@ -46,7 +46,7 @@
 
 - [ ] 3. Integration: replace ToolchainManager shell-outs
 
-- [ ] 3.1 Replace kotlinc unzip callsite with extractArchive
+- [x] 3.1 Replace kotlinc unzip callsite with extractArchive
   - `installKotlincToolchain` 内 `executeCommand(listOf("unzip", "-q", zipPath, "-d", extractTempDir))` を `extractArchive(zipPath, extractTempDir)` に置換
   - `formatExtractError(error: ExtractError, tool: String, version: String): ToolchainError` ローカルヘルパを `ToolchainManager.kt` に導入し、3 callsite で共有する
   - 失敗時 cleanup シーケンス (`deleteFile(zipPath)` + `removeDirectoryRecursive(extractTempDir)`) は維持
