@@ -83,7 +83,7 @@
   - _Depends: 2.2, 2.3, 3.1_
   - _Boundary: BuildCommands_
 
-- [ ] 3.3 kolt deps install / update / tree を bundle 対応にする
+- [x] 3.3 kolt deps install / update / tree を bundle 対応にする
   - `doInstall` で bundle resolve 結果を lockfile の `classpathBundles` に書き出す
   - `doUpdate` で各 bundle entry を main/test と同じ policy で更新する
   - `doTree` で `Bundles` セクションを既存 main / test セクションの後に描画する
