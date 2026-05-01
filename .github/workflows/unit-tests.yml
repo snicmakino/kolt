@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.17.0
+  KOLT_BOOTSTRAP_TAG: v0.18.0
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
@@ -81,14 +81,6 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
-          # Bridge for #336: bootstrap pre-bump (v0.17.0) ships argfiles
-          # with the unsubstituted @KOLT_LIBEXEC@ placeholder. install.sh
-          # would substitute on its own, but this CI step extracts the
-          # tarball directly. Mirror install.sh:214 here so the bootstrap
-          # daemon has a valid classpath. Drop this once KOLT_BOOTSTRAP_TAG
-          # is bumped to a release that contains the resolver-side fix.
-          sed -i "s|@KOLT_LIBEXEC@|$BOOTSTRAP_DIR/libexec|g" \
-            "$BOOTSTRAP_DIR"/libexec/classpath/*.argfile
           "$BOOTSTRAP_KOLT" --version
 
       # `--ktest_logger=SILENT` collapses the per-test GTEST output (~2k
@@ -114,10 +106,7 @@ jobs:
       # subprocess compile`. The canary asserts both that the daemon
       # code path was reached (`starting compiler daemon`) and that the
       # daemon actually engaged (no `falling back to subprocess`) so a
-      # silent regression to subprocess fallback fails the build. The
-      # bootstrap step's @KOLT_LIBEXEC@ sed bridge keeps this assertion
-      # green on the v0.17.0 bootstrap; #336's resolver-side fix makes
-      # the bridge unnecessary on the next bootstrap bump.
+      # silent regression to subprocess fallback fails the build.
       - name: Verify daemon thin jar builds standalone
         run: |
           set -euo pipefail

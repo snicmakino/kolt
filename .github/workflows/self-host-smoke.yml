@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.16.3
+  KOLT_BOOTSTRAP_TAG: v0.18.0
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
@@ -82,10 +82,6 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
-          # Bridge for #336: see unit-tests.yml for the rationale.
-          # Drop on the next bootstrap bump.
-          sed -i "s|@KOLT_LIBEXEC@|$BOOTSTRAP_DIR/libexec|g" \
-            "$BOOTSTRAP_DIR"/libexec/classpath/*.argfile
           "$BOOTSTRAP_KOLT" --version
 
       # Native daemon canary: `kolt build` for kolt itself is a Native
