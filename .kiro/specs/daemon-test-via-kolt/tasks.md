@@ -9,7 +9,7 @@
   - dogfood log (`docs/dogfood.md`) に 1 行記録
   - _Requirements: 1.2_
 
-- [ ] 2. JVM daemon kolt.toml 整備 (root + ic 統合)
+- [x] 2. JVM daemon kolt.toml 整備 (root + ic 統合)
 - [x] 2.1 test_sources と test-dependencies を追加
   - `kolt-jvm-compiler-daemon/kolt.toml` の `[build]` に `test_sources = ["src/test/kotlin", "ic/src/test/kotlin"]` を追加
   - `[test-dependencies]` を新設し `org.junit.jupiter:junit-jupiter = "5.11.3"` と `org.junit.platform:junit-platform-launcher = "1.11.3"` を pin (Gradle 時代と同 version)
@@ -44,7 +44,7 @@
   - _Requirements: 2.5, 2.6_
   - _Boundary: kolt-jvm-compiler-daemon/kolt.lock_
 
-- [ ] 3. (P) Native daemon kolt.toml 整備
+- [x] 3. (P) Native daemon kolt.toml 整備
 - [x] 3.1 (P) test_sources / test-deps 追加 + lockfile 再生成
   - `kolt-native-compiler-daemon/kolt.toml` の `[build]` に `test_sources = ["src/test/kotlin"]` を追加
   - `[test-dependencies]` で `org.junit.jupiter:junit-jupiter = "5.11.3"` / `org.junit.platform:junit-platform-launcher = "1.11.3"` を pin
@@ -53,7 +53,7 @@
   - _Requirements: 1.3, 6.2, 6.3_
   - _Boundary: kolt-native-compiler-daemon/kolt.toml, kolt-native-compiler-daemon/kolt.lock_
 
-- [ ] 4. Foundation fix + invariant test
+- [x] 4. Foundation fix + invariant test
 - [x] 4.1 kolt CLI test compile に -module-name と -Xfriend-paths を forward
   - `src/nativeMain/kotlin/kolt/build/TestBuilder.kt` の `testBuildCommand` argv に `-module-name <config.name>` と `-Xfriend-paths=<classesDir>` を追加
   - `src/nativeMain/kotlin/kolt/build/SubprocessCompilerBackend.kt` の `subprocessArgv` で `request.moduleName` を `-module-name <moduleName>` として forward、 line 29 の "intentionally not forwarded" コメントは削除 / 更新
@@ -72,7 +72,7 @@
   - _Requirements: 6.5_
   - _Boundary: IcModuleBoundaryInvariantTest_
 
-- [ ] 5. End-to-end verification と Gradle parity cross-check
+- [x] 5. End-to-end verification と Gradle parity cross-check
 - [x] 5.1 JVM daemon directory での kolt test smoke
   - `cd kolt-jvm-compiler-daemon && kolt test` を実行
   - root daemon test 群 (8 ファイル相当) と ic test 群 (16 ファイル相当) の union が全 pass、 exit code 0
@@ -102,7 +102,7 @@
   - _Depends: 5.1, 5.2_
   - _Requirements: 6.1, 6.4_
 
-- [ ] 6. Documentation cleanup
+- [x] 6. Documentation cleanup
 - [x] 6.1 tech.md から ./gradlew check 言及を撤去
   - `.kiro/steering/tech.md` の `## Common Commands` 末尾にある Special-purpose ブロック (`./gradlew check` 行 + `./gradlew linkDebugExecutableLinuxX64 \\` 行 + 続く `&& ...kolt.kexe build` 行 + 周辺の "Special-purpose" 注釈) を削除
   - 削除後の `## Common Commands` セクションが文構造として整っている (見出し / 空行 / Development for working on kolt itself のブロック整合)
