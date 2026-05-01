@@ -81,7 +81,7 @@ dependency direction: **cli → build → resolve / infra**.
   cache adapters. The kernel is the reliability floor — treat it with Gradle/Maven-
   spec parity in mind.
 - **Explicit fallback policy**: all daemon failures except `CompilationFailed` fall
-  back to subprocess. Retry budgets (e.g. 10..200ms within 3s) are inlined with ADR
+  back to subprocess. Retry budgets (e.g. 10..200ms within 10s) are inlined with ADR
   references rather than hidden in framework code.
 - **Daemon version sync**: Kotlin version pins, daemon main-class FQNs, and the
   bootstrap JDK pin each fan out across multiple files. `DriftGuardsTest`

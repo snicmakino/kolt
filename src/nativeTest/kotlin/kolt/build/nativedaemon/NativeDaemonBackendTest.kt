@@ -358,7 +358,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
 
     val unavailable = assertIs<NativeCompileError.BackendUnavailable.Other>(err)
     assertTrue(
-      unavailable.detail.contains("within 3000ms"),
+      unavailable.detail.contains("within 10000ms"),
       "expected budget mention, got: ${unavailable.detail}",
     )
     assertTrue(calls > 1, "expected multiple retry attempts before giving up")

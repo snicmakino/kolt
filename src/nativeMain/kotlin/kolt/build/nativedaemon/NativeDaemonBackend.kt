@@ -25,7 +25,7 @@ import kolt.nativedaemon.wire.Message
 import platform.posix.usleep
 
 // ADR 0024 §2/§3/§7. Parallel to `kolt.build.daemon.DaemonCompilerBackend`:
-// spawn-on-demand, exponential backoff connect (10..200ms within 3s budget),
+// spawn-on-demand, exponential backoff connect (10..200ms within 10s budget),
 // wire protocol over a Unix domain socket. Not load-bearing for correctness —
 // `FallbackNativeCompilerBackend` (ADR 0024 §7) retries eligible errors on
 // `NativeSubprocessBackend`.
@@ -150,7 +150,7 @@ internal constructor(
   companion object {
     internal const val INITIAL_BACKOFF_MS = 10
     internal const val MAX_BACKOFF_MS = 200
-    internal const val CONNECT_TOTAL_BUDGET_MS: Long = 3000L
+    internal const val CONNECT_TOTAL_BUDGET_MS: Long = 10_000L
 
     // Heap ceiling SSoT — lockstep with ADR 0024 §3.
     // JVM daemon's spawnArgv omits `-Xmx` by design: BTA's steady-state

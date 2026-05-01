@@ -107,8 +107,10 @@ jobs:
       # subprocess compile`, which short-circuited before any spawn
       # attempt. The canary requires `starting compiler daemon` in stderr
       # — i.e. the daemon code path was reached. Whether the spawn itself
-      # connects within the 3s retry budget is orthogonal (cold-cache CI
-      # currently times out and falls back, tracked separately).
+      # connects within the retry budget is orthogonal: #310 raised the
+      # budget to 10s in the dev tree, but the bootstrap tag here still
+      # ships 3s, so the negative assertion (no `falling back to
+      # subprocess`) is gated on the next bootstrap bump.
       - name: Verify daemon thin jar builds standalone
         run: |
           set -euo pipefail

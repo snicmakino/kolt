@@ -12,6 +12,7 @@ date: 2026-04-14
 - Transport is a Unix domain socket at `~/.kolt/daemon/<projectHash>/daemon.sock`. Frame format: big-endian u32 length prefix + UTF-8 JSON body; `classDiscriminator = "type"`; max body 64 MiB. One connection at a time (Phase A contract). (§3)
 - Bound leaks with periodic restart: thresholds are 1000 compiles, 30 min idle, 1.5 GiB heap (live set via `MemoryMXBean`). `ExitReason` tags the cause on exit. (§4)
 - The daemon is the default compile backend from day one (`FallbackCompilerBackend(DaemonCompilerBackend, SubprocessCompilerBackend)`). `--no-daemon` bypasses it per invocation. Only `BackendUnavailable` / `InternalMisuse` trigger fallback; `CompilationFailed` does not. (§5)
+- Cold-spawn connect budget is 10s (was 3s through 2026-04-30). Budget covers cold spawn only — warm reconnects short-circuit before the retry loop and are unaffected. (§5)
 - `kolt-compiler-daemon/` is an independent Gradle build included via `includeBuild`, not a subproject, to allow separate distribution per ADR 0018. (§6)
 
 ## Context and Problem Statement
@@ -91,6 +92,8 @@ The daemon is the default backend from PR3 of #14. `kolt build` wires `FallbackC
 `reportFallback` emits one stderr line per fallback: `warning` for `BackendUnavailable.*`, `error` for `InternalMisuse`. `InternalMisuse` is deliberately loud so dogfooding surfaces bugs. `kolt build --no-daemon` bypasses the daemon for a single invocation; no `kolt.toml` knob exists.
 
 The opt-in plan (ship as `kolt build --daemon`, flip default after spikes #88–#91) was abandoned because all its transient artifacts — flag, doc caveat, interim ADR status — would need reverting a release later.
+
+Cold-spawn connect budget: `DaemonCompilerBackend.CONNECT_TOTAL_BUDGET_MS = 10_000`. The 3s default shipped with #14 false-positively fell back on cold-cache CI (#310): the §2 cold-start figure (~2.6s) plus the WSL2/CI 9p stat-storm outlier (~3.3s, see Benchmark notes) routinely cleared 3s before the daemon listened. The retry loop runs only after a spawn — warm reconnects succeed on the first `connector()` call and never enter `retryConnect()` — so the headroom is invisible to dev-loop builds. Cost: when the daemon is genuinely broken, fallback now takes up to ~10s per build; this is paid once because subsequent builds still re-spawn rather than wait, but the failure mode is louder than before.
 
 ### §6 Independent Gradle build via includeBuild
 

@@ -28,7 +28,9 @@ import platform.posix.timespec
 import platform.posix.usleep
 
 // ADR 0016, #14. Not load-bearing for correctness — all failures are fallback-eligible
-// except CompilationFailed. Retry policy: exponential backoff (10..200ms) within 3s budget.
+// except CompilationFailed. Retry policy: exponential backoff (10..200ms) within 10s budget.
+// Budget covers cold-spawn only (warm reconnect short-circuits before the retry loop), so
+// dev-loop responsiveness on warm caches is unaffected; cold-cache CI needs the headroom.
 class DaemonCompilerBackend
 internal constructor(
   private val javaBin: String,
@@ -144,7 +146,7 @@ internal constructor(
   companion object {
     internal const val INITIAL_BACKOFF_MS = 10
     internal const val MAX_BACKOFF_MS = 200
-    internal const val CONNECT_TOTAL_BUDGET_MS: Long = 3000L
+    internal const val CONNECT_TOTAL_BUDGET_MS: Long = 10_000L
   }
 }
 

@@ -472,9 +472,9 @@ class DaemonCompilerBackendConnectAndSpawnTest {
     val backend = newBackend(connector = connector, spawner = { _, _ -> Ok(Unit) }, clock = clock)
     val err = assertNotNull(backend.compile(sampleRequest()).getError())
     val unavailable = assertIs<CompileError.BackendUnavailable.Other>(err)
-    assertTrue(unavailable.detail.contains("within 3000ms"))
+    assertTrue(unavailable.detail.contains("within 10000ms"))
     assertTrue(attempts > 1, "expected at least one retry attempt after spawn")
-    assertTrue(clock.nowMs >= 3000L, "fake clock should have advanced past the budget")
+    assertTrue(clock.nowMs >= 10000L, "fake clock should have advanced past the budget")
   }
 }
 
