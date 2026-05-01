@@ -9,7 +9,7 @@ date: 2026-04-30
 
 - `kolt.toml` is a project-shared, commit-tracked file. Per-machine and per-environment values do not belong in it (§1).
 - The parser does not perform `${env.X}` interpolation on any value. The decision is enforced at parse time, not by convention (§2).
-- Environment-specific values arrive through two designated channels: a CLI `-D<key>=<value>` flag on `kolt test` / `kolt run` (#319), and a per-user `kolt.local.toml` overlay (#320). Both are deferred to follow-up issues; this ADR commits the contract they will satisfy (§3).
+- Environment-specific values arrive through two designated channels: a CLI `-D<key>=<value>` flag on `kolt test` / `kolt run` (#319, landed), and a per-user `kolt.local.toml` overlay (#320, deferred). The CLI flag overlays kolt.toml-declared sysprops literal-only; CLI value wins on key collision (§3).
 - The `[test.sys_props]` and `[run.sys_props]` value shapes admitted today (literal / classpath / project_dir) are deliberately limited to project-derivable forms so the env-agnostic invariant is structural, not stylistic (§4).
 - The decision is reversible only by superseding ADR if a future contributor wants to add interpolation. The follow-up issues are the path that does not require superseding (§5).
 
@@ -58,7 +58,7 @@ Two channels are committed for environment-specific override of declared sysprop
 - **CLI flag** (#319). `kolt test -D<key>=<value> [...]` and `kolt run -D<key>=<value> [...]` overlay literal values onto the kolt.toml-declared sysprops at invocation time. CLI values are literal-only — the structured `{ classpath = ... }` / `{ project_dir = ... }` forms remain `kolt.toml`-exclusive because they only make sense in the context of declared bundles and project paths. Use case: one-off debugging, ad-hoc fixture overrides.
 - **Per-user override file** (#320). `kolt.local.toml` (project-local, recommended `.gitignore` entry) overlays kolt.toml's `[test.sys_props]` / `[run.sys_props]` for a single working tree. Use case: persistent per-developer settings that should not be committed.
 
-Both channels are scheduled as follow-up issues. They are not load-bearing for the v0.X release of `[test.sys_props]` / `[run.sys_props]` itself — the existing surface is useful as-is for project-derivable values (e.g., compiler-plugin classpaths, daemon source roots) which is the primary motivating use case (#315).
+The CLI flag landed (PR for #319 wires `-D<key>=<value>` through `parseKoltArgs` into `jvmTestArgv` / `jvmRunArgv` with overlay semantics: kolt.toml-declared sysprops first in declaration order, CLI flags appended in command-line order, same-key collisions drop the toml entry). The per-user overlay (#320) remains deferred. Neither was load-bearing for the v0.X release of `[test.sys_props]` / `[run.sys_props]` itself — the existing surface is useful as-is for project-derivable values (e.g., compiler-plugin classpaths, daemon source roots) which is the primary motivating use case (#315).
 
 ### §4 Admitted value shapes are project-derivable by design
 
@@ -84,8 +84,8 @@ The CLI flag (#319) and per-user overlay (#320) are the path that does not requi
 - Two designated channels (CLI flag, override file) cover the common env-specific use cases without polluting `kolt.toml`.
 
 **Negative**
-- Common idioms like "log level controlled by `LOG_LEVEL`" require either CLI flag at every invocation (until #319 lands, then via `-Dlog.level=...`) or `kolt.local.toml` (until #320 lands).
-- Until #319 and #320 land, contributors with env-specific needs have only the indirect path: set the env var before running `kolt test`, and have application code read it directly via `System.getenv(...)` rather than through a sysprop.
+- Common idioms like "log level controlled by `LOG_LEVEL`" require either a CLI flag at every invocation (`-Dlog.level=...`) or `kolt.local.toml` (until #320 lands).
+- Until #320 lands, persistent per-developer sysprop overrides require an alias / wrapper script around `kolt test` / `kolt run`; the CLI flag covers one-off invocations only.
 
 ### Confirmation
 
@@ -102,7 +102,7 @@ The CLI flag (#319) and per-user overlay (#320) are the path that does not requi
 ## Related
 
 - #318 — jvm-sys-props spec (this ADR's parent)
-- #319 — CLI `-D<key>=<value>` flag for `kolt test` / `kolt run` (deferred channel)
+- #319 — CLI `-D<key>=<value>` flag for `kolt test` / `kolt run` (landed)
 - #320 — Per-user `kolt.local.toml` override file (deferred channel)
 - ADR 0028 — v1 release policy (pre-v1 breaking changes are acceptable; this ADR commits a long-term contract)
 - `.kiro/specs/jvm-sys-props/design.md` — design that this ADR codifies
