@@ -402,7 +402,7 @@ classDiagram
 | エラー種別 | 検出箇所 | 応答 |
 |---|---|---|
 | kolt.toml parse 失敗 | `parseConfig` が `Err(ConfigError)` 返却 | stderr に `[watch] ⚠ kolt.toml parse error: <msg>; retaining previous configuration` を出力、 in-memory config retain、 rebuild skip (Req 2.5) |
-| schema-未知 section の出現 | `classifyChange` が matrix table 未収録の section name を検知 | defensive fallback の `NotifyOnly("This section is not yet classified; please file an issue")` を 1 行返す。 watch loop は通常の notify-only 経路で出力 |
+| schema-未知 section の出現 | `classifyChange` が matrix table 未収録の section name を検知 | defensive fallback の `NotifyOnly("This section is not yet classified; please file an issue or update ChangeMatrix.kt")` を 1 行返す。 watch loop は通常の notify-only 経路で出力 |
 | `commandRunner` の rebuild 失敗 | `commandRunner` が non-zero return | 既存挙動を踏襲 (`error: ...` を eprintln、 watch を継続) |
 | in-memory config 更新後の watcher 再構築失敗 | (inotify add 失敗等) | 既存挙動を踏襲 (error log、 ループ継続) |
 

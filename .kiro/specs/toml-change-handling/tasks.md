@@ -11,7 +11,7 @@
     - _Boundary: kolt.config.ChangeMatrix_
 
 - [ ] 2. ChangeMatrix Core: classification and dispatch logic
-  - [ ] 2.1 Implement classifyChange covering identity, per-section diff, and defensive fallback
+  - [x] 2.1 Implement classifyChange covering identity, per-section diff, and defensive fallback
     - Red: write unit tests asserting (a) `classifyChange(c, c)` returns empty list, (b) per-section field-only diff fixtures produce one expected `SectionChange` aligned with the matrix table in design.md, (c) a synthetic unknown-section name yields a defensive `NotifyOnly` fallback line
     - Green: implement section-by-section comparison using `KoltConfig` data-class equality and an internal section-to-action lookup table aligned with the design matrix
     - Refactor: factor the section-to-action lookup table into a private constant for reuse by planDispatch and the schema-coverage test
