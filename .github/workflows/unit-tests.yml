@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.16.3
+  KOLT_BOOTSTRAP_TAG: v0.17.0
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
@@ -105,12 +105,11 @@ jobs:
       # exercises the JVM compiler daemon. The pre-#302 bug surfaced as
       # `kolt-jvm-compiler-daemon jar not found — falling back to
       # subprocess compile`, which short-circuited before any spawn
-      # attempt. The canary requires `starting compiler daemon` in stderr
-      # — i.e. the daemon code path was reached. Whether the spawn itself
-      # connects within the retry budget is orthogonal: #310 raised the
-      # budget to 10s in the dev tree, but the bootstrap tag here still
-      # ships 3s, so the negative assertion (no `falling back to
-      # subprocess`) is gated on the next bootstrap bump.
+      # attempt. The canary requires `starting compiler daemon` in
+      # stderr — i.e. the daemon code path was reached. The negative
+      # assertion (no `falling back to subprocess`) is deferred: #332
+      # raised the connect budget to 10s but cold-cache CI still
+      # subprocess-falls-back, see #336.
       - name: Verify daemon thin jar builds standalone
         run: |
           set -euo pipefail
