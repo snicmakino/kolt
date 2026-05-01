@@ -80,7 +80,7 @@ kolt --version              Show version
 
 | Flag | Description |
 |------|-------------|
-| `--watch` | Watch source files and re-run on change (build/check/test/run) |
+| `--watch` | Watch source files and re-run on change (build/test/run). Not supported for `check` — use an LSP for editor type-check feedback. |
 | `--no-daemon` | Skip the warm compiler daemon for this invocation. Always available, even on Kotlin versions outside the daemon's supported range (ADR 0022). |
 | `--release` | Build under the release profile. Native: enables `-opt`, omits `-g`, writes artifacts to `build/release/`. JVM: declared no-op; the artifact still moves to `build/release/<name>.jar`. Debug remains the default. |
 | `-D<key>=<value>` | JVM system property for `kolt test` / `kolt run` (JVM target only). Overlays declared `[test.sys_props]` / `[run.sys_props]`; same-key collisions drop the toml entry. CLI values are literal-only. |

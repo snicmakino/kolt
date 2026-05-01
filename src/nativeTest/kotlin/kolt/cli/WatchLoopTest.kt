@@ -25,12 +25,6 @@ class CollectWatchPathsTest {
   }
 
   @Test
-  fun checkWatchesSameAsBuild() {
-    val config = testConfig(sources = listOf("src"))
-    assertEquals(collectWatchPaths(config, "build"), collectWatchPaths(config, "check"))
-  }
-
-  @Test
   fun runWatchesSameAsBuild() {
     val config = testConfig(sources = listOf("src"))
     assertEquals(collectWatchPaths(config, "build"), collectWatchPaths(config, "run"))

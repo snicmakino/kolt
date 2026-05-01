@@ -185,7 +185,7 @@ flowchart TD
 **Key decisions** (ダイアグラム外の補足):
 - **Mixed-window prevails**: `HasNotify` ブランチが yes になると、 同時変更された AutoReload sections は **skip** される。 reload も rebuild も走らない。 user が notify-only sections の推奨アクションを取って watch を再起動した時点で、 fresh process の startup load で auto-reload sections も反映される (Req 4.6)
 - **Build serialization**: handler が synchronous で `Invoke` から戻るまで次の inotify event は kernel buffer 保留。 explicit in-flight flag は不要 (Req 7.1〜7.3 が構造的に成立)
-- **`[run.sys_props]` respawn (D-8 確定)**: `watchRunLoop` 専用の post-AutoReload step。 `plan.rebuild = false` かつ `plan.changedSections` に `run.sys_props` が含まれる時、 running app を kill して新 sysprops で respawn。 `watchCommandLoop` (build/test/check) ではこの step は no-op
+- **`[run.sys_props]` respawn (D-8 確定)**: `watchRunLoop` 専用の post-AutoReload step。 `plan.rebuild = false` かつ `plan.changedSections` に `run.sys_props` が含まれる時、 running app を kill して新 sysprops で respawn。 `watchCommandLoop` (build/test) ではこの step は no-op
 - **Empty changes (Req 2.3)**: `classifyChange` が空 list を返すケース (file が touch されたが内容同一) は plan を組み立てる前に early return
 
 ## Requirements Traceability

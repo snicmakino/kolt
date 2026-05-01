@@ -106,7 +106,7 @@ Each row's "Section" cell uses the canonical key in `SECTION_ACTIONS` (`src/nati
 
 For the `AutoReload` rows that include `[build] sources` or `[build] resources`, the watch loop additionally reconstructs its watcher path set (full rebuild: unregister all existing inotify watches, re-run `collectWatchPaths`, re-register the new path set) before triggering the rebuild. Differential watcher updates are out of scope; a kolt project's watch path count is small enough that full rebuild costs nothing measurable.
 
-For `[run.sys_props]` in `kolt run --watch` specifically, when the AutoReload path applies (i.e. `plan.reload && !plan.rebuild` and `[run.sys_props]` is in the changed sections), the running app is killed and respawned with the new sysprops via the existing run-loop spawn path. This is the only loop-specific dispatch — `watchCommandLoop` (build / test / check) does not respawn anything.
+For `[run.sys_props]` in `kolt run --watch` specifically, when the AutoReload path applies (i.e. `plan.reload && !plan.rebuild` and `[run.sys_props]` is in the changed sections), the running app is killed and respawned with the new sysprops via the existing run-loop spawn path. This is the only loop-specific dispatch — `watchCommandLoop` (build / test) does not respawn anything.
 
 ### §4 Notify-only-prevail in mixed windows
 

@@ -30,7 +30,7 @@ fun main(args: Array<String>) {
       if (watch) watchCommandLoop("build", useDaemon, profile = profile)
       else doBuild(useDaemon = useDaemon, profile = profile).getOrElse { exitProcess(it) }
     "check" ->
-      if (watch) watchCommandLoop("check", useDaemon, profile = profile)
+      if (watch) exitProcess(rejectCheckWatch())
       else doCheck(useDaemon = useDaemon, profile = profile).getOrElse { exitProcess(it) }
     "run" -> {
       val appArgs =

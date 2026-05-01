@@ -72,7 +72,6 @@ kolt add <dep>         依存を追加（deps add のエイリアス）
 kolt build --watch     監視して再ビルド
 kolt test --watch      監視して再テスト
 kolt run --watch       監視して再ビルド・アプリ再起動
-kolt check --watch     監視して型チェック
 kolt fmt               ktfmt でソースファイルをフォーマット
 kolt fmt --check       フォーマットチェック（CI モード）
 kolt clean             ビルド成果物を削除
@@ -97,7 +96,7 @@ kolt --version         バージョンを表示
 
 | フラグ | 説明 |
 |--------|------|
-| `--watch` | ソースファイルを監視し、変更時にコマンドを再実行（build/check/test/run） |
+| `--watch` | ソースファイルを監視し、変更時にコマンドを再実行（build/test/run）。`check` では非対応 — エディタ向け型チェックは LSP を利用してください。 |
 | `--no-daemon` | この実行でウォームコンパイラデーモンをスキップ。daemon サポート対象外の Kotlin バージョン (ADR 0022) でも常に利用可能。 |
 | `--release` | release プロファイルでビルドする。Native は `-opt` を有効化し `-g` を外して `build/release/` に出力。JVM では宣言上 no-op（kotlinc 引数も daemon IC パスも変わらない）だが、両プロファイル成果物を相互に上書きしないよう成果物パスは `build/release/<name>.jar` に切り替わる。デフォルトは `debug` プロファイルで、両プロファイルの成果物はディスク上に共存するためプロファイルを切り替えても他方の IC が無効化されることはない。詳細は [ADR 0030](docs/adr/0030-build-profiles.md) を参照。 |
 | `-D<key>=<value>` | `kolt test` / `kolt run` 用の JVM システムプロパティ（JVM ターゲットのみ）。宣言済みの `[test.sys_props]` / `[run.sys_props]` に対するオーバーレイで、同一キーが衝突した場合は kolt.toml 側のエントリを破棄する。CLI 値は literal のみ。詳細は [ADR 0032](docs/adr/0032-kolt-toml-env-agnostic.md) を参照。 |

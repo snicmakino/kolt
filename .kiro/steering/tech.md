@@ -84,7 +84,7 @@ kolt init [name]                  # create project
 kolt build    [--watch] [--release]   # compile (debug default; --release writes build/release/)
 kolt run      [--watch] [--release]   # build + run
 kolt test     [--watch] [--release]   # build + run tests
-kolt check    [--watch] [--release]   # type-check only
+kolt check    [--release]             # type-check only (no --watch; use LSP)
 kolt fmt      [--check]           # ktfmt format (or verify in CI)
 kolt add <dep>                    # add dependency to kolt.toml
 kolt deps [install|update|tree]   # resolve / inspect deps

@@ -839,6 +839,13 @@ internal fun rejectIfLibrary(
   return Err(EXIT_CONFIG_ERROR)
 }
 
+// `kolt check --watch` overlaps with LSP responsibility — incremental
+// editor type-check feedback is what an LSP exists for.
+internal fun rejectCheckWatch(eprint: (String) -> Unit = ::eprintln): Int {
+  eprint("error: --watch is not supported on `kolt check`; use an LSP for live type-check feedback")
+  return EXIT_CONFIG_ERROR
+}
+
 // CLI `-D<key>=<value>` is JVM-only (ADR 0032 §3). Mirrors the parse-time
 // rejection of `[test.sys_props]` / `[run.sys_props]` on native targets
 // (Config.kt) so the contract is symmetric: a user who declares sysprops

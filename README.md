@@ -73,7 +73,6 @@ kolt add <dep>         Add a dependency (alias for deps add)
 kolt build --watch     Watch and rebuild
 kolt test --watch      Watch and retest
 kolt run --watch       Watch, rebuild, and restart app
-kolt check --watch     Watch and type-check
 kolt fmt               Format source files with ktfmt
 kolt fmt --check       Check formatting (CI mode)
 kolt clean             Remove build artifacts
@@ -98,7 +97,7 @@ kolt --version         Show version
 
 | Flag | Description |
 |------|-------------|
-| `--watch` | Watch source files and re-run the command on change (build/check/test/run) |
+| `--watch` | Watch source files and re-run the command on change (build/test/run). Not supported for `check` — use an LSP for editor type-check feedback. |
 | `--no-daemon` | Skip the warm compiler daemon for this invocation. Always available, including on Kotlin versions outside the daemon's supported range (ADR 0022). |
 | `--release` | Build under the release profile. Native: enables `-opt`, omits `-g`, writes artifacts to `build/release/`. JVM: declared no-op (same kotlinc args, same daemon IC path) — the artifact still moves to `build/release/<name>.jar` so the two profiles' outputs do not overwrite each other. Default profile is `debug`; both profiles' artifacts coexist on disk so switching between them does not invalidate the other. See [ADR 0030](docs/adr/0030-build-profiles.md). |
 | `-D<key>=<value>` | JVM system property for `kolt test` / `kolt run` (JVM target only). Overlays declared `[test.sys_props]` / `[run.sys_props]`; same-key collisions drop the toml entry. CLI values are literal-only. See [ADR 0032](docs/adr/0032-kolt-toml-env-agnostic.md). |

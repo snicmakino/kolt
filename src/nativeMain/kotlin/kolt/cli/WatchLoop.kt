@@ -182,7 +182,6 @@ internal fun watchCommandLoop(
   commandRunner: (String, Boolean, List<String>) -> Result<*, Int> = { cmd, daemon, args ->
     when (cmd) {
       "build" -> doBuild(useDaemon = daemon, profile = profile)
-      "check" -> doCheck(useDaemon = daemon, profile = profile)
       "test" ->
         doTest(testArgs = args, useDaemon = daemon, profile = profile, cliSysProps = cliSysProps)
       else -> doBuild(useDaemon = daemon, profile = profile)
