@@ -9,19 +9,19 @@ processes over Unix sockets to amortize kotlinc startup cost.
 Self-host closed as of v0.14.0 (#97 / #228): both the native binary and the daemon
 JARs build from their own `kolt.toml`s. The `self-host-post` CI job exercises this
 path end-to-end (3× `kolt build` + `scripts/assemble-dist.sh` stitch + tarball
-install + fixture smoke). Gradle is kept in parallel as the bootstrap path and as
-the cross-check until v1.0.
+install + fixture smoke).
 
-Top-level build layout uses Gradle `includeBuild()` to decouple three pieces: the
-root native project, `kolt-jvm-compiler-daemon/` (JVM daemon), and
-`kolt-native-compiler-daemon/` (native-compiler sidecar).
+Top-level build splits into three independent kolt subprojects: the root native
+project, `kolt-jvm-compiler-daemon/` (JVM daemon), and
+`kolt-native-compiler-daemon/` (native-compiler sidecar). Each builds from its own
+`kolt.toml`.
 
 ## Core Technologies
 
-- **Language**: Kotlin 2.3.x (pinned in both `build.gradle.kts` and `kolt.toml`). The
-  Kotlin compiler version used for user builds is independently overridable via
-  `[kotlin] compiler = "..."` so users can pin an older API.
-- **JVM target**: JDK 25 for daemon JARs and Gradle builds.
+- **Language**: Kotlin 2.3.x (pinned in `kolt.toml`). The Kotlin compiler version used
+  for user builds is independently overridable via `[kotlin] compiler = "..."` so
+  users can pin an older API.
+- **JVM target**: JDK 25 for daemon JARs.
 - **Native target**: linuxX64 via Kotlin/Native (konanc). Two-stage library+link
   compile flow (ADR 0014) to keep plugin registrars working on native.
 
@@ -72,12 +72,9 @@ the repo is English-first.
 - **JDK** (host or `[build] jdk`-managed). Daemon pins JDK 25.
 - **kotlinc** — auto-downloaded to `~/.kolt/toolchains/kotlinc/{version}/` on first
   run; falls back to system kotlinc if present.
-- **konanc** — auto-installed on first native build; also provisioned by Gradle
-  during development.
+- **konanc** — auto-installed on first native build.
 - **libcurl** (Linux native build): `libcurl4-openssl-dev` headers.
 - **libarchive** (Linux native build): `libarchive-dev` headers; `libarchive13` runtime.
-- **Gradle 8.12** — only for building the daemon JARs / doing dev work; end users of
-  kolt never see Gradle.
 
 ### Common Commands
 

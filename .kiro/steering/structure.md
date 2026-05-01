@@ -4,8 +4,8 @@
 
 **Native-first multiplatform with JVM sidecars as separate builds.** The root project
 only has `nativeMain` / `nativeTest` source sets; JVM daemon code lives in two
-included Gradle builds (`kolt-jvm-compiler-daemon/`, `kolt-native-compiler-daemon/`) with their
-own build files. Packages inside the native source are split **by responsibility**,
+independent kolt subprojects (`kolt-jvm-compiler-daemon/`, `kolt-native-compiler-daemon/`) with their
+own `kolt.toml`s. Packages inside the native source are split **by responsibility**,
 not by layer.
 
 ## Top-Level Layout
@@ -13,14 +13,13 @@ not by layer.
 - `src/nativeMain/kotlin/` — production code (native linuxX64).
 - `src/nativeTest/kotlin/` — tests, mirroring the production package tree.
 - `src/nativeInterop/cinterop/` — C FFI (e.g. `libcurl.def`).
-- `kolt-jvm-compiler-daemon/` — JVM daemon, independent Gradle build.
-- `kolt-native-compiler-daemon/` — native-compiler daemon sidecar, independent Gradle build.
+- `kolt-jvm-compiler-daemon/` — JVM daemon, independent kolt subproject.
+- `kolt-native-compiler-daemon/` — native-compiler daemon sidecar, independent kolt subproject.
 - `docs/` — prose docs and ADRs (`docs/adr/`).
 - `spike/` — experimental probes and benchmark harnesses. May be deleted freely;
   should never be imported from production code.
 - `scripts/` — dev and release scripts.
-- `kolt.toml`, `build.gradle.kts` — build configuration (kolt self-host config +
-  Gradle bootstrap).
+- `kolt.toml` — build configuration (kolt self-host config).
 
 `.kiro/` and `.claude/` hold spec-driven-development metadata and agent tooling. They
 are load-bearing for the workflow but out of scope for production code patterns.

@@ -8,12 +8,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
 
-// Test-side mirror of the Gradle `verifyDaemon*` drift guards. Migrating
-// these checks into native tests means they survive the planned removal
-// of Gradle from the root build (#97/#228 daemon self-host direction)
-// while still running under `./gradlew linuxX64Test` today. The third
-// test guards the `BOOTSTRAP_JDK_VERSION` <-> daemon `jdk`/`jvm_target`
-// <-> `jvmToolchain(N)` triangle, which had no Gradle guard before.
 class DriftGuardsTest {
 
   @Test
@@ -36,23 +30,25 @@ class DriftGuardsTest {
           "$root/kolt-native-compiler-daemon/src/main/kotlin/kolt/nativedaemon/Main.kt",
           Regex("""const\s+val\s+KOLT_NATIVE_DAEMON_KOTLIN_VERSION\s*:\s*String\s*=\s*"([^"]+)""""),
         ),
-        // Anchor on the closing `"` of the Gradle string literal so a
-        // comment line like `// kotlin-build-tools-impl:2.3.20 for ...`
-        // does not satisfy the match.
         Pin(
-          "kolt-jvm-compiler-daemon/build.gradle.kts `kotlin-compiler-embeddable`",
-          "$root/kolt-jvm-compiler-daemon/build.gradle.kts",
-          Regex("""kotlin-compiler-embeddable:([^"\s]+)""""),
+          "kolt-jvm-compiler-daemon/kolt.toml `[kotlin] version`",
+          "$root/kolt-jvm-compiler-daemon/kolt.toml",
+          Regex("""(?ms)^\[kotlin\][^\[]*?^version\s*=\s*"([^"]+)""""),
         ),
         Pin(
-          "kolt-jvm-compiler-daemon/ic/build.gradle.kts `kotlin-build-tools-api`",
-          "$root/kolt-jvm-compiler-daemon/ic/build.gradle.kts",
-          Regex("""kotlin-build-tools-api:([^"\s]+)""""),
+          "kolt-native-compiler-daemon/kolt.toml `[kotlin] version`",
+          "$root/kolt-native-compiler-daemon/kolt.toml",
+          Regex("""(?ms)^\[kotlin\][^\[]*?^version\s*=\s*"([^"]+)""""),
         ),
         Pin(
-          "kolt-jvm-compiler-daemon/ic/build.gradle.kts `kotlin-build-tools-impl`",
-          "$root/kolt-jvm-compiler-daemon/ic/build.gradle.kts",
-          Regex("""kotlin-build-tools-impl:([^"\s]+)""""),
+          "kolt-jvm-compiler-daemon/kolt.toml `kotlin-build-tools-api`",
+          "$root/kolt-jvm-compiler-daemon/kolt.toml",
+          Regex(""""org\.jetbrains\.kotlin:kotlin-build-tools-api"\s*=\s*"([^"]+)""""),
+        ),
+        Pin(
+          "kolt-jvm-compiler-daemon/kolt.toml `kotlin-build-tools-impl`",
+          "$root/kolt-jvm-compiler-daemon/kolt.toml",
+          Regex(""""org\.jetbrains\.kotlin:kotlin-build-tools-impl"\s*=\s*"([^"]+)""""),
         ),
       )
     assertAllAgree("daemon Kotlin version", pins)
@@ -150,21 +146,6 @@ class DriftGuardsTest {
           "$root/kolt-native-compiler-daemon/kolt.toml",
           Regex("""(?m)^jvm_target\s*=\s*"([^"]+)""""),
         ),
-        Pin(
-          "kolt-jvm-compiler-daemon/build.gradle.kts `jvmToolchain(N)`",
-          "$root/kolt-jvm-compiler-daemon/build.gradle.kts",
-          Regex("""jvmToolchain\((\d+)\)"""),
-        ),
-        Pin(
-          "kolt-jvm-compiler-daemon/ic/build.gradle.kts `jvmToolchain(N)`",
-          "$root/kolt-jvm-compiler-daemon/ic/build.gradle.kts",
-          Regex("""jvmToolchain\((\d+)\)"""),
-        ),
-        Pin(
-          "kolt-native-compiler-daemon/build.gradle.kts `jvmToolchain(N)`",
-          "$root/kolt-native-compiler-daemon/build.gradle.kts",
-          Regex("""jvmToolchain\((\d+)\)"""),
-        ),
       )
     assertAllAgree("bootstrap JDK", pins)
   }
@@ -194,8 +175,7 @@ class DriftGuardsTest {
         appendLine("$subject pins drift:")
         for (e in extracted) appendLine("  - ${e.label}: \"${e.value}\"")
         append(
-          "Update all sites together so they share a single value, " +
-            "then rerun ./gradlew linuxX64Test."
+          "Update all sites together so they share a single value, " + "then rerun `kolt test`."
         )
       }
       fail(msg)
@@ -242,11 +222,10 @@ class DriftGuardsTest {
 
   private fun nameOnly(path: String): String = path.substringAfterLast('/')
 
-  // Walk up from cwd until we hit `.git` (project root). Both Gradle
-  // (`linuxX64Test`) and self-host (`kolt test`) launch from the project
-  // root so the loop normally terminates on the first iteration; the
-  // walk is defensive against future runners that might `cd` into a
-  // subdirectory.
+  // Walk up from cwd until we hit `.git` (project root). `kolt test`
+  // launches from the project root so the loop normally terminates on
+  // the first iteration; the walk is defensive against future runners
+  // that might `cd` into a subdirectory.
   private fun projectRoot(): String {
     var current = currentWorkingDirectory() ?: fail("could not get cwd for project-root lookup")
     while (current.isNotEmpty() && current != "/") {
