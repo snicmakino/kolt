@@ -1,5 +1,6 @@
 package kolt.cli
 
+import kolt.infra.InotifyEvent
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -120,5 +121,49 @@ class ShouldTriggerRebuildTest {
   @Test
   fun emptyNameDoesNotTrigger() {
     assertFalse(shouldTriggerRebuild(""))
+  }
+}
+
+class HasKoltTomlEventTest {
+
+  @Test
+  fun koltTomlEventInRootDirIsDetected() {
+    val wdKinds = mapOf(1 to WatchKind.ROOT_DIR)
+    val events = listOf(InotifyEvent(wd = 1, mask = 0u, name = "kolt.toml"))
+    assertTrue(hasKoltTomlEvent(events, wdKinds))
+  }
+
+  @Test
+  fun sourceFileEventDoesNotMatchKoltTomlPath() {
+    val wdKinds = mapOf(1 to WatchKind.ROOT_DIR, 2 to WatchKind.SOURCE_DIR)
+    val events =
+      listOf(
+        InotifyEvent(wd = 2, mask = 0u, name = "Main.kt"),
+        InotifyEvent(wd = 2, mask = 0u, name = "Lib.kts"),
+      )
+    assertFalse(hasKoltTomlEvent(events, wdKinds))
+  }
+
+  @Test
+  fun koltTomlInSourceDirIsNotMatched() {
+    val wdKinds = mapOf(2 to WatchKind.SOURCE_DIR)
+    val events = listOf(InotifyEvent(wd = 2, mask = 0u, name = "kolt.toml"))
+    assertFalse(hasKoltTomlEvent(events, wdKinds))
+  }
+
+  @Test
+  fun mixedEventsRecognizeKoltToml() {
+    val wdKinds = mapOf(1 to WatchKind.ROOT_DIR, 2 to WatchKind.SOURCE_DIR)
+    val events =
+      listOf(
+        InotifyEvent(wd = 2, mask = 0u, name = "Main.kt"),
+        InotifyEvent(wd = 1, mask = 0u, name = "kolt.toml"),
+      )
+    assertTrue(hasKoltTomlEvent(events, wdKinds))
+  }
+
+  @Test
+  fun emptyEventListYieldsFalse() {
+    assertFalse(hasKoltTomlEvent(emptyList(), emptyMap()))
   }
 }

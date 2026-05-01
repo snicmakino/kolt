@@ -1,0 +1,97 @@
+# Implementation Plan: toml-change-handling
+
+- [x] 1. Foundation: ChangeMatrix module scaffolding
+  - [x] 1.1 Create ChangeMatrix module with SectionAction taxonomy and supporting types
+    - Define `SectionAction` sealed class with `AutoReload(rebuild: Boolean)`, `NotifyOnly(recommendation: String)`, `NoOp` variants per design taxonomy
+    - Define `SectionChange` data class (sectionName + action) and `DispatchPlan` data class (reload, rebuild, notifications, changedSections)
+    - Define `NOTIFICATION_MARKER` constant ("[watch] ⚠")
+    - Add stub bodies for `classifyChange` and `planDispatch` (return empty list / empty plan) so the file compiles standalone
+    - Observable: `kolt build` and `kolt test` pass with the new file present; types are importable from `kolt.config` package
+    - _Requirements: 8.2, 8.3, 8.4_
+    - _Boundary: kolt.config.ChangeMatrix_
+
+- [x] 2. ChangeMatrix Core: classification and dispatch logic
+  - [x] 2.1 Implement classifyChange covering identity, per-section diff, and defensive fallback
+    - Red: write unit tests asserting (a) `classifyChange(c, c)` returns empty list, (b) per-section field-only diff fixtures produce one expected `SectionChange` aligned with the matrix table in design.md, (c) a synthetic unknown-section name yields a defensive `NotifyOnly` fallback line
+    - Green: implement section-by-section comparison using `KoltConfig` data-class equality and an internal section-to-action lookup table aligned with the design matrix
+    - Refactor: factor the section-to-action lookup table into a private constant for reuse by planDispatch and the schema-coverage test
+    - Observable: ChangeMatrix unit tests pass; running `kolt test` shows the per-matrix-cell test cases in green
+    - _Requirements: 2.3, 2.4, 8.6, 8.13_
+    - _Boundary: kolt.config.ChangeMatrix_
+  - [x] 2.2 Implement planDispatch covering all five branches and notify-only-prevail semantics
+    - Red: write unit tests covering (a) empty input, (b) all-NoOp, (c) `AutoReload(rebuild=true)` sets `reload=true, rebuild=true`, (d) `AutoReload(rebuild=false)` only sets `reload=true`, (e) any `NotifyOnly` forces `reload=false, rebuild=false, notifications` non-empty (mixed-window prevail)
+    - Green: implement branching logic that respects notify-only-prevail; format each `NotifyOnly` notification line as `${NOTIFICATION_MARKER} [${sectionName}] changed; ${recommendation}`
+    - Refactor: enforce the invariant `notifications.isNotEmpty()` ⇔ `!reload && !rebuild` via a single guard or test-visible assertion
+    - Observable: planDispatch tests all pass; notification format string is inspectable in test output and matches the `[watch] ⚠ [<section>] changed; <action>` shape
+    - _Requirements: 3.1, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 6.2, 6.4_
+    - _Boundary: kolt.config.ChangeMatrix_
+  - [x] 2.3 Implement schema-coverage cross-validation test
+    - Hardcode a `KOLT_CONFIG_SECTIONS` set inside the test file enumerating top-level scalar names and section names exposed via `KoltConfig`
+    - Hardcode (or expose for test) the matrix table's section name set
+    - Assert the two sets are equal so adding a section to either side without the other fails the test with a clear delta message
+    - Observable: `kolt test` passes with both lists agreeing; deliberately removing one entry from either list reproduces a clear failure naming the missing section
+    - _Requirements: 8.13_
+    - _Boundary: kolt.config.ChangeMatrix_
+
+- [x] 3. (P) ADR 0033 publication
+  - [x] 3.1 Draft and publish ADR 0033 "kolt.toml change-handling model"
+    - Status / Date / Summary section with 5–7 bullets covering 3-value taxonomy, per-invocation matrix, watch matrix, mixed-window prevail, build-serialize, daemon-stateless reaffirmation, and `kolt deps remove` follow-up reference
+    - Context section motivating the matrix from #297 and the implicit-rules problem
+    - Decision section with two matrix tables (per-invocation + watch) covering every section listed in the design matrix draft; render `[kotlin]` family with visual sub-section grouping
+    - Rationale section recording mixed-window prevail logic, build-serialize over cancel, NotifyOnly placement for `[kotlin]` family with explicit-user-operations preference, and daemon stateless decision
+    - Maintenance clause requiring future schema additions to update both matrix tables before merging
+    - Alternatives section recording rejection of β1 (auto-resync) and α2 (daemon observation) with reasons
+    - Related section linking #297, ADR 0019, ADR 0024, and `.kiro/specs/toml-change-handling/`
+    - Observable: `docs/adr/0033-kolt-toml-change-handling-model.md` exists, renders correctly, and contains both matrix tables with all design-listed sections present
+    - _Depends: 1.1_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 9.2, 9.3_
+    - _Boundary: docs/adr/0033_
+
+- [x] 4. docs/architecture.md cross-reference update
+  - [x] 4.1 Add Configuration change semantics section to docs/architecture.md
+    - New short section briefly summarizes the change-handling model (per-invocation eager + watch matrix dispatch) and links to ADR 0033 by relative path
+    - Observable: rendered `docs/architecture.md` shows the new section with a working ADR 0033 link and section title appears in the table of contents (if present)
+    - _Depends: 3.1_
+    - _Requirements: 8.12_
+    - _Boundary: docs/architecture.md_
+
+- [x] 5. (P) WatchLoop integration: change-handling pipeline
+  - [x] 5.1 Wire reparse and parse-error handling into the watch event handler
+    - When the existing inotify event filter detects a `kolt.toml` modification (line ~111 of WatchLoop), call `parseConfig` on the freshly read content
+    - On `Err`: emit `${NOTIFICATION_MARKER} kolt.toml parse error: <msg>; retaining previous configuration` once to stderr; retain the in-memory config; skip rebuild; return to the event loop
+    - On `Ok(newConfig)`: pass to the dispatch pipeline implemented in 5.2
+    - Preserve the existing synchronous handler structure: do not introduce coroutines, threads, or async dispatch; the kernel inotify buffer continues to provide implicit serialization (preserves Req 7.1〜7.4 build-serialization invariant)
+    - Observable: in a manual watch session, saving `kolt.toml` with broken syntax emits the parse-error notification once and does not trigger any rebuild output
+    - _Depends: 2.2_
+    - _Requirements: 2.1, 2.2, 2.5, 7.1, 7.2, 7.3, 7.4_
+    - _Boundary: kolt.cli.WatchLoop_
+  - [x] 5.2 Wire ChangeMatrix dispatch — NotifyOnly path with notification output
+    - After successful reparse, call `classifyChange(currentConfig, newConfig)` then `planDispatch(changes)`
+    - When `plan.notifications` is non-empty: emit each line to stderr as a single notification group within the same debounce window; retain the old config; skip rebuild
+    - Same-section repeated edits within one debounce window collapse to a single line via the existing `settleAndDrain` aggregation behavior
+    - Observable: in a manual watch session, modifying `[dependencies]` emits exactly one notification line `[watch] ⚠ [dependencies] changed; Run kolt deps install` with no `--- change detected, rebuilding ---` line following
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
+    - _Boundary: kolt.cli.WatchLoop_
+  - [x] 5.3 Wire ChangeMatrix dispatch — AutoReload path with full watcher rebuild
+    - When `plan.reload == true` and `plan.notifications` is empty: replace `currentConfig` with `newConfig` in the loop's mutable state
+    - If the section-diff includes `[build.sources]` or `[build.resources]`: full-rebuild watcher state by calling `collectWatchPaths(currentConfig)`, unregister every existing entry of `wdKinds` via `inotify_rm_watch`, then re-register the new path set and rebuild `wdKinds`
+    - When `plan.rebuild == true`: invoke `commandRunner` (which produces the existing `--- change detected, rebuilding ---` output)
+    - When `plan.rebuild == false` (e.g., `[run.sys_props]`/`[test.sys_props]`-only change in `watchCommandLoop`): no rebuild, no respawn, just config refresh — next source-driven rebuild picks up the new sysprops
+    - Observable: in a manual watch session, adding a new directory to `[build.sources]` results in (a) a rebuild with the existing rebuild marker, (b) files newly created in the added directory subsequently trigger rebuilds via inotify
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.1, 5.2, 9.1_
+    - _Boundary: kolt.cli.WatchLoop_
+  - [x] 5.4 Wire `[run.sys_props]` respawn into watchRunLoop only
+    - In `watchRunLoop` only: after AutoReload completes, when `plan.reload && !plan.rebuild && plan.changedSections.any { it.sectionName == "[run.sys_props]" }`, kill the running app and respawn it with new sysprops via the existing run-loop spawn path
+    - Verify or refactor: ensure `commandRunner` (or the run-loop spawn path) reads `currentConfig.run.sysProps` fresh on each invocation; if the existing implementation captures sysprops at startup, refactor to capture by mutable reference so subsequent respawns pick up the latest values
+    - Mixed-window guard: the respawn condition explicitly checks `plan.reload`, so notify-only-prevail cases (where `plan.reload == false`) do not trigger respawn (β3 integrity)
+    - Observable: in a manual `kolt run --watch` session, editing `[run.sys_props]` causes the running app to be killed and respawned; the new env value is visible (e.g., via `System.getProperty(...)` in the test fixture or via a printed value the app emits)
+    - _Requirements: 3.5_
+    - _Boundary: kolt.cli.WatchLoop_
+
+- [x] 6. Validation: regression coverage
+  - [x] 6.1 Add regression coverage for source-file-driven rebuild
+    - Add or extend a `WatchLoopTest` case asserting that source-file (`.kt` / `.kts`) changes still trigger rebuild via the existing path (not the new ChangeMatrix dispatch path) — i.e., `kolt.toml` content unchanged but a `.kt` file was modified
+    - Run the full `kolt test` suite and confirm no regressions in `CollectWatchPathsTest`, `ShouldTriggerRebuildTest`, or any other watch-adjacent test
+    - Observable: full test suite is green; the new regression case fails if WatchLoop incorrectly routes `.kt` changes through ChangeMatrix dispatch (deliberate misroute reproduces the failure)
+    - _Depends: 5.3_
+    - _Requirements: 9.1, 9.3_
