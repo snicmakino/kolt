@@ -5,7 +5,6 @@ import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.build.Profile
 import kolt.build.nativeRunCommand
-import kolt.build.runCommand
 import kolt.config.KoltConfig
 import kolt.config.NATIVE_TARGETS
 import kolt.infra.*
@@ -306,28 +305,17 @@ internal fun watchRunLoop(
         continue
       }
 
+    val projectRoot =
+      currentWorkingDirectory()
+        ?: run {
+          eprintln("error: could not determine current working directory")
+          break
+        }
     val runCmd =
       if (buildResult.config.build.target in NATIVE_TARGETS) {
         nativeRunCommand(buildResult.config, appArgs, profile)
       } else {
-        // Parser invariant `kind == "app" ⇒ main != null` guarantees
-        // non-null; the lib kind gate at loop entry pre-empts libraries,
-        // so this `?: run` is ADR 0001 safety for the parser invariant
-        // and is unreachable on apps at runtime.
-        val jvmMain =
-          buildResult.config.build.main
-            ?: run {
-              eprintln("error: [build] main is required to run")
-              break
-            }
-        runCommand(
-          buildResult.config,
-          main = jvmMain,
-          classpath = buildResult.classpath,
-          appArgs = appArgs,
-          javaPath = buildResult.javaPath,
-          profile = profile,
-        )
+        runJvmCommandFor(buildResult, projectRoot, appArgs, profile)
       }
     val childPid = spawnInProcessGroup(runCmd.args)
     if (childPid < 0) {
