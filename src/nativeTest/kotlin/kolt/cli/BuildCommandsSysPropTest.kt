@@ -307,11 +307,11 @@ class BuildCommandsSysPropTest {
     )
   }
 
-  // #322: `kolt run --watch` shares this argv-build helper with the one-shot
+  // `kolt run --watch` shares this argv-build helper with the one-shot
   // path so `[run.sys_props]` resolution cannot diverge between modes.
-  // The helper unpacks BuildResult into the same jvmRunArgv call doRunInner
-  // makes; this test pins that the bundle-classpath threading survives the
-  // BuildResult round-trip.
+  // The helper unpacks BuildResult into the same jvmRunArgv call the
+  // one-shot path makes; this test pins that the bundle-classpath
+  // threading survives the BuildResult round-trip.
   @Test
   fun runJvmCommandForUnpacksBuildResultThroughJvmRunArgv() {
     val config =
@@ -343,10 +343,10 @@ class BuildCommandsSysPropTest {
     assertEquals("--app-arg", cmd.args.last())
   }
 
-  // Req 7.3 watch-mode counterpart: a BuildResult without `[run.sys_props]`
-  // produces argv with no `-D` slots, byte-identical to the pre-feature
-  // shape. Guards against a future helper edit accidentally inserting an
-  // empty-key sysprop or a default `-D` flag.
+  // A BuildResult without `[run.sys_props]` must produce argv with no
+  // `-D` slots, byte-identical to the no-sysprops shape. Guards against
+  // a future helper edit accidentally inserting an empty-key sysprop or
+  // a default `-D` flag.
   @Test
   fun runJvmCommandForOmitsSysPropsWhenRunSectionEmpty() {
     val buildResult = BuildResult(config = testConfig(), classpath = null, javaPath = null)
