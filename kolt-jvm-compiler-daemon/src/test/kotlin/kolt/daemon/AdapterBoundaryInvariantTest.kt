@@ -15,10 +15,9 @@ import kotlin.test.assertTrue
 // surface and future compiler bumps would break the build at the
 // wrong layer.
 //
-// Issue #112 made this a human-review gate (acceptance criterion 2).
-// This test mechanises the gate so a contributor who adds a direct
-// BTA import anywhere in daemon core gets a red test instead of a
-// reviewer catching it weeks later. Putting the check in JUnit means
+// This test mechanises a human-review gate so a contributor who adds a
+// direct BTA import anywhere in daemon core gets a red test instead of
+// a reviewer catching it weeks later. Putting the check in JUnit means
 // the invariant is enforced on every `kolt test`, shares its reporting
 // with other regressions, and is easy to run in IDE.
 class AdapterBoundaryInvariantTest {
