@@ -49,7 +49,8 @@ private fun newBackend(
 ): NativeDaemonBackend =
   NativeDaemonBackend(
     javaBin = "/opt/jdk/bin/java",
-    daemonLaunchArgs = listOf("@/opt/kolt/libexec/classpath/kolt-native-compiler-daemon.argfile"),
+    daemonLaunchArgs =
+      listOf("-cp", "/opt/kolt/libexec/native-daemon.jar", "kolt.nativedaemon.MainKt"),
     konancJar = "/opt/konan/konan/lib/kotlin-native-compiler-embeddable.jar",
     konanHome = "/opt/konan",
     socketPath = "/tmp/kolt-native-daemon-test.sock",

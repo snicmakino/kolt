@@ -83,14 +83,19 @@ jobs:
             --dir "$BOOTSTRAP_DIR"
           tar -xzf "$BOOTSTRAP_DIR"/kolt-*-linux-x64.tar.gz \
             -C "$BOOTSTRAP_DIR" --strip-components=1
+          # Bridge for #336: see unit-tests.yml for the rationale.
+          # Drop on the next bootstrap bump.
+          sed -i "s|@KOLT_LIBEXEC@|$BOOTSTRAP_DIR/libexec|g" \
+            "$BOOTSTRAP_DIR"/libexec/classpath/*.argfile
           "$BOOTSTRAP_KOLT" --version
 
       # Native daemon canary: `kolt build` for kolt itself is a Native
       # target build, so it routes through `resolveNativeCompilerBackend`
       # and the K2Native sidecar daemon (ADR 0024). Mirrors the JVM-side
-      # canary in `unit-tests.yml`: assert `starting native compiler
-      # daemon` reached stderr — i.e. the daemon code path was exercised.
-      # Spawn-to-connect timing is orthogonal (#310).
+      # canary in `unit-tests.yml`: assert both that the daemon code
+      # path was reached (`starting native compiler daemon`) and that
+      # the daemon actually engaged (no `falling back to subprocess`)
+      # so a silent regression to subprocess fallback fails the build.
       #
       # `kolt test` does not engage the native daemon today (#312); use
       # `kolt build` here instead.
@@ -102,7 +107,11 @@ jobs:
             echo "Canary failed: bootstrap kolt did not reach the native daemon spawn path" >&2
             exit 1
           fi
-          echo "Canary OK: native daemon spawn path was reached"
+          if grep -q 'falling back to subprocess' kolt-build.stderr; then
+            echo "Canary failed: native daemon was reached but did not engage (fell back to subprocess)" >&2
+            exit 1
+          fi
+          echo "Canary OK: native daemon engaged"
 
       - name: Verify self-hosted binary
         run: |
@@ -293,6 +302,43 @@ jobs:
             esac
           done < <(printf '%s\n' "$expected")
           echo "guard: libexec/kolt-bta-impl matches BTA_IMPL_JARS and is present on the argfile"
+
+      # #336 end-to-end guard: a user who downloads the release tarball
+      # and just `tar xzf`s it (skipping install.sh) must still get a
+      # working daemon. Pre-fix: argfile @KOLT_LIBEXEC@ placeholders are
+      # left raw, JVM dies with ClassNotFoundException, daemon never
+      # binds, build subprocess-falls-back. The resolver-side fix on
+      # this branch substitutes the placeholder at spawn time. Drive
+      # the daemon-engaged path from the un-installed dist tree and
+      # fail if `falling back to subprocess` shows up.
+      - name: Smoke-build without install.sh (#336 resolver fix)
+        run: |
+          set -euo pipefail
+          DIST_ROOT="$GITHUB_WORKSPACE/dist/kolt-${KOLT_TOML_VERSION}-linux-x64"
+          # Sanity: this guard only exercises #336 if the dist argfile
+          # still ships the placeholder. If assemble-dist starts emitting
+          # absolute paths the test silently becomes a no-op.
+          if ! grep -q '@KOLT_LIBEXEC@' \
+              "$DIST_ROOT/libexec/classpath/kolt-jvm-compiler-daemon.argfile"; then
+            echo "Sanity failed: dist argfile no longer contains @KOLT_LIBEXEC@; #336 smoke is no-op" >&2
+            exit 1
+          fi
+          rm -rf "$HOME/.kolt/daemon"
+          cd kolt-jvm-compiler-daemon
+          rm -rf build
+          "$DIST_ROOT/bin/kolt" build 2> kolt-build.stderr
+          echo "--- kolt-build.stderr ---"
+          cat kolt-build.stderr
+          echo "--- end stderr ---"
+          if grep -q 'falling back to subprocess' kolt-build.stderr; then
+            echo "#336 regression: daemon fell back to subprocess on tarball-without-install path" >&2
+            exit 1
+          fi
+          if ! grep -q 'starting compiler daemon' kolt-build.stderr; then
+            echo "Smoke failed: daemon spawn path not reached" >&2
+            exit 1
+          fi
+          echo "Smoke OK: daemon engaged from tarball-without-install path"
 
       # Local HTTP server lets install.sh exercise its real download +
       # SHA-256 + extract + sed + symlink path against the assembled tarball

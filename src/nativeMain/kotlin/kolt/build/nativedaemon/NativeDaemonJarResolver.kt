@@ -10,9 +10,12 @@ import kotlinx.cinterop.toKString
 
 // Parallel to DaemonJarResolver for the JVM daemon. ADR 0018 §2: the resolver
 // returns the JVM args to splice between `java` and the daemon's own CLI
-// args — `@<argfile>` for installed layouts, `-cp <cp> <MainClass>` otherwise.
-// Filename and env var differ from the JVM daemon so a dev machine with both
-// staged doesn't cross-wire them.
+// args — `-cp <cp> <MainClass>` in every case. The libexec branch reads
+// the `assemble-dist`-emitted argfile and substitutes `@KOLT_LIBEXEC@`
+// with the absolute libexec path so the JVM gets a valid classpath
+// whether the user ran install.sh or just `tar xzf && bin/kolt` (#336).
+// Filename and env var differ from the JVM daemon so a dev machine with
+// both staged doesn't cross-wire them.
 sealed interface NativeDaemonJarResolution {
   data class Resolved(val launchArgs: List<String>, val source: Source) : NativeDaemonJarResolution
 
@@ -28,6 +31,7 @@ sealed interface NativeDaemonJarResolution {
 internal const val NATIVE_DAEMON_JAR_STEM = "kolt-native-compiler-daemon"
 internal const val NATIVE_DAEMON_MAIN_CLASS = "kolt.nativedaemon.MainKt"
 internal const val KOLT_NATIVE_DAEMON_JAR_ENV = "KOLT_NATIVE_DAEMON_JAR"
+internal const val LIBEXEC_PLACEHOLDER = "@KOLT_LIBEXEC@"
 
 fun resolveNativeDaemonJarPure(
   envValue: String?,
@@ -47,10 +51,10 @@ fun resolveNativeDaemonJarPure(
   val prefix = parentDir(binDir) ?: return NativeDaemonJarResolution.NotFound
   val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
   if (fileExists(argfile)) {
-    return NativeDaemonJarResolution.Resolved(
-      listOf("@$argfile"),
-      NativeDaemonJarResolution.Source.Libexec,
-    )
+    val launch =
+      launchArgsFromArgfile(argfile, "$prefix/libexec", readManifest)
+        ?: return NativeDaemonJarResolution.NotFound
+    return NativeDaemonJarResolution.Resolved(launch, NativeDaemonJarResolution.Source.Libexec)
   }
 
   var repoRoot: String? = selfExePath
@@ -69,6 +73,19 @@ fun resolveNativeDaemonJarPure(
   }
 
   return NativeDaemonJarResolution.NotFound
+}
+
+// See `kolt.build.daemon.launchArgsFromArgfile` for the contract; this
+// is the native-daemon mirror, kept private to match the parentDir /
+// readManifestLines duplication pattern in this file.
+private fun launchArgsFromArgfile(
+  argfile: String,
+  libexecAbs: String,
+  readManifest: (String) -> List<String>?,
+): List<String>? {
+  val lines = readManifest(argfile) ?: return null
+  val tokens = lines.map { it.replace(LIBEXEC_PLACEHOLDER, libexecAbs) }.filter { it.isNotEmpty() }
+  return tokens.takeIf { it.isNotEmpty() }
 }
 
 private fun launchArgsFromThinJar(

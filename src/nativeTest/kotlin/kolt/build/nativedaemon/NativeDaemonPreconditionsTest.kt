@@ -25,7 +25,7 @@ class NativeDaemonPreconditionsTest {
     ensureJavaBin: (KoltPaths) -> Result<String, BootstrapJdkError> = { Ok("/opt/jdk/bin/java") },
     resolveNativeJar: () -> NativeDaemonJarResolution = {
       NativeDaemonJarResolution.Resolved(
-        listOf("@/opt/kolt/libexec/classpath/kolt-native-compiler-daemon.argfile"),
+        listOf("-cp", "/opt/kolt/libexec/native-daemon.jar", NATIVE_DAEMON_MAIN_CLASS),
         NativeDaemonJarResolution.Source.Libexec,
       )
     },
@@ -47,7 +47,7 @@ class NativeDaemonPreconditionsTest {
 
     assertEquals("/opt/jdk/bin/java", setup.javaBin)
     assertEquals(
-      listOf("@/opt/kolt/libexec/classpath/kolt-native-compiler-daemon.argfile"),
+      listOf("-cp", "/opt/kolt/libexec/native-daemon.jar", NATIVE_DAEMON_MAIN_CLASS),
       setup.daemonLaunchArgs,
     )
     // konanHome is the managed toolchain root for the Kotlin version.

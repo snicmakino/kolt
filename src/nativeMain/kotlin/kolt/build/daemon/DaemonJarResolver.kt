@@ -9,10 +9,14 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 
 // ADR 0018 §2: the resolver returns the JVM arguments that sit between the
-// `java` executable and the daemon's own CLI args — either `@<argfile>` for
-// installed layouts or `-cp <cp> <MainClass>` for env-override and dev cases.
-// This keeps fat-jar packaging off kolt's build graph and lets the launcher
-// stay ignorant of where the classpath came from.
+// `java` executable and the daemon's own CLI args — `-cp <cp> <MainClass>`
+// in every case. For the libexec layout the classpath comes from the
+// `assemble-dist`-emitted argfile; the resolver reads it and substitutes
+// the `@KOLT_LIBEXEC@` placeholder with the absolute libexec path so the
+// JVM gets a valid classpath whether the user ran install.sh or just
+// `tar xzf && bin/kolt` (#336). install.sh's own substitution remains a
+// no-op shim under this resolver — the placeholder simply isn't there
+// anymore by the time we read it.
 sealed interface DaemonJarResolution {
   data class Resolved(val launchArgs: List<String>, val source: Source) : DaemonJarResolution
 
@@ -28,6 +32,7 @@ sealed interface DaemonJarResolution {
 internal const val DAEMON_JAR_STEM = "kolt-jvm-compiler-daemon"
 internal const val DAEMON_MAIN_CLASS = "kolt.daemon.MainKt"
 internal const val KOLT_DAEMON_JAR_ENV = "KOLT_DAEMON_JAR"
+internal const val LIBEXEC_PLACEHOLDER = "@KOLT_LIBEXEC@"
 
 // Probe order: env override -> libexec argfile -> dev fallback (kolt build output).
 fun resolveDaemonJarPure(
@@ -48,7 +53,10 @@ fun resolveDaemonJarPure(
   val prefix = parentDir(binDir) ?: return DaemonJarResolution.NotFound
   val argfile = "$prefix/libexec/classpath/$DAEMON_JAR_STEM.argfile"
   if (fileExists(argfile)) {
-    return DaemonJarResolution.Resolved(listOf("@$argfile"), DaemonJarResolution.Source.Libexec)
+    val launch =
+      launchArgsFromArgfile(argfile, "$prefix/libexec", readManifest)
+        ?: return DaemonJarResolution.NotFound
+    return DaemonJarResolution.Resolved(launch, DaemonJarResolution.Source.Libexec)
   }
 
   var repoRoot: String? = selfExePath
@@ -64,6 +72,22 @@ fun resolveDaemonJarPure(
   }
 
   return DaemonJarResolution.NotFound
+}
+
+// Read `<libexec>/classpath/<daemon>.argfile` (line-per-token format from
+// scripts/assemble-dist.sh `write_argfile`), substitute every
+// `@KOLT_LIBEXEC@` with the absolute libexec path, and return the parsed
+// launch args. Returns null if the argfile can't be read or yielded no
+// tokens. Whether install.sh already ran the same substitution doesn't
+// matter — `replace` on a placeholder-free string is a no-op.
+private fun launchArgsFromArgfile(
+  argfile: String,
+  libexecAbs: String,
+  readManifest: (String) -> List<String>?,
+): List<String>? {
+  val lines = readManifest(argfile) ?: return null
+  val tokens = lines.map { it.replace(LIBEXEC_PLACEHOLDER, libexecAbs) }.filter { it.isNotEmpty() }
+  return tokens.takeIf { it.isNotEmpty() }
 }
 
 // Build `-cp <thin>:<deps...> <MainClass>` from a thin jar and its sibling

@@ -39,31 +39,115 @@ class NativeDaemonJarResolverTest {
 
   @Test
   fun emptyEnvFallsThroughToLibexecArgfile() {
-    val argfile = "/opt/kolt/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val prefix = "/opt/kolt"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
     val result =
       resolveNativeDaemonJarPure(
         envValue = "",
-        selfExePath = "/opt/kolt/bin/kolt",
+        selfExePath = "$prefix/bin/kolt",
         fileExists = exists(argfile),
-        readManifest = { null },
+        readManifest =
+          manifests(
+            argfile to
+              listOf(
+                "-cp",
+                "$LIBEXEC_PLACEHOLDER/$NATIVE_DAEMON_JAR_STEM/$NATIVE_DAEMON_JAR_STEM.jar",
+                NATIVE_DAEMON_MAIN_CLASS,
+              )
+          ),
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(listOf("@$argfile"), resolved.launchArgs)
+    assertEquals(
+      listOf(
+        "-cp",
+        "$prefix/libexec/$NATIVE_DAEMON_JAR_STEM/$NATIVE_DAEMON_JAR_STEM.jar",
+        NATIVE_DAEMON_MAIN_CLASS,
+      ),
+      resolved.launchArgs,
+    )
     assertEquals(NativeDaemonJarResolution.Source.Libexec, resolved.source)
   }
 
   @Test
   fun libexecArgfileIsPickedFromInstalledPrefix() {
-    val argfile = "/usr/local/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val prefix = "/usr/local"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
     val result =
       resolveNativeDaemonJarPure(
         envValue = null,
-        selfExePath = "/usr/local/bin/kolt",
+        selfExePath = "$prefix/bin/kolt",
+        fileExists = exists(argfile),
+        readManifest =
+          manifests(
+            argfile to listOf("-cp", "$LIBEXEC_PLACEHOLDER/x.jar", NATIVE_DAEMON_MAIN_CLASS)
+          ),
+      )
+    val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
+    assertEquals(
+      listOf("-cp", "$prefix/libexec/x.jar", NATIVE_DAEMON_MAIN_CLASS),
+      resolved.launchArgs,
+    )
+  }
+
+  // #336: an extracted-but-not-installed tarball ships argfiles still
+  // containing `@KOLT_LIBEXEC@`. Without resolver-side substitution the
+  // JVM dies with ClassNotFoundException and the daemon never binds.
+  @Test
+  fun libexecArgfileSubstitutesPlaceholderInsidePath() {
+    val prefix = "/srv/kolt-extracted"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val classpathLine =
+      "$LIBEXEC_PLACEHOLDER/$NATIVE_DAEMON_JAR_STEM/$NATIVE_DAEMON_JAR_STEM.jar:" +
+        "$LIBEXEC_PLACEHOLDER/$NATIVE_DAEMON_JAR_STEM/deps/x.jar"
+    val result =
+      resolveNativeDaemonJarPure(
+        envValue = null,
+        selfExePath = "$prefix/bin/kolt",
+        fileExists = exists(argfile),
+        readManifest = manifests(argfile to listOf("-cp", classpathLine, NATIVE_DAEMON_MAIN_CLASS)),
+      )
+    val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
+    val expectedClasspath =
+      "$prefix/libexec/$NATIVE_DAEMON_JAR_STEM/$NATIVE_DAEMON_JAR_STEM.jar:" +
+        "$prefix/libexec/$NATIVE_DAEMON_JAR_STEM/deps/x.jar"
+    assertEquals(listOf("-cp", expectedClasspath, NATIVE_DAEMON_MAIN_CLASS), resolved.launchArgs)
+  }
+
+  // assemble-dist's `printf '%s\n' ...` writes a trailing newline; without
+  // dropping it the JVM sees an empty argument token and aborts.
+  @Test
+  fun libexecArgfileDropsEmptyTrailingLines() {
+    val prefix = "/opt/kolt"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val result =
+      resolveNativeDaemonJarPure(
+        envValue = null,
+        selfExePath = "$prefix/bin/kolt",
+        fileExists = exists(argfile),
+        readManifest =
+          manifests(
+            argfile to listOf("-cp", "$LIBEXEC_PLACEHOLDER/x.jar", NATIVE_DAEMON_MAIN_CLASS, "")
+          ),
+      )
+    val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
+    assertEquals(
+      listOf("-cp", "$prefix/libexec/x.jar", NATIVE_DAEMON_MAIN_CLASS),
+      resolved.launchArgs,
+    )
+  }
+
+  @Test
+  fun libexecArgfileUnreadableFallsThroughToNotFound() {
+    val prefix = "/opt/kolt"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val result =
+      resolveNativeDaemonJarPure(
+        envValue = null,
+        selfExePath = "$prefix/bin/kolt",
         fileExists = exists(argfile),
         readManifest = { null },
       )
-    val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(listOf("@$argfile"), resolved.launchArgs)
+    assertEquals(NativeDaemonJarResolution.NotFound, result)
   }
 
   @Test
@@ -90,21 +174,27 @@ class NativeDaemonJarResolverTest {
 
   @Test
   fun libexecWinsOverDevFallbackWhenBothExist() {
-    val argfile = "/opt/kolt/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
+    val prefix = "/opt/kolt"
+    val argfile = "$prefix/libexec/classpath/$NATIVE_DAEMON_JAR_STEM.argfile"
     val devJar = "/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM.jar"
     val result =
       resolveNativeDaemonJarPure(
         envValue = null,
-        selfExePath = "/opt/kolt/bin/kolt",
+        selfExePath = "$prefix/bin/kolt",
         fileExists = exists(argfile, devJar),
         readManifest =
           manifests(
+            argfile to listOf("-cp", "$LIBEXEC_PLACEHOLDER/x.jar", NATIVE_DAEMON_MAIN_CLASS),
             "/$NATIVE_DAEMON_JAR_STEM/build/$NATIVE_DAEMON_JAR_STEM-runtime.classpath" to
-              emptyList()
+              emptyList(),
           ),
       )
     val resolved = assertIs<NativeDaemonJarResolution.Resolved>(result)
-    assertEquals(listOf("@$argfile"), resolved.launchArgs)
+    assertEquals(
+      listOf("-cp", "$prefix/libexec/x.jar", NATIVE_DAEMON_MAIN_CLASS),
+      resolved.launchArgs,
+    )
+    assertEquals(NativeDaemonJarResolution.Source.Libexec, resolved.source)
   }
 
   @Test
