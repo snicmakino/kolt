@@ -70,6 +70,14 @@ class SubprocessCompilerBackendArgvTest {
   }
 
   @Test
+  fun argvForwardsModuleName() {
+    val argv = subprocessArgv("kotlinc", request(moduleName = "my-app"))
+    val idx = argv.indexOf("-module-name")
+    assertTrue(idx >= 0, "expected -module-name flag in argv but got: $argv")
+    assertEquals("my-app", argv[idx + 1])
+  }
+
+  @Test
   fun argvIncludesExtraArgs() {
     val argv =
       subprocessArgv(

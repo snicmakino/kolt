@@ -23,3 +23,7 @@ distinguishable from external-user reports.
 - 2026-04-30 `KOLT_BOOTSTRAP_TAG` self-bootstrap means a broken pinned tag blocks the next release — pin must always trail HEAD by ≥ 1 published release → policy noted in workflow headers, no issue.
 - 2026-04-30 JVM daemon's 3s spawn-to-connect retry budget is too short for cold JVM startup on CI; first build after a fresh boot falls back to subprocess even though the daemon spawn itself succeeds. Surfaced via #302's canary expecting "no fallback at all" — instead the canary had to be relaxed to "daemon code path was reached" → #310.
 - 2026-04-30 `kolt.lock` v3 → v4 migration on the jvm-sys-props branch (#318): `kolt deps install` printed the warning and overwrote cleanly in both daemon subprojects. Root project has no `kolt.lock` (native target, deps via cinterop / native resolver), so only two files moved. Diff is just the `"version"` line — `classpath_bundles` defaults to empty and is omitted by the serializer. Builds and tests stayed green post-migration; the Option B "deps install only" policy from design.md held.
+
+## 2026-05
+
+- 2026-05-01 `kolt test -- --select-class=<FQCN>` fails: JUnit Platform Console Launcher 1.11.4 rejects `--scan-class-path` together with explicit selectors (`Scanning the classpath and using explicit selectors at the same time is not supported`). `testRunCommand` always inserts `--scan-class-path`, so trailing-arg passthrough cannot be used to narrow execution to a single class or package. Surfaced during the daemon-test-via-kolt (#315) Pre-flight Gate → #323.

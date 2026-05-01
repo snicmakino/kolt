@@ -106,12 +106,9 @@ Development (for working on kolt itself):
 kolt build                                                  # native binary
 kolt test                                                   # unit tests
 cd kolt-jvm-compiler-daemon && kolt build                   # JVM daemon thin jar
+cd kolt-jvm-compiler-daemon && kolt test                    # JVM daemon + ic JUnit 5 suite
 cd kolt-native-compiler-daemon && kolt build                # Native daemon thin jar
-
-# Special-purpose (kept until kolt-native equivalents land):
-./gradlew check                                             # tests + daemon version verification
-./gradlew linkDebugExecutableLinuxX64 \
-  && ./build/bin/linuxX64/debugExecutable/kolt.kexe build   # CI bootstrap self-host smoke
+cd kolt-native-compiler-daemon && kolt test                 # Native daemon JUnit 5 suite
 ```
 
 ## Key Technical Decisions

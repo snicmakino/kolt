@@ -7,9 +7,26 @@
       "version": "2.3.1",
       "sha256": "96289c225b06d20156a0695432afc104f187ab68c84e9b8bed7af573e5194c83"
     },
+    "org.apiguardian:apiguardian-api": {
+      "version": "1.1.2",
+      "sha256": "b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38",
+      "transitive": true,
+      "test": true
+    },
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "version": "2.3.20",
       "sha256": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e"
+    },
+    "org.jetbrains.kotlin:kotlin-test": {
+      "version": "2.3.20",
+      "sha256": "d6c9ccf82f67e6cf7fdaf9e0cea419dac4dfa58620a1653d3dba45f544a289ac",
+      "transitive": true,
+      "test": true
+    },
+    "org.jetbrains.kotlin:kotlin-test-junit5": {
+      "version": "2.3.20",
+      "sha256": "90c554e254623cc49de7ae4c7c932a86287795e45875c47e1937c29c297eff02",
+      "test": true
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
       "version": "1.7.3",
@@ -24,6 +41,52 @@
       "version": "13.0",
       "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
       "transitive": true
+    },
+    "org.junit.jupiter:junit-jupiter": {
+      "version": "5.11.3",
+      "sha256": "ac7578efed162367c3ddc006338e07d4571510fd9866642ea93d5b9e4ed2f665",
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-api": {
+      "version": "5.11.3",
+      "sha256": "5d8147a60f49453973e250ed68701b7ff055964fe2462fc2cb1ec1d6d44889ba",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-engine": {
+      "version": "5.11.3",
+      "sha256": "e62420c99f7c0d59a2159a2ef63e61877e9c80bd722c03ca8bf3bdcea050a589",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.jupiter:junit-jupiter-params": {
+      "version": "5.11.3",
+      "sha256": "0f798ebec744c4e6605fd4f2072f41a8e989e2d469e21db5aa67cf799c0b51ec",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-commons": {
+      "version": "1.11.3",
+      "sha256": "be262964b0b6b48de977c61d4f931df8cf61e80e750cc3f3a0a39cdd21c1008c",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-engine": {
+      "version": "1.11.3",
+      "sha256": "0043f72f611664735da8dc9a308bf12ecd2236b05339351c4741edb4d8fab0da",
+      "transitive": true,
+      "test": true
+    },
+    "org.junit.platform:junit-platform-launcher": {
+      "version": "1.11.3",
+      "sha256": "b4727459201b0011beb0742bd807421a1fc8426b116193031ed87825bc2d4f04",
+      "test": true
+    },
+    "org.opentest4j:opentest4j": {
+      "version": "1.3.0",
+      "sha256": "48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b",
+      "transitive": true,
+      "test": true
     }
   }
 }

@@ -14,10 +14,35 @@ jvm_target = "25"
 jdk = "25"
 main = "kolt.daemon.main"
 sources = ["src/main/kotlin", "ic/src/main/kotlin"]
-test_sources = []
+test_sources = ["src/test/kotlin", "ic/src/test/kotlin"]
 
 [dependencies]
 "org.jetbrains.kotlin:kotlin-build-tools-api" = "2.3.20"
 "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
 "com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
 "com.akuleshov7:ktoml-core" = "0.7.1"
+
+[test-dependencies]
+"org.junit.jupiter:junit-jupiter" = "5.11.3"
+"org.junit.platform:junit-platform-launcher" = "1.11.3"
+
+[classpaths.bta_impl]
+"org.jetbrains.kotlin:kotlin-build-tools-impl" = "2.3.20"
+
+[classpaths.fixture]
+"org.jetbrains.kotlin:kotlin-stdlib" = "2.3.20"
+
+[classpaths.serialization_plugin]
+"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable" = "2.3.20"
+
+[classpaths.serialization_runtime]
+"org.jetbrains.kotlin:kotlin-stdlib" = "2.3.20"
+"org.jetbrains.kotlinx:kotlinx-serialization-core-jvm" = "1.7.3"
+
+[test.sys_props]
+"kolt.ic.btaImplClasspath" = { classpath = "bta_impl" }
+"kolt.ic.fixtureClasspath" = { classpath = "fixture" }
+"kolt.ic.serializationPluginClasspath" = { classpath = "serialization_plugin" }
+"kolt.ic.serializationRuntimeClasspath" = { classpath = "serialization_runtime" }
+"kolt.daemon.coreMainSourceRoot" = { project_dir = "src/main/kotlin" }
+"kolt.daemon.icTestSourceRoot" = { project_dir = "ic/src/test/kotlin" }

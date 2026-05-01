@@ -24,210 +24,242 @@ import kotlin.test.assertNotNull
 // of that intent.
 class MainCliArgsTest {
 
-    @Test
-    fun parseArgsAcceptsAllThreeRequiredFlags() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/kolt-daemon.sock",
-                "--compiler-jars", "/kt/lib/a.jar:/kt/lib/b.jar",
-                "--bta-impl-jars", "/bta/impl/kotlin-build-tools-impl.jar",
-            ),
+  @Test
+  fun parseArgsAcceptsAllThreeRequiredFlags() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/kolt-daemon.sock",
+          "--compiler-jars",
+          "/kt/lib/a.jar:/kt/lib/b.jar",
+          "--bta-impl-jars",
+          "/bta/impl/kotlin-build-tools-impl.jar",
         )
-        val cli = assertNotNull(result.get())
-        assertEquals("/tmp/kolt-daemon.sock", cli.socketPath.toString())
-        assertEquals(2, cli.compilerJars.size)
-        assertEquals(1, cli.btaImplJars.size)
-    }
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals("/tmp/kolt-daemon.sock", cli.socketPath.toString())
+    assertEquals(2, cli.compilerJars.size)
+    assertEquals(1, cli.btaImplJars.size)
+  }
 
-    @Test
-    fun compilerJarsFlagIsRequiredEvenThoughDaemonDoesNotLoadItDirectly() {
-        // Regression guard for the "drop --compiler-jars because it is dead"
-        // temptation. The field is dead inside daemon core after ad05de8 but
-        // the flag must stay on the wire so the native client does not break.
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/kolt-daemon.sock",
-                "--bta-impl-jars", "/bta/impl/x.jar",
-            ),
-        )
-        assertEquals(CliError.MissingCompilerJars, result.getError())
-    }
+  @Test
+  fun compilerJarsFlagIsRequiredEvenThoughDaemonDoesNotLoadItDirectly() {
+    // Regression guard for the "drop --compiler-jars because it is dead"
+    // temptation. The field is dead inside daemon core after ad05de8 but
+    // the flag must stay on the wire so the native client does not break.
+    val result =
+      parseArgs(arrayOf("--socket", "/tmp/kolt-daemon.sock", "--bta-impl-jars", "/bta/impl/x.jar"))
+    assertEquals(CliError.MissingCompilerJars, result.getError())
+  }
 
-    @Test
-    fun btaImplJarsFlagIsRequired() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/kolt-daemon.sock",
-                "--compiler-jars", "/kt/lib/a.jar",
-            ),
-        )
-        assertEquals(CliError.MissingBtaImplJars, result.getError())
-    }
+  @Test
+  fun btaImplJarsFlagIsRequired() {
+    val result =
+      parseArgs(arrayOf("--socket", "/tmp/kolt-daemon.sock", "--compiler-jars", "/kt/lib/a.jar"))
+    assertEquals(CliError.MissingBtaImplJars, result.getError())
+  }
 
-    @Test
-    fun emptyCompilerJarsValueRejected() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/kolt-daemon.sock",
-                "--compiler-jars", "",
-                "--bta-impl-jars", "/bta/impl/x.jar",
-            ),
+  @Test
+  fun emptyCompilerJarsValueRejected() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/kolt-daemon.sock",
+          "--compiler-jars",
+          "",
+          "--bta-impl-jars",
+          "/bta/impl/x.jar",
         )
-        assertEquals(CliError.EmptyCompilerJars, result.getError())
-    }
+      )
+    assertEquals(CliError.EmptyCompilerJars, result.getError())
+  }
 
-    @Test
-    fun emptyBtaImplJarsValueRejected() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/kolt-daemon.sock",
-                "--compiler-jars", "/kt/lib/a.jar",
-                "--bta-impl-jars", "",
-            ),
+  @Test
+  fun emptyBtaImplJarsValueRejected() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/kolt-daemon.sock",
+          "--compiler-jars",
+          "/kt/lib/a.jar",
+          "--bta-impl-jars",
+          "",
         )
-        assertEquals(CliError.EmptyBtaImplJars, result.getError())
-    }
+      )
+    assertEquals(CliError.EmptyBtaImplJars, result.getError())
+  }
 
-    @Test
-    fun icRootDefaultsToUserHomeKoltDaemonIc() {
-        // ADR 0019 §5: when `--ic-root` is omitted the daemon defaults to
-        // `$HOME/.kolt/daemon/ic`. Tests and integration harnesses override
-        // via `--ic-root <path>`.
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-            ),
-        )
-        val cli = assertNotNull(result.get())
-        assertEquals(Path.of(System.getProperty("user.home"), ".kolt", "daemon", "ic"), cli.icRoot)
-    }
+  @Test
+  fun icRootDefaultsToUserHomeKoltDaemonIc() {
+    // ADR 0019 §5: when `--ic-root` is omitted the daemon defaults to
+    // `$HOME/.kolt/daemon/ic`. Tests and integration harnesses override
+    // via `--ic-root <path>`.
+    val result =
+      parseArgs(
+        arrayOf("--socket", "/tmp/s", "--compiler-jars", "/a.jar", "--bta-impl-jars", "/b.jar")
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(Path.of(System.getProperty("user.home"), ".kolt", "daemon", "ic"), cli.icRoot)
+  }
 
-    @Test
-    fun icRootFlagOverridesDefault() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--ic-root", "/tmp/custom-ic",
-            ),
+  @Test
+  fun icRootFlagOverridesDefault() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--ic-root",
+          "/tmp/custom-ic",
         )
-        val cli = assertNotNull(result.get())
-        assertEquals(Path.of("/tmp/custom-ic"), cli.icRoot)
-    }
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(Path.of("/tmp/custom-ic"), cli.icRoot)
+  }
 
-    @Test
-    fun pluginJarsOptionalDefaultsToEmptyMap() {
-        // ADR 0019 §9 + B-2c: `--plugin-jars` is optional. A project that uses
-        // no compiler plugins (kolt.toml has no `[kotlin.plugins]` section or all
-        // entries are `false`) must not be forced to pass the flag.
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-            ),
-        )
-        val cli = assertNotNull(result.get())
-        assertEquals(emptyMap(), cli.pluginJars)
-    }
+  @Test
+  fun pluginJarsOptionalDefaultsToEmptyMap() {
+    // ADR 0019 §9 + B-2c: `--plugin-jars` is optional. A project that uses
+    // no compiler plugins (kolt.toml has no `[kotlin.plugins]` section or all
+    // entries are `false`) must not be forced to pass the flag.
+    val result =
+      parseArgs(
+        arrayOf("--socket", "/tmp/s", "--compiler-jars", "/a.jar", "--bta-impl-jars", "/b.jar")
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(emptyMap(), cli.pluginJars)
+  }
 
-    @Test
-    fun pluginJarsParsesAliasToClasspath() {
-        // Format: `<alias>=<cp>[;<alias>=<cp>...]`. Inside each `<cp>` the
-        // usual File.pathSeparator splits entries. The `;` outer separator
-        // avoids colliding with `:` (pathSeparator) on Linux.
-        val sep = java.io.File.pathSeparator
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--plugin-jars", "serialization=/plugins/ser1.jar${sep}/plugins/ser2.jar",
-            ),
+  @Test
+  fun pluginJarsParsesAliasToClasspath() {
+    // Format: `<alias>=<cp>[;<alias>=<cp>...]`. Inside each `<cp>` the
+    // usual File.pathSeparator splits entries. The `;` outer separator
+    // avoids colliding with `:` (pathSeparator) on Linux.
+    val sep = java.io.File.pathSeparator
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--plugin-jars",
+          "serialization=/plugins/ser1.jar${sep}/plugins/ser2.jar",
         )
-        val cli = assertNotNull(result.get())
-        assertEquals(
-            mapOf("serialization" to listOf(Path.of("/plugins/ser1.jar"), Path.of("/plugins/ser2.jar"))),
-            cli.pluginJars,
-        )
-    }
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(
+      mapOf("serialization" to listOf(Path.of("/plugins/ser1.jar"), Path.of("/plugins/ser2.jar"))),
+      cli.pluginJars,
+    )
+  }
 
-    @Test
-    fun pluginJarsParsesMultipleAliases() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--plugin-jars", "serialization=/p/ser.jar;allopen=/p/open.jar",
-            ),
+  @Test
+  fun pluginJarsParsesMultipleAliases() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--plugin-jars",
+          "serialization=/p/ser.jar;allopen=/p/open.jar",
         )
-        val cli = assertNotNull(result.get())
-        assertEquals(
-            mapOf(
-                "serialization" to listOf(Path.of("/p/ser.jar")),
-                "allopen" to listOf(Path.of("/p/open.jar")),
-            ),
-            cli.pluginJars,
-        )
-    }
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(
+      mapOf(
+        "serialization" to listOf(Path.of("/p/ser.jar")),
+        "allopen" to listOf(Path.of("/p/open.jar")),
+      ),
+      cli.pluginJars,
+    )
+  }
 
-    @Test
-    fun pluginJarsMalformedEntryRejected() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--plugin-jars", "serialization",
-            ),
+  @Test
+  fun pluginJarsMalformedEntryRejected() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--plugin-jars",
+          "serialization",
         )
-        assertEquals(CliError.MalformedPluginJars("serialization"), result.getError())
-    }
+      )
+    assertEquals(CliError.MalformedPluginJars("serialization"), result.getError())
+  }
 
-    @Test
-    fun pluginJarsEmptyAliasRejected() {
-        // `=foo.jar` has no alias; `eq <= 0` catches it inside parsePluginJars.
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--plugin-jars", "=foo.jar",
-            ),
+  @Test
+  fun pluginJarsEmptyAliasRejected() {
+    // `=foo.jar` has no alias; `eq <= 0` catches it inside parsePluginJars.
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--plugin-jars",
+          "=foo.jar",
         )
-        assertEquals(CliError.MalformedPluginJars("=foo.jar"), result.getError())
-    }
+      )
+    assertEquals(CliError.MalformedPluginJars("=foo.jar"), result.getError())
+  }
 
-    @Test
-    fun pluginJarsEmptyClasspathRejected() {
-        // `alias=` has a trailing `=` with no classpath; `eq == entry.length - 1`
-        // catches it before the pathSeparator split even runs.
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--plugin-jars", "serialization=",
-            ),
+  @Test
+  fun pluginJarsEmptyClasspathRejected() {
+    // `alias=` has a trailing `=` with no classpath; `eq == entry.length - 1`
+    // catches it before the pathSeparator split even runs.
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--plugin-jars",
+          "serialization=",
         )
-        assertEquals(CliError.MalformedPluginJars("serialization="), result.getError())
-    }
+      )
+    assertEquals(CliError.MalformedPluginJars("serialization="), result.getError())
+  }
 
-    @Test
-    fun unknownFlagRejected() {
-        val result = parseArgs(
-            arrayOf(
-                "--socket", "/tmp/s",
-                "--compiler-jars", "/a.jar",
-                "--bta-impl-jars", "/b.jar",
-                "--frobnicate",
-            ),
+  @Test
+  fun unknownFlagRejected() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--frobnicate",
         )
-        val err = assertNotNull(result.getError()) as CliError.UnknownFlag
-        assertEquals("--frobnicate", err.flag)
-    }
+      )
+    val err = assertNotNull(result.getError()) as CliError.UnknownFlag
+    assertEquals("--frobnicate", err.flag)
+  }
 }

@@ -29,6 +29,11 @@ fun testBuildCommand(
     add(config.build.jvmTarget)
     addAll(languageVersionArgs(config))
     addAll(pluginArgs)
+    // Match Gradle Kotlin plugin: test source set shares the main module's
+    // identity so `internal` symbols are visible across the boundary.
+    add("-module-name")
+    add(config.name)
+    add("-Xfriend-paths=$classesDir")
     add("-d")
     add(TEST_CLASSES_DIR)
   }
