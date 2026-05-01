@@ -56,6 +56,7 @@ kolt test                   Build and run tests (kolt test -- args for JUnit Pla
 kolt check                  Type-check without producing artifacts
 kolt add <dep>              Add a dependency to kolt.toml
 kolt add --test <dep>       Add a test dependency
+kolt remove <ga>            Remove a dependency (auto-searches both sections)
 kolt fetch                  Resolve dependencies and download JARs
 kolt update                 Re-resolve dependencies and update kolt.lock
 kolt tree                   Show dependency tree

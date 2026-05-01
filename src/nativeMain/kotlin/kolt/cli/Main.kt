@@ -79,6 +79,7 @@ fun main(args: Array<String>) {
     "fmt" -> doFmt(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "clean" -> doClean().getOrElse { exitProcess(it) }
     "add" -> doAdd(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
+    "remove" -> doRemove(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "fetch" -> doFetch().getOrElse { exitProcess(it) }
     "update" -> doUpdate().getOrElse { exitProcess(it) }
     "tree" -> doTree().getOrElse { exitProcess(it) }
@@ -160,6 +161,7 @@ private fun printUsage() {
   eprintln("  fmt        Format source files with ktfmt")
   eprintln("  clean      Remove build artifacts")
   eprintln("  add        Add a dependency to kolt.toml")
+  eprintln("  remove     Remove a dependency from kolt.toml")
   eprintln("  fetch      Resolve dependencies and download JARs")
   eprintln("  update     Re-resolve dependencies and update kolt.lock")
   eprintln("  tree       Show dependency tree")

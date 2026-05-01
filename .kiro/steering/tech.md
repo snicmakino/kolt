@@ -87,6 +87,7 @@ kolt test     [--watch] [--release]   # build + run tests
 kolt check    [--release]             # type-check only (no --watch; use LSP)
 kolt fmt      [--check]           # ktfmt format (or verify in CI)
 kolt add <dep>                    # add dependency to kolt.toml
+kolt remove <ga>                  # remove dependency from kolt.toml (auto-search both sections)
 kolt fetch                        # resolve dependencies and download JARs
 kolt update                       # re-resolve and update kolt.lock
 kolt tree                         # show dependency tree

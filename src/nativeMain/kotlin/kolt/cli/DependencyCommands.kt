@@ -80,6 +80,48 @@ private fun doAddInner(args: List<String>): Result<Unit, Int> {
   return doFetchInner()
 }
 
+internal fun doRemove(args: List<String>): Result<Unit, Int> = withDependencyLock {
+  doRemoveInner(args)
+}
+
+private fun doRemoveInner(args: List<String>): Result<Unit, Int> {
+  val groupArtifact =
+    parseRemoveArgs(args).getOrElse { error ->
+      when (error) {
+        is RemoveArgsError.MissingCoordinate -> eprintln("usage: kolt remove <group:artifact>")
+        is RemoveArgsError.InvalidFormat -> eprintln("error: invalid coordinate '${error.input}'")
+      }
+      return Err(EXIT_DEPENDENCY_ERROR)
+    }
+
+  val toml =
+    readFileAsString(KOLT_TOML).getOrElse { error ->
+      eprintln("error: could not read ${error.path}")
+      return Err(EXIT_CONFIG_ERROR)
+    }
+
+  val result = removeDependencyFromToml(toml, groupArtifact)
+  if (result.removed.isEmpty()) {
+    println("no entry for $groupArtifact in [dependencies] or [test-dependencies]")
+    return Ok(Unit)
+  }
+
+  writeFileAsString(KOLT_TOML, result.newToml).getOrElse { error ->
+    eprintln("error: could not write ${error.path}")
+    return Err(EXIT_CONFIG_ERROR)
+  }
+
+  for (entry in result.removed) {
+    val section = if (entry.isTest) "[test-dependencies]" else "[dependencies]"
+    println("removed $groupArtifact = \"${entry.version}\" from $section")
+  }
+
+  // doFetchInner (not doFetch) — the outer lock acquired by doRemove
+  // already covers the fetch; calling doFetch would attempt a second
+  // flock(2) acquire on a fresh OFD and deadlock against ourselves.
+  return doFetchInner()
+}
+
 private fun fetchLatestVersion(
   group: String,
   artifact: String,

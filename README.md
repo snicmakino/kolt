@@ -68,6 +68,7 @@ kolt run               Build and run (kolt run -- args for app arguments)
 kolt test              Build and run tests (kolt test -- args for JUnit Platform arguments)
 kolt check             Type-check without producing artifacts
 kolt add <dep>         Add a dependency to kolt.toml
+kolt remove <ga>       Remove a dependency from kolt.toml
 kolt fetch             Resolve dependencies and download JARs
 kolt update            Re-resolve dependencies and update kolt.lock
 kolt tree              Show dependency tree
@@ -161,6 +162,8 @@ kolt add org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0
 kolt add org.jetbrains.kotlinx:kotlinx-coroutines-core   # latest stable version
 kolt add --test io.kotest:kotest-runner-junit5:5.8.0      # test dependency
 ```
+
+Remove dependencies with `kolt remove <group:artifact>`. The command auto-searches both `[dependencies]` and `[test-dependencies]`; if the same coord lives in both, both are dropped. The shared cache at `~/.kolt/cache/` is left untouched — run `kolt cache clean` separately to reclaim disk space.
 
 Or declare Maven coordinates directly in `[dependencies]`:
 
