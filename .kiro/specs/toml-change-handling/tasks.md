@@ -55,8 +55,8 @@
     - _Requirements: 8.12_
     - _Boundary: docs/architecture.md_
 
-- [ ] 5. (P) WatchLoop integration: change-handling pipeline
-  - [ ] 5.1 Wire reparse and parse-error handling into the watch event handler
+- [x] 5. (P) WatchLoop integration: change-handling pipeline
+  - [x] 5.1 Wire reparse and parse-error handling into the watch event handler
     - When the existing inotify event filter detects a `kolt.toml` modification (line ~111 of WatchLoop), call `parseConfig` on the freshly read content
     - On `Err`: emit `${NOTIFICATION_MARKER} kolt.toml parse error: <msg>; retaining previous configuration` once to stderr; retain the in-memory config; skip rebuild; return to the event loop
     - On `Ok(newConfig)`: pass to the dispatch pipeline implemented in 5.2
@@ -65,14 +65,14 @@
     - _Depends: 2.2_
     - _Requirements: 2.1, 2.2, 2.5, 7.1, 7.2, 7.3, 7.4_
     - _Boundary: kolt.cli.WatchLoop_
-  - [ ] 5.2 Wire ChangeMatrix dispatch — NotifyOnly path with notification output
+  - [x] 5.2 Wire ChangeMatrix dispatch — NotifyOnly path with notification output
     - After successful reparse, call `classifyChange(currentConfig, newConfig)` then `planDispatch(changes)`
     - When `plan.notifications` is non-empty: emit each line to stderr as a single notification group within the same debounce window; retain the old config; skip rebuild
     - Same-section repeated edits within one debounce window collapse to a single line via the existing `settleAndDrain` aggregation behavior
     - Observable: in a manual watch session, modifying `[dependencies]` emits exactly one notification line `[watch] ⚠ [dependencies] changed; Run kolt deps install` with no `--- change detected, rebuilding ---` line following
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
     - _Boundary: kolt.cli.WatchLoop_
-  - [ ] 5.3 Wire ChangeMatrix dispatch — AutoReload path with full watcher rebuild
+  - [x] 5.3 Wire ChangeMatrix dispatch — AutoReload path with full watcher rebuild
     - When `plan.reload == true` and `plan.notifications` is empty: replace `currentConfig` with `newConfig` in the loop's mutable state
     - If the section-diff includes `[build.sources]` or `[build.resources]`: full-rebuild watcher state by calling `collectWatchPaths(currentConfig)`, unregister every existing entry of `wdKinds` via `inotify_rm_watch`, then re-register the new path set and rebuild `wdKinds`
     - When `plan.rebuild == true`: invoke `commandRunner` (which produces the existing `--- change detected, rebuilding ---` output)
@@ -80,7 +80,7 @@
     - Observable: in a manual watch session, adding a new directory to `[build.sources]` results in (a) a rebuild with the existing rebuild marker, (b) files newly created in the added directory subsequently trigger rebuilds via inotify
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.1, 5.2, 9.1_
     - _Boundary: kolt.cli.WatchLoop_
-  - [ ] 5.4 Wire `[run.sys_props]` respawn into watchRunLoop only
+  - [x] 5.4 Wire `[run.sys_props]` respawn into watchRunLoop only
     - In `watchRunLoop` only: after AutoReload completes, when `plan.reload && !plan.rebuild && plan.changedSections.any { it.sectionName == "run.sys_props" }`, kill the running app and respawn it with new sysprops via the existing run-loop spawn path
     - Verify or refactor: ensure `commandRunner` (or the run-loop spawn path) reads `currentConfig.run.sysProps` fresh on each invocation; if the existing implementation captures sysprops at startup, refactor to capture by mutable reference so subsequent respawns pick up the latest values
     - Mixed-window guard: the respawn condition explicitly checks `plan.reload`, so notify-only-prevail cases (where `plan.reload == false`) do not trigger respawn (β3 integrity)
@@ -88,8 +88,8 @@
     - _Requirements: 3.5_
     - _Boundary: kolt.cli.WatchLoop_
 
-- [ ] 6. Validation: regression coverage
-  - [ ] 6.1 Add regression coverage for source-file-driven rebuild
+- [x] 6. Validation: regression coverage
+  - [x] 6.1 Add regression coverage for source-file-driven rebuild
     - Add or extend a `WatchLoopTest` case asserting that source-file (`.kt` / `.kts`) changes still trigger rebuild via the existing path (not the new ChangeMatrix dispatch path) — i.e., `kolt.toml` content unchanged but a `.kt` file was modified
     - Run the full `kolt test` suite and confirm no regressions in `CollectWatchPathsTest`, `ShouldTriggerRebuildTest`, or any other watch-adjacent test
     - Observable: full test suite is green; the new regression case fails if WatchLoop incorrectly routes `.kt` changes through ChangeMatrix dispatch (deliberate misroute reproduces the failure)

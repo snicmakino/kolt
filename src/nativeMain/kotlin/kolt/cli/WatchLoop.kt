@@ -7,6 +7,7 @@ import kolt.build.Profile
 import kolt.build.nativeRunCommand
 import kolt.config.KoltConfig
 import kolt.config.NATIVE_TARGETS
+import kolt.config.NOTIFICATION_MARKER
 import kolt.infra.*
 import kotlin.concurrent.AtomicInt
 import kotlinx.cinterop.*
@@ -49,7 +50,7 @@ private fun installSigintHandler() {
 
 private fun shouldExit(): Boolean = sigintReceived.value != 0
 
-private enum class WatchKind {
+internal enum class WatchKind {
   ROOT_DIR,
   SOURCE_DIR,
   RESOURCE_DIR,
@@ -123,6 +124,9 @@ private fun hasRelevantEvents(events: List<InotifyEvent>, wdKinds: Map<Int, Watc
   return false
 }
 
+internal fun hasKoltTomlEvent(events: List<InotifyEvent>, wdKinds: Map<Int, WatchKind>): Boolean =
+  events.any { wdKinds[it.wd] == WatchKind.ROOT_DIR && it.name == "kolt.toml" }
+
 private fun autoAddNewDirs(
   events: List<InotifyEvent>,
   wdKinds: MutableMap<Int, WatchKind>,
@@ -177,20 +181,61 @@ internal fun watchCommandLoop(
     }
   },
 ) {
-  val config =
+  var currentConfig =
     loadProjectConfig().getOrElse {
       eprintln("error: cannot start watch mode with invalid config")
       return
     }
-  val watchDirs = collectWatchPaths(config, command)
-  val setup = setupWatches(watchDirs, config) ?: return
-  val watcher = setup.watcher
-  val wdKinds = setup.wdKinds.toMutableMap()
+  val initialSetup =
+    setupWatches(collectWatchPaths(currentConfig, command), currentConfig) ?: return
+  var watcher = initialSetup.watcher
+  val wdKinds = initialSetup.wdKinds.toMutableMap()
 
   installSigintHandler()
   eprintln("watching for changes (Ctrl+C to stop)...")
 
   commandRunner(command, useDaemon, testArgs)
+
+  // Dispatch a kolt.toml change via ChangeMatrix. Returns true if the dispatch decided to invoke
+  // commandRunner (so the caller knows whether to skip a follow-on source-rebuild). Mutates
+  // currentConfig, watcher, and wdKinds when the outcome is Reload.
+  fun handleKoltTomlChange(): Boolean {
+    when (val outcome = dispatchKoltTomlChange(currentConfig, parseProjectConfig())) {
+      is KoltTomlChangeOutcome.ParseError -> {
+        eprintln(
+          "$NOTIFICATION_MARKER kolt.toml parse error: ${outcome.message}; " +
+            "retaining previous configuration"
+        )
+        return false
+      }
+      KoltTomlChangeOutcome.NoChange -> return false
+      is KoltTomlChangeOutcome.NotifyOnly -> {
+        outcome.notifications.forEach { eprintln(it) }
+        return false
+      }
+      is KoltTomlChangeOutcome.Reload -> {
+        currentConfig = outcome.newConfig
+        if (outcome.watcherRebuildNeeded) {
+          watcher.close()
+          val rebuilt =
+            setupWatches(collectWatchPaths(currentConfig, command), currentConfig)
+              ?: run {
+                eprintln("error: failed to rebuild watcher after kolt.toml change; exiting watch")
+                return false
+              }
+          watcher = rebuilt.watcher
+          wdKinds.clear()
+          wdKinds.putAll(rebuilt.wdKinds)
+        }
+        if (outcome.rebuild) {
+          eprintln("\n--- change detected, rebuilding ---")
+          commandRunner(command, useDaemon, testArgs)
+          return true
+        }
+        return false
+      }
+    }
+  }
 
   while (!shouldExit()) {
     val events =
@@ -207,8 +252,21 @@ internal fun watchCommandLoop(
     if (!relevant && !settleRelevant) continue
 
     if (shouldExit()) break
-    eprintln("\n--- change detected, rebuilding ---")
-    commandRunner(command, useDaemon, testArgs)
+
+    val koltTomlChanged = hasKoltTomlEvent(events, wdKinds)
+    val nonTomlEventsExist =
+      events.any { !(wdKinds[it.wd] == WatchKind.ROOT_DIR && it.name == "kolt.toml") }
+
+    if (koltTomlChanged) {
+      val rebuildInvoked = handleKoltTomlChange()
+      if (!rebuildInvoked && nonTomlEventsExist) {
+        eprintln("\n--- change detected, rebuilding ---")
+        commandRunner(command, useDaemon, testArgs)
+      }
+    } else {
+      eprintln("\n--- change detected, rebuilding ---")
+      commandRunner(command, useDaemon, testArgs)
+    }
 
     val pending = watcher.pollEvents(timeoutMs = 0).getOrElse { emptyList() }
     if (pending.isNotEmpty()) {
@@ -216,8 +274,19 @@ internal fun watchCommandLoop(
       if (hasRelevantEvents(pending, wdKinds)) {
         settleAndDrain(watcher, wdKinds)
         if (!shouldExit()) {
-          eprintln("\n--- pending changes detected, rebuilding ---")
-          commandRunner(command, useDaemon, testArgs)
+          val pendingKoltToml = hasKoltTomlEvent(pending, wdKinds)
+          val pendingNonTomlEvents =
+            pending.any { !(wdKinds[it.wd] == WatchKind.ROOT_DIR && it.name == "kolt.toml") }
+          if (pendingKoltToml) {
+            val rebuiltInvoked = handleKoltTomlChange()
+            if (!rebuiltInvoked && pendingNonTomlEvents) {
+              eprintln("\n--- pending changes detected, rebuilding ---")
+              commandRunner(command, useDaemon, testArgs)
+            }
+          } else {
+            eprintln("\n--- pending changes detected, rebuilding ---")
+            commandRunner(command, useDaemon, testArgs)
+          }
         }
       }
     }
@@ -282,32 +351,116 @@ internal fun watchRunLoop(
   cliSysProps: List<Pair<String, String>> = emptyList(),
   eprint: (String) -> Unit = ::eprintln,
 ) {
-  val config =
+  var currentConfig =
     loadProjectConfig().getOrElse {
       eprint("error: cannot start watch mode with invalid config")
       return
     }
-  // ADR 0023 §1 kind gate: emit the canonical rejection once at entry
-  // and return cleanly so a library invocation does not enter the
-  // rebuild-poll loop (R4.2 "no per-source-change error spam").
-  if (rejectIfLibrary(config, eprint).getError() != null) return
-  if (rejectCliSysPropsOnNative(config, cliSysProps, eprint).getError() != null) return
+  // ADR 0023 §1 kind gate: emit the canonical rejection once at entry and return cleanly so a
+  // library invocation does not enter the rebuild-poll loop.
+  if (rejectIfLibrary(currentConfig, eprint).getError() != null) return
+  if (rejectCliSysPropsOnNative(currentConfig, cliSysProps, eprint).getError() != null) return
 
-  val watchDirs = collectWatchPaths(config, "run")
-  val setup = setupWatches(watchDirs, config) ?: return
-  val watcher = setup.watcher
-  val wdKinds = setup.wdKinds.toMutableMap()
+  val initialSetup = setupWatches(collectWatchPaths(currentConfig, "run"), currentConfig) ?: return
+  var watcher = initialSetup.watcher
+  val wdKinds = initialSetup.wdKinds.toMutableMap()
 
   installSigintHandler()
   eprintln("watching for changes (Ctrl+C to stop)...")
 
-  while (!shouldExit()) {
-    val buildResult =
-      doBuild(useDaemon = useDaemon, profile = profile).getOrElse {
-        eprintln("build failed, waiting for changes...")
-        waitForRelevantChange(watcher, wdKinds)
-        continue
+  // Outcome of the inner watch loop. Drives the outer loop's rebuild / respawn decisions.
+  data class InnerLoopOutcome(val shouldRebuild: Boolean, val shouldRespawnOnly: Boolean)
+
+  // Apply a kolt.toml change to currentConfig / watcher / wdKinds. Returns whether the outer loop
+  // should rebuild (true), respawn only (false but caller handles run.sys_props case separately),
+  // or stay running (caller continues the inner loop).
+  data class KoltTomlEffect(
+    val breakInnerLoop: Boolean,
+    val shouldRebuild: Boolean,
+    val shouldRespawnOnly: Boolean,
+  )
+
+  fun applyKoltTomlChange(): KoltTomlEffect {
+    when (val outcome = dispatchKoltTomlChange(currentConfig, parseProjectConfig())) {
+      is KoltTomlChangeOutcome.ParseError -> {
+        eprintln(
+          "$NOTIFICATION_MARKER kolt.toml parse error: ${outcome.message}; " +
+            "retaining previous configuration"
+        )
+        return KoltTomlEffect(
+          breakInnerLoop = false,
+          shouldRebuild = false,
+          shouldRespawnOnly = false,
+        )
       }
+      KoltTomlChangeOutcome.NoChange ->
+        return KoltTomlEffect(
+          breakInnerLoop = false,
+          shouldRebuild = false,
+          shouldRespawnOnly = false,
+        )
+      is KoltTomlChangeOutcome.NotifyOnly -> {
+        outcome.notifications.forEach { eprintln(it) }
+        return KoltTomlEffect(
+          breakInnerLoop = false,
+          shouldRebuild = false,
+          shouldRespawnOnly = false,
+        )
+      }
+      is KoltTomlChangeOutcome.Reload -> {
+        currentConfig = outcome.newConfig
+        if (outcome.watcherRebuildNeeded) {
+          watcher.close()
+          val rebuilt =
+            setupWatches(collectWatchPaths(currentConfig, "run"), currentConfig)
+              ?: run {
+                eprintln("error: failed to rebuild watcher after kolt.toml change; exiting watch")
+                return KoltTomlEffect(
+                  breakInnerLoop = true,
+                  shouldRebuild = false,
+                  shouldRespawnOnly = false,
+                )
+              }
+          watcher = rebuilt.watcher
+          wdKinds.clear()
+          wdKinds.putAll(rebuilt.wdKinds)
+        }
+        if (outcome.rebuild) {
+          return KoltTomlEffect(
+            breakInnerLoop = true,
+            shouldRebuild = true,
+            shouldRespawnOnly = false,
+          )
+        }
+        // rebuild=false: only respawn if [run.sys_props] is among changes.
+        val runSysPropsChanged = outcome.changedSections.any { it.sectionName == "[run.sys_props]" }
+        return KoltTomlEffect(
+          breakInnerLoop = runSysPropsChanged,
+          shouldRebuild = false,
+          shouldRespawnOnly = runSysPropsChanged,
+        )
+      }
+    }
+  }
+
+  var shouldRebuild = true
+  var lastBuildResult: BuildResult? = null
+
+  while (!shouldExit()) {
+    val buildResult: BuildResult =
+      if (shouldRebuild || lastBuildResult == null) {
+        doBuild(useDaemon = useDaemon, profile = profile).getOrElse {
+          eprintln("build failed, waiting for changes...")
+          waitForRelevantChange(watcher, wdKinds)
+          continue
+        }
+      } else {
+        // Respawn-only path: reuse classpath / javaPath from the prior build, but pick up the
+        // latest config so the spawn picks up new [run.sys_props]. doBuild is skipped because no
+        // compile inputs changed for a [run.sys_props]-only window.
+        lastBuildResult!!.copy(config = currentConfig)
+      }
+    lastBuildResult = buildResult
 
     val projectRoot =
       currentWorkingDirectory()
@@ -328,26 +481,40 @@ internal fun watchRunLoop(
     }
 
     var childAlive = true
-    var changeDetected = false
-    while (!shouldExit()) {
-      val events = watcher.pollEvents(timeoutMs = 200).getOrElse { emptyList() }
-      if (shouldExit()) break
+    val outcome: InnerLoopOutcome = run {
+      while (!shouldExit()) {
+        val events = watcher.pollEvents(timeoutMs = 200).getOrElse { emptyList() }
+        if (shouldExit())
+          return@run InnerLoopOutcome(shouldRebuild = false, shouldRespawnOnly = false)
 
-      if (events.isNotEmpty()) {
-        autoAddNewDirs(events, wdKinds, watcher)
-        if (hasRelevantEvents(events, wdKinds)) {
-          settleAndDrain(watcher, wdKinds)
-          changeDetected = true
-          break
+        if (events.isNotEmpty()) {
+          autoAddNewDirs(events, wdKinds, watcher)
+          if (hasRelevantEvents(events, wdKinds)) {
+            settleAndDrain(watcher, wdKinds)
+            if (hasKoltTomlEvent(events, wdKinds)) {
+              val effect = applyKoltTomlChange()
+              if (effect.breakInnerLoop) {
+                return@run InnerLoopOutcome(
+                  shouldRebuild = effect.shouldRebuild,
+                  shouldRespawnOnly = effect.shouldRespawnOnly,
+                )
+              }
+              // ParseError / NoChange / NotifyOnly / Reload-without-rebuild-without-run-sysprops:
+              // app keeps running; continue inner loop.
+              continue
+            } else {
+              return@run InnerLoopOutcome(shouldRebuild = true, shouldRespawnOnly = false)
+            }
+          }
+        }
+
+        if (childAlive && reapChild(childPid)) {
+          childAlive = false
+          waitForRelevantChange(watcher, wdKinds)
+          return@run InnerLoopOutcome(shouldRebuild = true, shouldRespawnOnly = false)
         }
       }
-
-      if (childAlive && reapChild(childPid)) {
-        childAlive = false
-        waitForRelevantChange(watcher, wdKinds)
-        changeDetected = true
-        break
-      }
+      InnerLoopOutcome(shouldRebuild = false, shouldRespawnOnly = false)
     }
 
     if (childAlive) {
@@ -355,8 +522,15 @@ internal fun watchRunLoop(
     }
 
     if (shouldExit()) break
-    if (changeDetected) {
+    if (outcome.shouldRebuild) {
       eprintln("\n--- change detected, rebuilding ---")
+      shouldRebuild = true
+    } else if (outcome.shouldRespawnOnly) {
+      // No rebuild line: respawn only with the new sysprops. The notification (if any) was
+      // already emitted by applyKoltTomlChange.
+      shouldRebuild = false
+    } else {
+      shouldRebuild = false
     }
   }
 

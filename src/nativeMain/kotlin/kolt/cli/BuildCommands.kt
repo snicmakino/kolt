@@ -255,6 +255,19 @@ internal fun loadProjectConfig(): Result<KoltConfig, Int> {
     .let { Ok(it) }
 }
 
+/**
+ * Parse kolt.toml without printing errors. Side-effect-free counterpart to loadProjectConfig that
+ * exposes ConfigError so callers (notably the watch loop change-handling pipeline) can format the
+ * message themselves and decide whether to surface it.
+ */
+internal fun parseProjectConfig(): Result<KoltConfig, ConfigError> {
+  val tomlString =
+    readFileAsString(KOLT_TOML).getOrElse { error ->
+      return Err(ConfigError.ParseFailed("could not read ${error.path}"))
+    }
+  return parseConfig(tomlString)
+}
+
 internal fun doCheck(
   useDaemon: Boolean = true,
   profile: Profile = Profile.Debug,
