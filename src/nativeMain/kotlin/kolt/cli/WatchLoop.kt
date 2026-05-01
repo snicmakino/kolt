@@ -166,11 +166,13 @@ internal fun watchCommandLoop(
   useDaemon: Boolean,
   testArgs: List<String> = emptyList(),
   profile: Profile = Profile.Debug,
+  cliSysProps: List<Pair<String, String>> = emptyList(),
   commandRunner: (String, Boolean, List<String>) -> Result<*, Int> = { cmd, daemon, args ->
     when (cmd) {
       "build" -> doBuild(useDaemon = daemon, profile = profile)
       "check" -> doCheck(useDaemon = daemon, profile = profile)
-      "test" -> doTest(testArgs = args, useDaemon = daemon, profile = profile)
+      "test" ->
+        doTest(testArgs = args, useDaemon = daemon, profile = profile, cliSysProps = cliSysProps)
       else -> doBuild(useDaemon = daemon, profile = profile)
     }
   },
@@ -277,6 +279,7 @@ internal fun watchRunLoop(
   useDaemon: Boolean,
   appArgs: List<String> = emptyList(),
   profile: Profile = Profile.Debug,
+  cliSysProps: List<Pair<String, String>> = emptyList(),
   eprint: (String) -> Unit = ::eprintln,
 ) {
   val config =
@@ -288,6 +291,7 @@ internal fun watchRunLoop(
   // and return cleanly so a library invocation does not enter the
   // rebuild-poll loop (R4.2 "no per-source-change error spam").
   if (rejectIfLibrary(config, eprint).getError() != null) return
+  if (rejectCliSysPropsOnNative(config, cliSysProps, eprint).getError() != null) return
 
   val watchDirs = collectWatchPaths(config, "run")
   val setup = setupWatches(watchDirs, config) ?: return
@@ -315,7 +319,7 @@ internal fun watchRunLoop(
       if (buildResult.config.build.target in NATIVE_TARGETS) {
         nativeRunCommand(buildResult.config, appArgs, profile)
       } else {
-        runJvmCommandFor(buildResult, projectRoot, appArgs, profile)
+        runJvmCommandFor(buildResult, projectRoot, appArgs, profile, cliSysProps)
       }
     val childPid = spawnInProcessGroup(runCmd.args)
     if (childPid < 0) {

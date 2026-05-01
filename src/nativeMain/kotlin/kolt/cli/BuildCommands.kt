@@ -59,6 +59,11 @@ internal data class BuildResult(
 // argv for the JUnit Console Launcher. Lifted out of `doTestInner` so the
 // sysprop wiring (config selection + resolver + runner) can be tested
 // without spinning up a build pipeline. Req 3.1 (test JVM `-D`).
+//
+// `cliSysProps` (#319) overlays `[test.sys_props]`: same-key toml entries
+// are dropped, CLI entries appear after surviving toml entries in the
+// command-line order they were given. Empty list (the default) is the
+// no-op for callers that don't surface CLI sysprops yet.
 internal fun jvmTestArgv(
   config: KoltConfig,
   projectRoot: String,
@@ -70,8 +75,13 @@ internal fun jvmTestArgv(
   testClasspath: String?,
   testArgs: List<String>,
   javaPath: String?,
+  cliSysProps: List<Pair<String, String>> = emptyList(),
 ): List<String> {
-  val sysProps = resolveSysProps(config.testSection.sysProps, projectRoot, bundleClasspaths)
+  val sysProps =
+    overlayCliSysProps(
+      resolveSysProps(config.testSection.sysProps, projectRoot, bundleClasspaths),
+      cliSysProps,
+    )
   return testRunCommand(
       classesDir = classesDir,
       testClassesDir = testClassesDir,
@@ -95,12 +105,17 @@ internal fun jvmRunArgv(
   appArgs: List<String>,
   javaPath: String?,
   profile: Profile,
+  cliSysProps: List<Pair<String, String>> = emptyList(),
 ): List<String> {
   // Parser invariant `kind == "app" ⇒ main != null`; lib kind is gated by
   // `rejectIfLibrary` upstream of every doRun-class path. The `?: error`
   // is ADR 0001 safety against a future caller that forgets the gate.
   val main = config.build.main ?: error("invariant: jvmRunArgv requires config.build.main")
-  val sysProps = resolveSysProps(config.runSection.sysProps, projectRoot, bundleClasspaths)
+  val sysProps =
+    overlayCliSysProps(
+      resolveSysProps(config.runSection.sysProps, projectRoot, bundleClasspaths),
+      cliSysProps,
+    )
   return runCommand(
       config,
       main = main,
@@ -125,6 +140,7 @@ internal fun runJvmCommandFor(
   projectRoot: String,
   appArgs: List<String>,
   profile: Profile,
+  cliSysProps: List<Pair<String, String>> = emptyList(),
 ): RunCommand =
   RunCommand(
     args =
@@ -136,8 +152,23 @@ internal fun runJvmCommandFor(
         appArgs = appArgs,
         javaPath = buildResult.javaPath,
         profile = profile,
+        cliSysProps = cliSysProps,
       )
   )
+
+// CLI -D overlay (#319). DoD: CLI flags placed after toml-declared sysprops
+// in command-line order; same-key collisions drop the toml entry and keep
+// the CLI value. Within CLI, duplicate keys pass through verbatim — the
+// JVM resolves last-write-wins for `-Dfoo=a -Dfoo=b`, which matches user
+// expectations from `java -Dfoo=...`.
+private fun overlayCliSysProps(
+  toml: List<Pair<String, String>>,
+  cli: List<Pair<String, String>>,
+): List<Pair<String, String>> {
+  if (cli.isEmpty()) return toml
+  val cliKeys = cli.map { it.first }.toSet()
+  return toml.filter { it.first !in cliKeys } + cli
+}
 
 // ADR 0027 §4 kind/target matrix: JVM `kind = "app"` emits
 // `build/<name>-runtime.classpath`; every other combination (JVM lib,
@@ -795,6 +826,25 @@ internal fun rejectIfLibrary(
   return Err(EXIT_CONFIG_ERROR)
 }
 
+// CLI `-D<key>=<value>` is JVM-only (ADR 0032 §3). Mirrors the parse-time
+// rejection of `[test.sys_props]` / `[run.sys_props]` on native targets
+// (Config.kt) so the contract is symmetric: a user who declares sysprops
+// in kolt.toml hits the parser error; a user who supplies them on the CLI
+// hits this one. Without this gate `kolt {run,test} -Dfoo=bar` on native
+// silently drops the flag.
+internal fun rejectCliSysPropsOnNative(
+  config: KoltConfig,
+  cliSysProps: List<Pair<String, String>>,
+  eprint: (String) -> Unit = ::eprintln,
+): Result<Unit, Int> {
+  if (cliSysProps.isEmpty() || config.build.target !in NATIVE_TARGETS) return Ok(Unit)
+  eprint(
+    "error: -D<key>=<value> is JVM-only and cannot be used with native target " +
+      "'${config.build.target}'"
+  )
+  return Err(EXIT_CONFIG_ERROR)
+}
+
 // `doRun` does not acquire the project lock. ADR 0029 §1's contract
 // limits the lock to `kolt.lock` rewrite plus `build/` finalisation;
 // `doRunInner` performs neither, only reading prebuilt artifacts and
@@ -808,7 +858,9 @@ internal fun doRun(
   javaPath: String? = null,
   profile: Profile = Profile.Debug,
   bundleClasspaths: Map<String, String> = emptyMap(),
-): Result<Unit, Int> = doRunInner(config, classpath, appArgs, javaPath, profile, bundleClasspaths)
+  cliSysProps: List<Pair<String, String>> = emptyList(),
+): Result<Unit, Int> =
+  doRunInner(config, classpath, appArgs, javaPath, profile, bundleClasspaths, cliSysProps)
 
 private fun doRunInner(
   config: KoltConfig,
@@ -817,10 +869,14 @@ private fun doRunInner(
   javaPath: String?,
   profile: Profile,
   bundleClasspaths: Map<String, String>,
+  cliSysProps: List<Pair<String, String>>,
 ): Result<Unit, Int> {
   // ADR 0023 §1 kind gate: reject libraries before any artifact lookup
   // or process launch. Target-agnostic by design (R4.3).
   rejectIfLibrary(config).getOrElse {
+    return Err(it)
+  }
+  rejectCliSysPropsOnNative(config, cliSysProps).getOrElse {
     return Err(it)
   }
 
@@ -864,6 +920,7 @@ private fun doRunInner(
       appArgs = appArgs,
       javaPath = javaPath,
       profile = profile,
+      cliSysProps = cliSysProps,
     )
   executeCommand(args).getOrElse { error ->
     return Err(
@@ -880,18 +937,25 @@ internal fun doTest(
   testArgs: List<String> = emptyList(),
   useDaemon: Boolean = true,
   profile: Profile = Profile.Debug,
-): Result<Unit, Int> = withProjectLock { lock -> doTestInner(testArgs, useDaemon, profile, lock) }
+  cliSysProps: List<Pair<String, String>> = emptyList(),
+): Result<Unit, Int> = withProjectLock { lock ->
+  doTestInner(testArgs, useDaemon, profile, cliSysProps, lock)
+}
 
 private fun doTestInner(
   testArgs: List<String>,
   useDaemon: Boolean,
   profile: Profile,
+  cliSysProps: List<Pair<String, String>>,
   lock: LockHandle,
 ): Result<Unit, Int> {
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)
     }
+  rejectCliSysPropsOnNative(config, cliSysProps).getOrElse {
+    return Err(it)
+  }
   if (config.build.target in NATIVE_TARGETS) {
     return doNativeTest(config, testArgs, useDaemon, profile, lock)
   }
@@ -975,6 +1039,7 @@ private fun doTestInner(
       testClasspath = testClasspath,
       testArgs = testArgs,
       javaPath = javaPath,
+      cliSysProps = cliSysProps,
     )
   // Release the project lock before spawning the test child. Test compile
   // above wrote build/classes/ under the lock; the test runner is a pure

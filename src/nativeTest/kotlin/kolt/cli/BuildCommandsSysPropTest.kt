@@ -1,5 +1,6 @@
 package kolt.cli
 
+import com.github.michaelbull.result.getError
 import kolt.build.Profile
 import kolt.config.RunSection
 import kolt.config.SysPropValue
@@ -356,5 +357,229 @@ class BuildCommandsSysPropTest {
     assertTrue(cmd.args.none { it.startsWith("-D") }, "no -D flags expected: ${cmd.args}")
     assertEquals("java", cmd.args[0])
     assertEquals("-cp", cmd.args[1])
+  }
+
+  // #319: CLI -D flags appended after toml-declared sysprops, in
+  // command-line order, when there are no key collisions.
+  @Test
+  fun jvmTestArgvAppendsCliSysPropsAfterTomlSysProps() {
+    val config =
+      testConfig()
+        .copy(
+          testSection =
+            TestSection(sysProps = linkedMapOf("toml.first" to SysPropValue.Literal("a")))
+        )
+
+    val args =
+      jvmTestArgv(
+        config = config,
+        projectRoot = "/proj",
+        bundleClasspaths = emptyMap(),
+        classesDir = "build/classes",
+        testClassesDir = "build/test-classes",
+        consoleLauncherPath = "/tools/launcher.jar",
+        testResourceDirs = emptyList(),
+        testClasspath = null,
+        testArgs = emptyList(),
+        javaPath = null,
+        cliSysProps = listOf("cli.first" to "b", "cli.second" to "c"),
+      )
+
+    assertEquals("java", args[0])
+    assertEquals("-Dtoml.first=a", args[1])
+    assertEquals("-Dcli.first=b", args[2])
+    assertEquals("-Dcli.second=c", args[3])
+    assertEquals("-jar", args[4])
+  }
+
+  // #319: a CLI -D flag with the same key as a `[test.sys_props]` entry
+  // overlays it. Toml entry is dropped; CLI value appears at the CLI
+  // position (after surviving toml entries).
+  @Test
+  fun jvmTestArgvCliOverlayWinsOnKeyCollision() {
+    val config =
+      testConfig()
+        .copy(
+          testSection =
+            TestSection(
+              sysProps =
+                linkedMapOf(
+                  "shared" to SysPropValue.Literal("toml-value"),
+                  "toml.only" to SysPropValue.Literal("survives"),
+                )
+            )
+        )
+
+    val args =
+      jvmTestArgv(
+        config = config,
+        projectRoot = "/proj",
+        bundleClasspaths = emptyMap(),
+        classesDir = "build/classes",
+        testClassesDir = "build/test-classes",
+        consoleLauncherPath = "/tools/launcher.jar",
+        testResourceDirs = emptyList(),
+        testClasspath = null,
+        testArgs = emptyList(),
+        javaPath = null,
+        cliSysProps = listOf("shared" to "cli-value"),
+      )
+
+    assertTrue(
+      args.none { it == "-Dshared=toml-value" },
+      "toml entry must be dropped on collision: $args",
+    )
+    assertEquals(1, args.count { it == "-Dshared=cli-value" })
+    assertEquals(1, args.count { it == "-Dtoml.only=survives" })
+    assertTrue(
+      args.indexOf("-Dtoml.only=survives") < args.indexOf("-Dshared=cli-value"),
+      "non-colliding toml entries come before CLI overlay: $args",
+    )
+  }
+
+  // #319: same shape as the test counterpart for jvmRunArgv (Req 3.2).
+  @Test
+  fun jvmRunArgvAppendsCliSysPropsAfterTomlSysProps() {
+    val config =
+      testConfig()
+        .copy(
+          runSection = RunSection(sysProps = linkedMapOf("run.toml" to SysPropValue.Literal("t")))
+        )
+
+    val args =
+      jvmRunArgv(
+        config = config,
+        projectRoot = "/proj",
+        bundleClasspaths = emptyMap(),
+        classpath = null,
+        appArgs = emptyList(),
+        javaPath = null,
+        profile = Profile.Debug,
+        cliSysProps = listOf("run.cli" to "c"),
+      )
+
+    assertEquals("java", args[0])
+    assertEquals("-Drun.toml=t", args[1])
+    assertEquals("-Drun.cli=c", args[2])
+  }
+
+  @Test
+  fun jvmRunArgvCliOverlayWinsOnKeyCollision() {
+    val config =
+      testConfig()
+        .copy(
+          runSection =
+            RunSection(
+              sysProps =
+                linkedMapOf(
+                  "run.shared" to SysPropValue.Literal("toml-value"),
+                  "run.only" to SysPropValue.Literal("survives"),
+                )
+            )
+        )
+
+    val args =
+      jvmRunArgv(
+        config = config,
+        projectRoot = "/proj",
+        bundleClasspaths = emptyMap(),
+        classpath = null,
+        appArgs = emptyList(),
+        javaPath = null,
+        profile = Profile.Debug,
+        cliSysProps = listOf("run.shared" to "cli-value"),
+      )
+
+    assertTrue(args.none { it == "-Drun.shared=toml-value" }, "toml entry dropped on collision")
+    assertEquals(1, args.count { it == "-Drun.shared=cli-value" })
+    assertEquals(1, args.count { it == "-Drun.only=survives" })
+  }
+
+  // #319 (watch): CLI -D flags must reach the watched JVM run path through
+  // `runJvmCommandFor`, mirroring the one-shot `kolt run -D...` shape.
+  @Test
+  fun runJvmCommandForThreadsCliSysProps() {
+    val buildResult = BuildResult(config = testConfig(), classpath = null, javaPath = null)
+
+    val cmd =
+      runJvmCommandFor(
+        buildResult,
+        "/proj",
+        emptyList(),
+        Profile.Debug,
+        cliSysProps = listOf("foo" to "bar"),
+      )
+
+    assertEquals("java", cmd.args[0])
+    assertEquals("-Dfoo=bar", cmd.args[1])
+  }
+
+  // #319: CLI duplicate keys pass through verbatim. JVM resolves
+  // last-write-wins for `-Dfoo=a -Dfoo=b`; if a future edit introduces
+  // CLI-side dedup the contract documented on `overlayCliSysProps` would
+  // silently shift, so pin both occurrences in the argv.
+  @Test
+  fun jvmRunArgvCliDuplicateKeysPassThroughVerbatim() {
+    val args =
+      jvmRunArgv(
+        config = testConfig(),
+        projectRoot = "/proj",
+        bundleClasspaths = emptyMap(),
+        classpath = null,
+        appArgs = emptyList(),
+        javaPath = null,
+        profile = Profile.Debug,
+        cliSysProps = listOf("foo" to "a", "foo" to "b"),
+      )
+
+    val foos = args.filter { it.startsWith("-Dfoo=") }
+    assertEquals(listOf("-Dfoo=a", "-Dfoo=b"), foos, "both CLI dup keys must reach the JVM argv")
+  }
+
+  // #319: CLI `-D` is JVM-only. Mirrors the parse-time native rejection
+  // of `[run.sys_props]` / `[test.sys_props]` so the contract is symmetric:
+  // declaring sysprops in kolt.toml on a native target errors at parse;
+  // supplying them on the CLI errors here. Without this gate the flag is
+  // silently dropped.
+  @Test
+  fun rejectCliSysPropsOnNativeReturnsConfigErrorWithCanonicalMessage() {
+    val nativeConfig = testConfig(target = "linuxX64")
+    val stderr = mutableListOf<String>()
+
+    val exit =
+      rejectCliSysPropsOnNative(nativeConfig, listOf("foo" to "bar"), eprint = { stderr.add(it) })
+        .getError()
+
+    assertEquals(EXIT_CONFIG_ERROR, exit)
+    assertEquals(1, stderr.size)
+    assertTrue(
+      stderr[0].contains("-D<key>=<value> is JVM-only") &&
+        stderr[0].contains("native target 'linuxX64'"),
+      "stderr must mention JVM-only and the native target name, got: ${stderr[0]}",
+    )
+  }
+
+  // Pass-through cases: no CLI flags, or JVM target. Either yields Ok with
+  // no stderr; the gate must never spam.
+  @Test
+  fun rejectCliSysPropsOnNativeIsNoopForJvmTargetOrEmptyCliSysProps() {
+    val stderr = mutableListOf<String>()
+
+    val jvmWithCli =
+      rejectCliSysPropsOnNative(
+        testConfig(target = "jvm"),
+        listOf("foo" to "bar"),
+        eprint = { stderr.add(it) },
+      )
+    val nativeWithoutCli =
+      rejectCliSysPropsOnNative(
+        testConfig(target = "linuxX64"),
+        emptyList(),
+        eprint = { stderr.add(it) },
+      )
+
+    assertTrue(jvmWithCli.isOk, "JVM target with CLI flags must pass")
+    assertTrue(nativeWithoutCli.isOk, "native target without CLI flags must pass")
+    assertTrue(stderr.isEmpty(), "no stderr expected: $stderr")
   }
 }

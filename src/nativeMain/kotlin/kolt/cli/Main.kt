@@ -16,6 +16,7 @@ fun main(args: Array<String>) {
   val useDaemon = parsed.useDaemon
   val watch = parsed.watch
   val profile = parsed.profile
+  val cliSysProps = parsed.cliSysProps
   val filteredArgs = parsed.filteredArgs
   if (filteredArgs.isEmpty()) {
     printUsage()
@@ -38,7 +39,7 @@ fun main(args: Array<String>) {
           if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
         }
       if (watch) {
-        watchRunLoop(useDaemon, appArgs, profile = profile)
+        watchRunLoop(useDaemon, appArgs, profile = profile, cliSysProps = cliSysProps)
       } else {
         // ADR 0023 §1 kind gate: reject libraries before the
         // build pipeline runs (R4.2). doRun has the same guard
@@ -58,6 +59,7 @@ fun main(args: Array<String>) {
             buildResult.javaPath,
             profile = profile,
             bundleClasspaths = buildResult.bundleClasspaths,
+            cliSysProps = cliSysProps,
           )
           .getOrElse { exitProcess(it) }
       }
@@ -68,8 +70,11 @@ fun main(args: Array<String>) {
           val sep = all.indexOf("--")
           if (sep >= 0) all.subList(sep + 1, all.size) else emptyList()
         }
-      if (watch) watchCommandLoop("test", useDaemon, testArgs, profile = profile)
-      else doTest(testArgs, useDaemon = useDaemon, profile = profile).getOrElse { exitProcess(it) }
+      if (watch)
+        watchCommandLoop("test", useDaemon, testArgs, profile = profile, cliSysProps = cliSysProps)
+      else
+        doTest(testArgs, useDaemon = useDaemon, profile = profile, cliSysProps = cliSysProps)
+          .getOrElse { exitProcess(it) }
     }
     "fmt" -> doFmt(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "clean" -> doClean().getOrElse { exitProcess(it) }
@@ -95,17 +100,19 @@ fun main(args: Array<String>) {
 internal const val NO_DAEMON_FLAG = "--no-daemon"
 internal const val WATCH_FLAG = "--watch"
 internal const val RELEASE_FLAG = "--release"
+internal const val SYS_PROP_PREFIX = "-D"
 
 internal data class KoltArgs(
   val useDaemon: Boolean,
   val watch: Boolean,
   val profile: Profile,
+  val cliSysProps: List<Pair<String, String>>,
   val filteredArgs: List<String>,
 )
 
 // Splits the kolt-level flags from the subcommand and from any `--`
 // passthrough segment. The kolt-level flags (--no-daemon, --watch,
-// --release) are extracted into typed fields and stripped from
+// --release, -D<k>=<v>) are extracted into typed fields and stripped from
 // `filteredArgs`; the passthrough block (after `--`) is appended verbatim
 // so `kolt run -- --foo` still passes `-- --foo` to the subcommand parser.
 internal fun parseKoltArgs(argList: List<String>): KoltArgs {
@@ -116,10 +123,28 @@ internal fun parseKoltArgs(argList: List<String>): KoltArgs {
   val useDaemon = !koltLevel.contains(NO_DAEMON_FLAG)
   val watch = koltLevel.contains(WATCH_FLAG)
   val profile = if (koltLevel.contains(RELEASE_FLAG)) Profile.Release else Profile.Debug
+  val cliSysProps = koltLevel.mapNotNull(::parseDFlag)
   val filteredArgs =
-    koltLevel.filter { it != NO_DAEMON_FLAG && it != WATCH_FLAG && it != RELEASE_FLAG } +
-      passthrough
-  return KoltArgs(useDaemon, watch, profile, filteredArgs)
+    koltLevel.filter {
+      it != NO_DAEMON_FLAG && it != WATCH_FLAG && it != RELEASE_FLAG && parseDFlag(it) == null
+    } + passthrough
+  return KoltArgs(useDaemon, watch, profile, cliSysProps, filteredArgs)
+}
+
+// Returns null when `arg` is not a valid `-D<key>=<value>` form. Bare `-D`,
+// `-D=value` (empty key), and non-`-D` args fall back to filteredArgs so the
+// dispatcher can surface a normal "unknown command" / passthrough error.
+// Recognised forms: `-Dkey=value` -> ("key","value"); `-Dkey` -> ("key","");
+// `-Dkey=` -> ("key","").
+internal fun parseDFlag(arg: String): Pair<String, String>? {
+  if (!arg.startsWith(SYS_PROP_PREFIX)) return null
+  val rest = arg.substring(SYS_PROP_PREFIX.length)
+  if (rest.isEmpty()) return null
+  val eq = rest.indexOf('=')
+  if (eq < 0) return rest to ""
+  val key = rest.substring(0, eq)
+  if (key.isEmpty()) return null
+  return key to rest.substring(eq + 1)
 }
 
 private fun printUsage() {
@@ -145,7 +170,8 @@ private fun printUsage() {
   eprintln("  version    Show version information")
   eprintln("")
   eprintln("flags:")
-  eprintln("  --watch      Watch source files and re-run on change")
-  eprintln("  --no-daemon  Skip the warm compiler daemon for this invocation")
-  eprintln("  --release    Build under the release profile (Native: -opt; JVM: no-op)")
+  eprintln("  --watch         Watch source files and re-run on change")
+  eprintln("  --no-daemon     Skip the warm compiler daemon for this invocation")
+  eprintln("  --release       Build under the release profile (Native: -opt; JVM: no-op)")
+  eprintln("  -D<key>=<value> JVM system property for kolt test/run; overlays [test|run.sys_props]")
 }
