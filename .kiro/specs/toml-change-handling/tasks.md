@@ -47,8 +47,8 @@
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 9.2, 9.3_
     - _Boundary: docs/adr/0033_
 
-- [ ] 4. docs/architecture.md cross-reference update
-  - [ ] 4.1 Add Configuration change semantics section to docs/architecture.md
+- [x] 4. docs/architecture.md cross-reference update
+  - [x] 4.1 Add Configuration change semantics section to docs/architecture.md
     - New short section briefly summarizes the change-handling model (per-invocation eager + watch matrix dispatch) and links to ADR 0033 by relative path
     - Observable: rendered `docs/architecture.md` shows the new section with a working ADR 0033 link and section title appears in the table of contents (if present)
     - _Depends: 3.1_

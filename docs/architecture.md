@@ -122,6 +122,10 @@ Fallback chain for JVM compilation: daemon backend → subprocess backend, via `
 
 Fallback chain for native compilation: `FallbackNativeCompilerBackend` wraps `NativeDaemonBackend` over `NativeSubprocessBackend`. `isNativeFallbackEligible` decides per error whether to retry on the subprocess — infrastructure failures (connect refused, spawn failure, unexpected disconnect) fall back; genuine compilation errors do not, so the user sees konanc diagnostics without a duplicate subprocess run.
 
+## Configuration change semantics
+
+The behavior on `kolt.toml` edits is governed by a fixed three-value `SectionAction` taxonomy (`AutoReload` / `NotifyOnly` / `NoOp`) and a per-section matrix maintained in `kolt.config.ChangeMatrix`. Per-invocation entry points (`kolt build`, `kolt test`, `kolt run`, `kolt deps {add, install, update}`) re-read `kolt.toml` fresh on every command, so any edit takes effect on the next invocation. Watch mode classifies each detected change against the same matrix and dispatches accordingly: auto-reload sections (e.g. `[build] sources`, `[run.sys_props]`) take effect silently; notify-only sections (e.g. `[dependencies]`, `[kotlin] compiler`) emit a notification on stderr and require an explicit user action; no-op sections (`[fmt]`) are ignored. When a debounce window contains both auto-reload and notify-only changes, notify-only prevails — auto-reload is deferred until the user takes the recommended action and the watch process restarts. See [ADR 0033](adr/0033-kolt-toml-change-handling-model.md).
+
 ## Out of scope
 
 - **Task runner** — No custom command definitions (npm scripts style). Build lifecycle hooks are a separate discussion ([#119](https://github.com/snicmakino/kolt/issues/119)).
@@ -140,3 +144,4 @@ Architectural decisions are recorded in `docs/adr/`. Key ones:
 - [0019](adr/0019-incremental-build-kotlin-build-tools-api.md) — Incremental build via BTA
 - [0021](adr/0021-no-plugin-system.md) — No plugin system
 - [0024](adr/0024-native-compiler-daemon.md) — Native compiler daemon via reflective K2Native
+- [0033](adr/0033-kolt-toml-change-handling-model.md) — kolt.toml change-handling model (SectionAction taxonomy + per-invocation/watch matrices)
