@@ -148,7 +148,9 @@ class BtaIncrementalLockFailureTest {
   private fun systemClasspath(key: String): List<Path> {
     val raw =
       System.getProperty(key)
-        ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
+        ?: error(
+          "$key system property not set — check kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]"
+        )
     return raw.split(File.pathSeparator).filter { it.isNotBlank() }.map { Path.of(it) }
   }
 }

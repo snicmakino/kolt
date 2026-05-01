@@ -141,8 +141,8 @@ class BtaSerializationPluginTest {
 
   @Test
   fun `serialization plugin jars resolve from the classpath system property`() {
-    // Guard the build.gradle.kts wiring: if a future edit drops the
-    // serializationPluginClasspath configuration or misroutes the
+    // Guard the kolt.toml wiring: if a future edit drops the
+    // `[classpaths.serialization_plugin]` bundle or misroutes the
     // system property, we want the failure signal here rather than
     // buried inside the compile test above.
     assertTrue(
@@ -259,7 +259,9 @@ class BtaSerializationPluginTest {
   private fun systemClasspath(key: String): List<Path> {
     val raw =
       System.getProperty(key)
-        ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
+        ?: error(
+          "$key system property not set — check kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]"
+        )
     return raw.split(File.pathSeparator).filter { it.isNotBlank() }.map { Path.of(it) }
   }
 }

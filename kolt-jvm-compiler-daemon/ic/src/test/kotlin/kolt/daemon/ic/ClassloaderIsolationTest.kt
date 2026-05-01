@@ -64,7 +64,7 @@ class ClassloaderIsolationTest {
   @OptIn(org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi::class)
   private fun buildTopology(): Pair<ClassLoader, ClassLoader> {
     require(btaImplJars.isNotEmpty()) {
-      "kolt.ic.btaImplClasspath system property is empty — check :ic/build.gradle.kts test task config"
+      "kolt.ic.btaImplClasspath system property is empty — check kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]"
     }
     val parent = org.jetbrains.kotlin.buildtools.api.SharedApiClassesClassLoader()
     val child =

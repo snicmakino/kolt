@@ -16,10 +16,10 @@ import kolt.daemon.server.DaemonServer
 import kotlin.system.exitProcess
 
 // Kotlin compiler version pin. ADR 0019 §1 requires this to move in
-// lockstep with the `kotlin-build-tools-impl` artifact version in
-// `kolt-jvm-compiler-daemon/ic/build.gradle.kts`. Both are updated together
-// whenever the daemon's kotlinc is bumped. This constant is read by
-// `DaemonServer` to stamp the IC state directory
+// lockstep with the `kotlin-build-tools-impl` pin under
+// `kolt-jvm-compiler-daemon/kolt.toml [classpaths.bta_impl]`. Both are
+// updated together whenever the daemon's kotlinc is bumped. This
+// constant is read by `DaemonServer` to stamp the IC state directory
 // (`~/.kolt/daemon/ic/<this>/<projectHash>/`, ADR 0019 §5) so that a
 // compiler bump invalidates the cache in one move.
 internal const val KOLT_DAEMON_KOTLIN_VERSION: String = "2.3.20"

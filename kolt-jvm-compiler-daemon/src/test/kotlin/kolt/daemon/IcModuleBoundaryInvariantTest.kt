@@ -21,11 +21,9 @@ class IcModuleBoundaryInvariantTest {
 
   @Test
   fun `ic test sources do not import root daemon production packages`() {
-    // Skip when run outside kolt (e.g. cross-check via `./gradlew check` while
-    // the orphan Gradle config is still around): the Gradle test task does not
-    // declare this sysprop, and adding it would mean editing config that #316
-    // is about to delete. The kolt path always sets the sysprop via
-    // [test.sys_props.kolt.daemon.icTestSourceRoot] in kolt.toml.
+    // The sysprop is set under `kolt test` via
+    // [test.sys_props.kolt.daemon.icTestSourceRoot] in kolt.toml; skip
+    // when the sysprop is missing rather than failing.
     val sourceRootProp = System.getProperty("kolt.daemon.icTestSourceRoot")
     assumeTrue(
       sourceRootProp != null,

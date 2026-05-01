@@ -101,7 +101,7 @@ class BuildProfileIT {
   // release) using the bootstrapped kolt.kexe; assert both jars exist.
   // JVM-target rather than native because Native end-to-end requires
   // konanc + a working bootstrap toolchain in CI; JVM-target end-to-end
-  // is closer in cost to a normal `./gradlew test` run.
+  // is closer in cost to a normal `kolt test` run.
   @Test
   fun debugAndReleaseJarsCoexistAfterAlternation() {
     if (!enabled()) return
@@ -223,16 +223,12 @@ class BuildProfileIT {
 
   private fun locateKoltKexe(): String? {
     val cwd = currentWorkingDir() ?: return null
-    val candidates =
-      listOf(
-        "$cwd/build/bin/linuxX64/debugExecutable/kolt.kexe",
-        "$cwd/build/bin/linuxX64/releaseExecutable/kolt.kexe",
-      )
+    val candidates = listOf("$cwd/build/debug/kolt.kexe", "$cwd/build/release/kolt.kexe")
     val found = candidates.firstOrNull { fileExists(it) }
     if (found == null) {
       error(
         "KOLT_PROFILE_IT=1 but kolt.kexe is not built. Run " +
-          "`./gradlew linkDebugExecutableLinuxX64` first. Looked under: $candidates"
+          "`kolt build` first. Looked under: $candidates"
       )
     }
     return found
@@ -289,9 +285,7 @@ class BuildProfileIT {
     val on = getenv("KOLT_PROFILE_IT")?.toKString() == "1"
     if (!on && !skipNoticePrinted) {
       skipNoticePrinted = true
-      eprintln(
-        "BuildProfileIT: skipped (set KOLT_PROFILE_IT=1 and run linkDebugExecutableLinuxX64 to enable)"
-      )
+      eprintln("BuildProfileIT: skipped (set KOLT_PROFILE_IT=1 and run `kolt build` to enable)")
     }
     return on
   }

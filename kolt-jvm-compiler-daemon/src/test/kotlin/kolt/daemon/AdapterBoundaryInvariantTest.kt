@@ -18,10 +18,9 @@ import kotlin.test.assertTrue
 // Issue #112 made this a human-review gate (acceptance criterion 2).
 // This test mechanises the gate so a contributor who adds a direct
 // BTA import anywhere in daemon core gets a red test instead of a
-// reviewer catching it weeks later. A non-test Gradle task would
-// also work, but putting the check in JUnit means the invariant
-// is enforced on every `./gradlew test`, shares its reporting with
-// other regressions, and is easy to run in IDE.
+// reviewer catching it weeks later. Putting the check in JUnit means
+// the invariant is enforced on every `kolt test`, shares its reporting
+// with other regressions, and is easy to run in IDE.
 class AdapterBoundaryInvariantTest {
 
   @Test
@@ -31,7 +30,7 @@ class AdapterBoundaryInvariantTest {
         System.getProperty("kolt.daemon.coreMainSourceRoot")
           ?: error(
             "kolt.daemon.coreMainSourceRoot system property not set — " +
-              "check :kolt-jvm-compiler-daemon/build.gradle.kts `tasks.test`"
+              "check kolt-jvm-compiler-daemon/kolt.toml `[test.sys_props]`"
           )
       )
     assertTrue(Files.isDirectory(sourceRoot), "expected daemon core source root at $sourceRoot")
