@@ -25,10 +25,9 @@ import kotlin.test.fail
 // This test deliberately does **not** assert a specific recompile-set
 // size. The size-based assertion (1 class file recompiled on ABI-neutral
 // edits for linear-10 / hub-10) lives in a separate integration test
-// that pulls the spike fixtures into the `:ic` test task — see task #8
-// / a later commit. Keeping this test shape-only lets it run in every
-// `./gradlew :kolt-jvm-compiler-daemon:ic:test` cycle without dragging the
-// spike fixtures into the daemon module's test classpath.
+// that pulls the spike fixtures into the test source set. Keeping this
+// test shape-only lets it run in every `kolt test` cycle without
+// dragging the spike fixtures into the daemon module's test classpath.
 class BtaIncrementalCompilerWarmPathTest {
 
   private val btaImplJars: List<Path> = systemClasspath("kolt.ic.btaImplClasspath")
@@ -240,7 +239,9 @@ class BtaIncrementalCompilerWarmPathTest {
   private fun systemClasspath(key: String): List<Path> {
     val raw =
       System.getProperty(key)
-        ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
+        ?: error(
+          "$key system property not set — check kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]"
+        )
     return raw.split(File.pathSeparator).filter { it.isNotBlank() }.map { Path.of(it) }
   }
 }

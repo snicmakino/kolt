@@ -89,22 +89,12 @@ class JvmTestSysPropIT {
   }
 
   // Mirrors ConcurrentBuildIT/BuildProfileIT: the IT case relies on the
-  // bootstrap-built `kolt.kexe`. When the env gate is on we expect the
-  // binary to be present; surface a loud error otherwise so a misconfigured
-  // run does not silently pass.
-  // kolt.kexe is sourced from `build/<profile>/kolt.kexe` first (kolt-on-kolt
-  // bootstrap output) so the IT exercises the latest sysprop wiring, falling
-  // back to Gradle's `build/bin/linuxX64/...` layout for CI environments that
-  // have not run `kolt build` (only `./gradlew linkDebugExecutableLinuxX64`).
+  // bootstrap-built `kolt.kexe` under `build/<profile>/kolt.kexe`. When
+  // the env gate is on we expect the binary to be present; surface a
+  // loud error otherwise so a misconfigured run does not silently pass.
   private fun locateKoltKexe(): String? {
     val cwd = currentWorkingDir() ?: return null
-    val candidates =
-      listOf(
-        "$cwd/build/debug/kolt.kexe",
-        "$cwd/build/release/kolt.kexe",
-        "$cwd/build/bin/linuxX64/debugExecutable/kolt.kexe",
-        "$cwd/build/bin/linuxX64/releaseExecutable/kolt.kexe",
-      )
+    val candidates = listOf("$cwd/build/debug/kolt.kexe", "$cwd/build/release/kolt.kexe")
     val found = candidates.firstOrNull { fileExists(it) }
     if (found == null) {
       error(

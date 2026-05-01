@@ -25,8 +25,8 @@ import kotlin.test.fail
 // output end-to-end, which is the structural claim ADR 0019 §3 needs before
 // B-2b layers state management on top.
 //
-// Both jar classpaths come from system properties that :ic/build.gradle.kts
-// injects into the Gradle test task from resolvable configurations:
+// Both jar classpaths come from system properties declared in
+// kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]:
 //   kolt.ic.btaImplClasspath  — kotlin-build-tools-impl:2.3.20 transitive
 //   kolt.ic.fixtureClasspath  — kotlin-stdlib:2.3.20 (compile classpath for the fixture)
 class BtaIncrementalCompilerColdPathTest {
@@ -273,7 +273,9 @@ class BtaIncrementalCompilerColdPathTest {
   private fun systemClasspath(key: String): List<Path> {
     val raw =
       System.getProperty(key)
-        ?: error("$key system property not set — check :ic/build.gradle.kts test task config")
+        ?: error(
+          "$key system property not set — check kolt-jvm-compiler-daemon/kolt.toml [test.sys_props]"
+        )
     return raw.split(File.pathSeparator).filter { it.isNotBlank() }.map { Path.of(it) }
   }
 }

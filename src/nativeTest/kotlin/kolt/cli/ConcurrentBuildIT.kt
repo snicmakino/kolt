@@ -31,12 +31,11 @@ import platform.posix.mkdtemp
  * Spawns the built `kolt.kexe` against tmp fixture projects to drive the project-local advisory
  * lock and the temp+rename atomic Downloader path end-to-end.
  *
- * The cases are gated behind `KOLT_CONCURRENT_IT=1` because the realistic scenarios depend on
- * `./gradlew linkDebugExecutableLinuxX64` having produced `build/bin/linuxX64/debugExecutable/
- * kolt.kexe` and on Maven Central being reachable for the Downloader scenario. Without the env
- * variable each case returns immediately so `./gradlew linuxX64Test` stays offline-safe and fast;
- * with the env variable the test exercises real `fork+execvp` of the binary and asserts on its exit
- * code, stderr, and the resulting filesystem state.
+ * The cases are gated behind `KOLT_CONCURRENT_IT=1` because the realistic scenarios depend on `kolt
+ * build` having produced `build/debug/kolt.kexe` and on Maven Central being reachable for the
+ * Downloader scenario. Without the env variable each case returns immediately so `kolt test` stays
+ * offline-safe and fast; with the env variable the test exercises real `fork+execvp` of the binary
+ * and asserts on its exit code, stderr, and the resulting filesystem state.
  *
  * Shell harness scripts use a Kotlin-side `D = "$"` token for shell variable references so the
  * raw-string templates do not collide with Kotlin's own `$variable` interpolation.
@@ -235,24 +234,20 @@ class ConcurrentBuildIT {
     )
   }
 
-  // The IT cases need the Gradle-produced `kolt.kexe`. The Gradle test
-  // task does not depend on `linkDebugExecutableLinuxX64` by default, so
-  // we cannot assume the binary is present. When it is missing we
-  // surface a clear error rather than silently passing — the env-gate
-  // already guarded the "do not run" path; if the user opted in, the
-  // binary really should be there.
+  // The IT cases need a kolt-built `kolt.kexe`. `kolt test` does not
+  // produce the executable on its own, so we cannot assume the binary
+  // is present. When it is missing we surface a clear error rather
+  // than silently passing — the env-gate already guarded the "do not
+  // run" path; if the user opted in, the binary really should be
+  // there.
   private fun locateKoltKexe(): String? {
     val cwd = currentWorkingDir() ?: return null
-    val candidates =
-      listOf(
-        "$cwd/build/bin/linuxX64/debugExecutable/kolt.kexe",
-        "$cwd/build/bin/linuxX64/releaseExecutable/kolt.kexe",
-      )
+    val candidates = listOf("$cwd/build/debug/kolt.kexe", "$cwd/build/release/kolt.kexe")
     val found = candidates.firstOrNull { fileExists(it) }
     if (found == null) {
       error(
         "KOLT_CONCURRENT_IT=1 but kolt.kexe is not built. Run " +
-          "`./gradlew linkDebugExecutableLinuxX64` first. Looked under: $candidates"
+          "`kolt build` first. Looked under: $candidates"
       )
     }
     return found
@@ -309,7 +304,7 @@ class ConcurrentBuildIT {
   }
 
   // Without an explicit env opt-in the four scenarios early-return rather
-  // than running, so the suite ships clean to default `linuxX64Test`. Print
+  // than running, so the suite ships clean to default `kolt test`. Print
   // the skip notice once so a developer running tests without the env
   // variable does not assume "4 passed" means concurrent safety was
   // exercised.
@@ -318,7 +313,7 @@ class ConcurrentBuildIT {
     if (!on && !skipNoticePrinted) {
       skipNoticePrinted = true
       eprintln(
-        "ConcurrentBuildIT: skipped (set KOLT_CONCURRENT_IT=1 and run linkDebugExecutableLinuxX64 to enable)"
+        "ConcurrentBuildIT: skipped (set KOLT_CONCURRENT_IT=1 and run `kolt build` to enable)"
       )
     }
     return on
