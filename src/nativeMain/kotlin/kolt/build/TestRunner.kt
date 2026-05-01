@@ -20,6 +20,12 @@ fun testRunCommand(
         if (!classpath.isNullOrEmpty()) add(classpath)
       }
       .joinToString(":")
+  // JUnit Platform Console Launcher 1.11 rejects `--scan-class-path`
+  // together with any `--select-*` flag. Suppress the implicit scan so
+  // `kolt test -- --select-class=...` is honoured. `--include-*` /
+  // `--exclude-*` filters do not collide with class-path scanning, so
+  // they continue to compose with the default scan.
+  val hasExplicitSelector = testArgs.any { it.startsWith("--select-") }
   val args = buildList {
     add(javaPath ?: "java")
     for ((k, v) in sysProps) add("-D$k=$v")
@@ -27,7 +33,7 @@ fun testRunCommand(
     add(consoleLauncherPath)
     add("--class-path")
     add(cp)
-    add("--scan-class-path")
+    if (!hasExplicitSelector) add("--scan-class-path")
     addAll(testArgs)
   }
   return TestRunCommand(args = args)
