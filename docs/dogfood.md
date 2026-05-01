@@ -26,4 +26,4 @@ distinguishable from external-user reports.
 
 ## 2026-05
 
-- 2026-05-01 `kolt test -- --select-class=<FQCN>` fails: JUnit Platform Console Launcher 1.11.4 rejects `--scan-class-path` together with explicit selectors (`Scanning the classpath and using explicit selectors at the same time is not supported`). `testRunCommand` always inserts `--scan-class-path`, so trailing-arg passthrough cannot be used to narrow execution to a single class or package. Surfaced during the daemon-test-via-kolt (#315) Pre-flight Gate → #323.
+- 2026-05-01 `kolt test -- --select-class=<FQCN>` fails: JUnit Platform Console Launcher 1.11.4 rejects `--scan-class-path` together with explicit selectors (`Scanning the classpath and using explicit selectors at the same time is not supported`). `testRunCommand` always inserts `--scan-class-path`, so trailing-arg passthrough cannot be used to narrow execution to a single class or package. Surfaced during the daemon-test-via-kolt (#315) Pre-flight Gate → #323 (fixed).

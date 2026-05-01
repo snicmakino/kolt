@@ -254,4 +254,55 @@ class TestRunnerTest {
       cmd.args,
     )
   }
+
+  // JUnit Platform Console Launcher 1.11 rejects `--scan-class-path` together
+  // with `--select-class=` / `--select-package=` etc. Suppress the implicit
+  // scan when the caller passes any explicit `--select-*` selector, so
+  // `kolt test -- --select-class=foo.bar.AlphaTest` actually runs the
+  // single class instead of failing argv parsing.
+  @Test
+  fun testRunCommandSuppressesScanClassPathWhenSelectClassPresent() {
+    val cmd =
+      testRunCommand(
+        classesDir = "build/classes",
+        testClassesDir = "build/test-classes",
+        consoleLauncherPath = "/tools/launcher.jar",
+        testArgs = listOf("--select-class=foo.bar.AlphaTest"),
+      )
+
+    assertEquals(
+      listOf(
+        "java",
+        "-jar",
+        "/tools/launcher.jar",
+        "--class-path",
+        "build/classes:build/test-classes",
+        "--select-class=foo.bar.AlphaTest",
+      ),
+      cmd.args,
+    )
+  }
+
+  @Test
+  fun testRunCommandSuppressesScanClassPathWhenSelectPackagePresent() {
+    val cmd =
+      testRunCommand(
+        classesDir = "build/classes",
+        testClassesDir = "build/test-classes",
+        consoleLauncherPath = "/tools/launcher.jar",
+        testArgs = listOf("--select-package=foo.bar"),
+      )
+
+    assertEquals(
+      listOf(
+        "java",
+        "-jar",
+        "/tools/launcher.jar",
+        "--class-path",
+        "build/classes:build/test-classes",
+        "--select-package=foo.bar",
+      ),
+      cmd.args,
+    )
+  }
 }
