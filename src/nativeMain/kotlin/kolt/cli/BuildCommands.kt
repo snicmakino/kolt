@@ -113,6 +113,32 @@ internal fun jvmRunArgv(
     .args
 }
 
+// `kolt run --watch` shares the JVM-app argv shape with one-shot `kolt
+// run`. Lifted to a helper so `[run.sys_props]` resolution stays on a
+// single path through `jvmRunArgv` instead of WatchLoop drifting on its
+// own `runCommand(...)` call. Native targets keep going through
+// `nativeRunCommand` upstream of this helper — the `[run.sys_props]`
+// gate at config-validation time forbids the section on native targets,
+// so a watch-mode native run has nothing to thread.
+internal fun runJvmCommandFor(
+  buildResult: BuildResult,
+  projectRoot: String,
+  appArgs: List<String>,
+  profile: Profile,
+): RunCommand =
+  RunCommand(
+    args =
+      jvmRunArgv(
+        config = buildResult.config,
+        projectRoot = projectRoot,
+        bundleClasspaths = buildResult.bundleClasspaths,
+        classpath = buildResult.classpath,
+        appArgs = appArgs,
+        javaPath = buildResult.javaPath,
+        profile = profile,
+      )
+  )
+
 // ADR 0027 §4 kind/target matrix: JVM `kind = "app"` emits
 // `build/<name>-runtime.classpath`; every other combination (JVM lib,
 // native app, native lib) must not. A residual manifest from a previous

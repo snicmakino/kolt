@@ -306,4 +306,55 @@ class BuildCommandsSysPropTest {
       "test.sys_props value must not leak into app JVM: $args",
     )
   }
+
+  // #322: `kolt run --watch` shares this argv-build helper with the one-shot
+  // path so `[run.sys_props]` resolution cannot diverge between modes.
+  // The helper unpacks BuildResult into the same jvmRunArgv call doRunInner
+  // makes; this test pins that the bundle-classpath threading survives the
+  // BuildResult round-trip.
+  @Test
+  fun runJvmCommandForUnpacksBuildResultThroughJvmRunArgv() {
+    val config =
+      testConfig()
+        .copy(
+          runSection =
+            RunSection(
+              sysProps =
+                linkedMapOf(
+                  "run.lit" to SysPropValue.Literal("v"),
+                  "run.plug" to SysPropValue.ClasspathRef("plugins"),
+                )
+            )
+        )
+    val buildResult =
+      BuildResult(
+        config = config,
+        classpath = "/cache/dep.jar",
+        javaPath = "/jdk/bin/java",
+        bundleClasspaths = mapOf("plugins" to "/cache/p1.jar:/cache/p2.jar"),
+      )
+
+    val cmd = runJvmCommandFor(buildResult, "/abs/proj", listOf("--app-arg"), Profile.Debug)
+
+    assertEquals("/jdk/bin/java", cmd.args[0])
+    assertEquals("-Drun.lit=v", cmd.args[1])
+    assertEquals("-Drun.plug=/cache/p1.jar:/cache/p2.jar", cmd.args[2])
+    assertEquals("-cp", cmd.args[3])
+    assertEquals("--app-arg", cmd.args.last())
+  }
+
+  // Req 7.3 watch-mode counterpart: a BuildResult without `[run.sys_props]`
+  // produces argv with no `-D` slots, byte-identical to the pre-feature
+  // shape. Guards against a future helper edit accidentally inserting an
+  // empty-key sysprop or a default `-D` flag.
+  @Test
+  fun runJvmCommandForOmitsSysPropsWhenRunSectionEmpty() {
+    val buildResult = BuildResult(config = testConfig(), classpath = null, javaPath = null)
+
+    val cmd = runJvmCommandFor(buildResult, "/proj", emptyList(), Profile.Debug)
+
+    assertTrue(cmd.args.none { it.startsWith("-D") }, "no -D flags expected: ${cmd.args}")
+    assertEquals("java", cmd.args[0])
+    assertEquals("-cp", cmd.args[1])
+  }
 }
