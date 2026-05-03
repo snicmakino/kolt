@@ -196,6 +196,78 @@ class MetadataTest {
     assertTrue(resolution.fallbackToPrerelease)
   }
 
+  // Guava-style multi-flavor tie: two stable variants share the numeric
+  // tuple `33.6.0` and unknown qualifier tokens (`jre` / `android`) both
+  // sort as RELEASE under `compareVersions`. The publisher's `<release>`
+  // is the authoritative tiebreak so `kolt add com.google.guava:guava`
+  // keeps yielding `-jre` (Maven Central's declared default) instead of
+  // flipping with XML order.
+  @Test
+  fun multiFlavorTieDefersToReleaseTag() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <release>33.6.0-jre</release>
+                <versions>
+                  <version>33.6.0-android</version>
+                  <version>33.6.0-jre</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("33.6.0-jre", resolution.version)
+    assertFalse(resolution.fallbackToPrerelease)
+  }
+
+  // Snapshot must lose to the stable sibling even though they share the
+  // numeric tuple — guards against a regression where the SNAPSHOT
+  // accidentally classifies as stable or the comparator ties.
+  @Test
+  fun snapshotLosesToStableAtSameNumericTuple() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <versions>
+                  <version>0.1.0-SNAPSHOT</version>
+                  <version>0.1.0</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("0.1.0", resolution.version)
+    assertFalse(resolution.fallbackToPrerelease)
+  }
+
+  // An empty `<versions></versions>` block (vs. tag absent entirely)
+  // must fall through to <release>; the pre-release flag fires because
+  // <release> happens to be a candidate-release.
+  @Test
+  fun emptyVersionsBlockFallsThroughToReleaseTag() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <release>1.0.0-rc1</release>
+                <versions>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.0.0-rc1", resolution.version)
+    assertTrue(resolution.fallbackToPrerelease)
+  }
+
   @Test
   fun parseVersionWithWhitespaceInTag() {
     val xml =

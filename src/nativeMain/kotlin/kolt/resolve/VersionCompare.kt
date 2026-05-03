@@ -3,9 +3,13 @@ package kolt.resolve
 // Maven Central populates `<release>` with the latest non-SNAPSHOT
 // version, which still includes -rc / -alpha / -beta / -M\d+ / -eap /
 // -dev / -preview qualifiers — none of which the `kolt add <ga>` no-version
-// path should auto-pick. This predicate scopes the explicit set we treat
-// as "pre-release"; any other token (e.g. `.RELEASE`, `-Final`) parses as
-// stable so unconventional release suffixes don't get rejected.
+// path should auto-pick. The `cr` qualifier lands here too: JBoss /
+// Hibernate use `.CR\d+` for candidate releases. Trailing digits are
+// allowed on every qualifier (real artefacts ship `-eap13`, `-rc02`,
+// `-cr1`); `M` requires the digit because a bare token "M" would
+// otherwise sweep up unrelated single-letter classifiers. Unknown
+// tokens (e.g. `.RELEASE`, `-Final`, `.GA`, `-jre`, `-android`) parse
+// as stable so vendor-specific release suffixes aren't rejected.
 fun isStableVersion(version: String): Boolean {
   for (token in version.split('.', '-')) {
     if (token.isEmpty()) continue
@@ -13,12 +17,7 @@ fun isStableVersion(version: String): Boolean {
     val lower = token.lowercase()
     val isPrerelease =
       lower == "snapshot" ||
-        lower == "eap" ||
-        lower == "dev" ||
-        lower == "preview" ||
-        Regex("""^rc\d*$""").matches(lower) ||
-        Regex("""^alpha\d*$""").matches(lower) ||
-        Regex("""^beta\d*$""").matches(lower) ||
+        Regex("""^(rc|alpha|beta|cr|eap|dev|preview)\d*$""").matches(lower) ||
         Regex("""^m\d+$""").matches(lower)
     if (isPrerelease) return false
   }

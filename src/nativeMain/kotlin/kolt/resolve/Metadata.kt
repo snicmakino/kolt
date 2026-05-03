@@ -19,7 +19,15 @@ fun parseMetadataXml(xml: String): Result<MetadataResolution, MetadataParseError
   if (versions.isNotEmpty()) {
     val stable = versions.filter { isStableVersion(it) }
     val candidates = stable.ifEmpty { versions }
-    val picked = candidates.reduce { acc, v -> if (compareVersions(v, acc) > 0) v else acc }
+    val maxByCompare = candidates.reduce { acc, v -> if (compareVersions(v, acc) > 0) v else acc }
+    // Multi-flavor artefacts (e.g. Guava `33.6.0-jre` / `33.6.0-android`)
+    // share a numeric tuple and tie under `compareVersions`. The
+    // publisher's `<release>` tag is the authoritative tiebreak — without
+    // this preference, picking from XML order silently flips the chosen
+    // variant on artefacts whose `<versions>` list isn't `<release>`-last.
+    val release = extractSimpleTag(xml, "release")
+    val tied = candidates.filter { compareVersions(it, maxByCompare) == 0 }
+    val picked = if (release != null && release in tied) release else maxByCompare
     return Ok(MetadataResolution(picked, fallbackToPrerelease = !isStableVersion(picked)))
   }
   val release = extractSimpleTag(xml, "release")

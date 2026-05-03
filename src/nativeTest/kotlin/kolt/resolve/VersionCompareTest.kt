@@ -297,4 +297,46 @@ class IsStableVersionTest {
 
   @Test
   fun springReleaseQualifierTreatedAsStable() = assertTrue(isStableVersion("1.0.0.RELEASE"))
+
+  @Test
+  fun jbossFinalQualifierTreatedAsStable() = assertTrue(isStableVersion("1.0.0.Final"))
+
+  @Test
+  fun guavaJreFlavorTreatedAsStable() = assertTrue(isStableVersion("33.6.0-jre"))
+
+  @Test
+  fun guavaAndroidFlavorTreatedAsStable() = assertTrue(isStableVersion("33.6.0-android"))
+
+  // JBoss/Hibernate convention: .CR\d+ for candidate releases.
+  @Test
+  fun hibernateCRQualifierIsNotStable() = assertFalse(isStableVersion("7.3.0.CR1"))
+
+  // Real-world ship for JetBrains EAP builds: `-eap13`, not bare `-eap`.
+  @Test
+  fun eapWithDigitSuffixIsNotStable() = assertFalse(isStableVersion("0.24.0-eap13"))
+
+  @Test
+  fun previewWithDigitSuffixIsNotStable() = assertFalse(isStableVersion("1.0.0-preview2"))
+
+  @Test
+  fun devWithDigitSuffixIsNotStable() = assertFalse(isStableVersion("1.0.0-dev03"))
+
+  // Kotlin compiler line uses capital-case qualifiers.
+  @Test
+  fun kotlinCapitalRcWithoutDigitIsNotStable() = assertFalse(isStableVersion("2.1.0-RC"))
+
+  @Test
+  fun kotlinCapitalRcWithDigitIsNotStable() = assertFalse(isStableVersion("2.1.0-RC2"))
+
+  @Test
+  fun kotlinCapitalBetaWithDigitIsNotStable() = assertFalse(isStableVersion("2.1.0-Beta1"))
+
+  // Old Kotlin builds shipped `-beta-<buildno>` (dash-separated).
+  @Test
+  fun dashSeparatedBetaWithBuildNumberIsNotStable() =
+    assertFalse(isStableVersion("1.0.0-beta-1038"))
+
+  @Test
+  fun dashSeparatedAlphaWithBuildNumberIsNotStable() =
+    assertFalse(isStableVersion("1.0.0-alpha-1"))
 }
