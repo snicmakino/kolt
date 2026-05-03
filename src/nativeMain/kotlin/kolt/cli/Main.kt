@@ -92,7 +92,7 @@ fun main(args: Array<String>) {
     else -> {
       eprintln("error: unknown command '${filteredArgs[0]}'")
       printUsage()
-      exitProcess(EXIT_BUILD_ERROR)
+      exitProcess(EXIT_COMMAND_NOT_FOUND)
     }
   }
 }
