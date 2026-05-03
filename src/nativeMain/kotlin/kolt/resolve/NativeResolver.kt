@@ -266,8 +266,8 @@ private fun fetchAndRead(
     deps.ensureDirectoryRecursive(parentDir).getOrElse {
       return Err(ResolveError.DirectoryCreateFailed(parentDir))
     }
-    downloadFromRepositories(repos, cachePath, urlBuilder, deps::downloadFile).getOrElse {
-      failure ->
+    downloadFromRepositories(repos, cachePath, urlBuilder, deps::downloadFile).getOrElse { failure
+      ->
       return Err(ResolveError.DownloadFailed(groupArtifact, failure))
     }
   }

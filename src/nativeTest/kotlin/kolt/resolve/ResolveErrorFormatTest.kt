@@ -74,9 +74,7 @@ class ResolveErrorFormatTest {
     val rendered = formatResolveError(error)
     assertTrue(rendered.contains("error: failed to download com.example:lib"))
     assertTrue(
-      rendered.contains(
-        "https://repo1.maven.org/maven2/com/example/lib/1.0.0/lib-1.0.0.jar -> 404"
-      )
+      rendered.contains("https://repo1.maven.org/maven2/com/example/lib/1.0.0/lib-1.0.0.jar -> 404")
     )
     assertTrue(rendered.contains("https://jitpack.io/com/example/lib/1.0.0/lib-1.0.0.jar -> 404"))
   }

@@ -178,9 +178,7 @@ private fun fetchLatestVersion(
       return Err(EXIT_DEPENDENCY_ERROR)
     }
   if (resolution.fallbackToPrerelease) {
-    eprintln(
-      "warning: no stable release found for $group:$artifact; using ${resolution.version}"
-    )
+    eprintln("warning: no stable release found for $group:$artifact; using ${resolution.version}")
   }
   return Ok(resolution.version)
 }
