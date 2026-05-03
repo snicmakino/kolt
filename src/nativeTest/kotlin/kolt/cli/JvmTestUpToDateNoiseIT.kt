@@ -78,9 +78,9 @@ class JvmTestUpToDateNoiseIT {
     assertEquals(0, exit1, "cold kolt test must exit 0; stdout=$stdout1 stderr=$stderr1")
     assertEquals(0, exit2, "warm kolt test must exit 0; stdout=$stdout2 stderr=$stderr2")
     // Positive signal: the warm run actually reached the test compile
-    // phase. Without this, an early exit before line 1036 of
-    // BuildCommands.kt could pass the negative assertion for the wrong
-    // reason.
+    // phase (the `compiling tests...` banner in doTestInner). Without
+    // this, an early exit before the banner could pass the negative
+    // assertion for the wrong reason.
     assertTrue(
       stdout2.contains("compiling tests..."),
       "warm run must reach the test-compile phase; stdout=$stdout2 stderr=$stderr2",

@@ -375,7 +375,11 @@ private fun doBuildInner(
     }
 
   if (config.build.target in NATIVE_TARGETS) {
-    return doNativeBuildInner(config, useDaemon, profile, quietUpToDate)
+    // quietUpToDate is JVM-test-only — doTest routes native targets to
+    // doNativeTest before reaching doBuildInner, so the native branch
+    // here is reached only by standalone `kolt build` / `kolt check`,
+    // where the cache-hit confirmation is the desired signal.
+    return doNativeBuildInner(config, useDaemon, profile)
   }
 
   val currentState =
@@ -585,7 +589,6 @@ private fun doNativeBuildInner(
   config: KoltConfig,
   useDaemon: Boolean,
   profile: Profile,
-  quietUpToDate: Boolean = false,
 ): Result<BuildResult, Int> {
   val startMark = TimeSource.Monotonic.markNow()
 
@@ -625,9 +628,7 @@ private fun doNativeBuildInner(
 
   if (isBuildUpToDate(current = currentState, cached = cachedState)) {
     val elapsed = startMark.elapsedNow()
-    if (!quietUpToDate) {
-      println("${config.name} is up to date (${formatDuration(elapsed)})")
-    }
+    println("${config.name} is up to date (${formatDuration(elapsed)})")
     return Ok(BuildResult(config, classpath = null, javaPath = null))
   }
   // Out of date → rebuild. Drop the state file first so any failure
