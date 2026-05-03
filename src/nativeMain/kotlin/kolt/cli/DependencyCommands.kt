@@ -181,12 +181,17 @@ private fun fetchLatestVersion(
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  return parseMetadataXml(xml)
-    .getOrElse { error ->
+  val resolution =
+    parseMetadataXml(xml).getOrElse { error ->
       eprintln("error: ${error.message}")
       return Err(EXIT_DEPENDENCY_ERROR)
     }
-    .let { Ok(it) }
+  if (resolution.fallbackToPrerelease) {
+    eprintln(
+      "warning: no stable release found for $group:$artifact; using ${resolution.version}"
+    )
+  }
+  return Ok(resolution.version)
 }
 
 internal fun doFetch(): Result<Unit, Int> = withDependencyLock { doFetchInner() }

@@ -247,3 +247,54 @@ class VersionCompareTest {
     assertTrue(matchesRejectPattern("3.0.0", "[2.0.0,)"))
   }
 }
+
+class IsStableVersionTest {
+
+  @Test
+  fun pureNumericTripleIsStable() = assertTrue(isStableVersion("1.0.0"))
+
+  @Test
+  fun pureNumericPairIsStable() = assertTrue(isStableVersion("1.10"))
+
+  @Test
+  fun rcWithNumberIsNotStable() = assertFalse(isStableVersion("1.11.0-rc02"))
+
+  @Test
+  fun rcWithoutNumberIsNotStable() = assertFalse(isStableVersion("1.0.0-rc"))
+
+  @Test
+  fun rcUppercaseIsNotStable() = assertFalse(isStableVersion("1.0.0-RC1"))
+
+  @Test
+  fun alphaIsNotStable() = assertFalse(isStableVersion("1.0.0-alpha1"))
+
+  @Test
+  fun betaIsNotStable() = assertFalse(isStableVersion("1.0.0-beta"))
+
+  @Test
+  fun snapshotIsNotStable() = assertFalse(isStableVersion("1.0.0-SNAPSHOT"))
+
+  @Test
+  fun milestoneMUpperIsNotStable() = assertFalse(isStableVersion("1.0.0-M5"))
+
+  @Test
+  fun milestoneMLowerIsNotStable() = assertFalse(isStableVersion("1.0.0-m12"))
+
+  @Test
+  fun bareMWithoutDigitIsStable() = assertTrue(isStableVersion("1.0.0-M"))
+
+  @Test
+  fun eapIsNotStable() = assertFalse(isStableVersion("1.0.0-eap"))
+
+  @Test
+  fun devIsNotStable() = assertFalse(isStableVersion("1.0.0-dev"))
+
+  @Test
+  fun previewIsNotStable() = assertFalse(isStableVersion("1.0.0-preview"))
+
+  @Test
+  fun unknownQualifierTreatedAsStable() = assertTrue(isStableVersion("1.0.0-final"))
+
+  @Test
+  fun springReleaseQualifierTreatedAsStable() = assertTrue(isStableVersion("1.0.0.RELEASE"))
+}

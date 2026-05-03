@@ -5,13 +5,15 @@ import com.github.michaelbull.result.getError
 import kolt.config.MAVEN_CENTRAL_BASE
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class MetadataTest {
 
   @Test
-  fun parseReleaseVersionFromMetadataXml() {
+  fun parseLatestStableFromVersionsList() {
     val xml =
       """
             <metadata>
@@ -29,30 +31,128 @@ class MetadataTest {
         """
         .trimIndent()
 
-    val result = parseMetadataXml(xml)
-    assertEquals("1.10.2", assertNotNull(result.get()))
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.10.2", resolution.version)
+    assertFalse(resolution.fallbackToPrerelease)
   }
 
+  // Issue #354: kolt-usage docs the no-version path as "latest stable"
+  // but the pre-fix code trusted <release>, which Maven Central populates
+  // with the latest non-SNAPSHOT version including -rc qualifiers.
   @Test
-  fun parseMetadataWithoutReleaseUsesLatest() {
+  fun versionsListFiltersPrereleaseRcQualifier() {
     val xml =
       """
             <metadata>
-              <groupId>com.example</groupId>
-              <artifactId>lib</artifactId>
               <versioning>
-                <latest>2.0.0</latest>
+                <release>1.11.0-rc02</release>
                 <versions>
-                  <version>1.0.0</version>
-                  <version>2.0.0</version>
+                  <version>1.10.0</version>
+                  <version>1.11.0-rc02</version>
                 </versions>
               </versioning>
             </metadata>
         """
         .trimIndent()
 
-    val result = parseMetadataXml(xml)
-    assertEquals("2.0.0", assertNotNull(result.get()))
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.10.0", resolution.version)
+    assertFalse(resolution.fallbackToPrerelease)
+  }
+
+  @Test
+  fun versionsListPicksMaxByVersionNotByXmlOrder() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <versions>
+                  <version>0.9.0</version>
+                  <version>1.5.0</version>
+                  <version>1.0.0</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.5.0", resolution.version)
+  }
+
+  @Test
+  fun allPreReleaseFallsBackWithFlag() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <versions>
+                  <version>2.0.0-beta01</version>
+                  <version>2.0.0-rc01</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("2.0.0-rc01", resolution.version)
+    assertTrue(resolution.fallbackToPrerelease)
+  }
+
+  @Test
+  fun milestoneMQualifierIsFiltered() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <versions>
+                  <version>1.0.0-M5</version>
+                  <version>1.0.0</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.0.0", resolution.version)
+  }
+
+  @Test
+  fun eapQualifierIsFiltered() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <versions>
+                  <version>1.0.0-eap</version>
+                  <version>0.9.0</version>
+                </versions>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("0.9.0", resolution.version)
+  }
+
+  @Test
+  fun parseMetadataWithoutVersionsListUsesLatestTag() {
+    val xml =
+      """
+            <metadata>
+              <versioning>
+                <latest>2.0.0</latest>
+              </versioning>
+            </metadata>
+        """
+        .trimIndent()
+
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("2.0.0", resolution.version)
+    assertFalse(resolution.fallbackToPrerelease)
   }
 
   @Test
@@ -76,8 +176,11 @@ class MetadataTest {
     assertIs<MetadataParseError>(result.getError())
   }
 
+  // No <versions> list, only a pre-release in <release>: we honour the
+  // legacy fallback to keep working against malformed metadata, but mark
+  // the resolution so the caller can warn.
   @Test
-  fun parsePreReleaseVersion() {
+  fun releaseFallbackFlagsPrerelease() {
     val xml =
       """
             <metadata>
@@ -88,8 +191,9 @@ class MetadataTest {
         """
         .trimIndent()
 
-    val result = parseMetadataXml(xml)
-    assertEquals("2.0.0-beta.1", assertNotNull(result.get()))
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("2.0.0-beta.1", resolution.version)
+    assertTrue(resolution.fallbackToPrerelease)
   }
 
   @Test
@@ -106,8 +210,8 @@ class MetadataTest {
         """
         .trimIndent()
 
-    val result = parseMetadataXml(xml)
-    assertEquals("1.5.0", assertNotNull(result.get()))
+    val resolution = assertNotNull(parseMetadataXml(xml).get())
+    assertEquals("1.5.0", resolution.version)
   }
 
   @Test

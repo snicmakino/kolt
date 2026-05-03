@@ -1,5 +1,30 @@
 package kolt.resolve
 
+// Maven Central populates `<release>` with the latest non-SNAPSHOT
+// version, which still includes -rc / -alpha / -beta / -M\d+ / -eap /
+// -dev / -preview qualifiers — none of which the `kolt add <ga>` no-version
+// path should auto-pick. This predicate scopes the explicit set we treat
+// as "pre-release"; any other token (e.g. `.RELEASE`, `-Final`) parses as
+// stable so unconventional release suffixes don't get rejected.
+fun isStableVersion(version: String): Boolean {
+  for (token in version.split('.', '-')) {
+    if (token.isEmpty()) continue
+    if (token.all { it.isDigit() }) continue
+    val lower = token.lowercase()
+    val isPrerelease =
+      lower == "snapshot" ||
+        lower == "eap" ||
+        lower == "dev" ||
+        lower == "preview" ||
+        Regex("""^rc\d*$""").matches(lower) ||
+        Regex("""^alpha\d*$""").matches(lower) ||
+        Regex("""^beta\d*$""").matches(lower) ||
+        Regex("""^m\d+$""").matches(lower)
+    if (isPrerelease) return false
+  }
+  return true
+}
+
 fun compareVersions(a: String, b: String): Int {
   val partsA = splitVersion(a)
   val partsB = splitVersion(b)
