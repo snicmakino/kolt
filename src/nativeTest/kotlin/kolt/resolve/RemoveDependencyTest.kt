@@ -208,6 +208,138 @@ class RemoveDependencyTest {
     assertEquals(toml, result.newToml)
   }
 
+  // Issue #360: removing the last entry from a section must elide the
+  // section header. A bare `[dependencies]` reads as "still has deps" at
+  // a glance and looks unfinished in PR diffs.
+  @Test
+  fun removingLastEntryElidesMainSectionHeader() {
+    val toml =
+      """
+        |name = "app"
+        |
+        |[dependencies]
+        |"foo:bar" = "1.0"
+        |
+        |[repositories]
+        |central = "https://repo1.maven.org/maven2"
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "foo:bar")
+
+    assertFalse("[dependencies]" in result.newToml, "header must be dropped: ${result.newToml}")
+    assertTrue("[repositories]" in result.newToml)
+    assertTrue("central" in result.newToml)
+    assertTrue(result.newToml.endsWith("\n"))
+  }
+
+  @Test
+  fun removingLastEntryElidesTestSectionHeader() {
+    val toml =
+      """
+        |[dependencies]
+        |"foo:bar" = "1.0"
+        |
+        |[test-dependencies]
+        |"io.kotest:kotest-runner" = "5.8.0"
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "io.kotest:kotest-runner")
+
+    assertFalse(
+      "[test-dependencies]" in result.newToml,
+      "test header must be dropped: ${result.newToml}",
+    )
+    assertTrue("[dependencies]" in result.newToml)
+    assertTrue("foo:bar" in result.newToml)
+  }
+
+  @Test
+  fun removingLastEntryFromBothSectionsElidesBothHeaders() {
+    val toml =
+      """
+        |name = "app"
+        |
+        |[dependencies]
+        |"foo:bar" = "1.0"
+        |
+        |[test-dependencies]
+        |"foo:bar" = "2.0"
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "foo:bar")
+
+    assertFalse("[dependencies]" in result.newToml)
+    assertFalse("[test-dependencies]" in result.newToml)
+    assertTrue("name = \"app\"" in result.newToml)
+  }
+
+  // The header sits at the file tail, no following section. Drop the
+  // header and preserve the input's trailing-newline shape.
+  @Test
+  fun removingLastEntryWhenSectionIsAtEofElidesHeader() {
+    val toml =
+      """
+        |name = "app"
+        |
+        |[dependencies]
+        |"foo:bar" = "1.0"
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "foo:bar")
+
+    assertFalse("[dependencies]" in result.newToml)
+    assertTrue(result.newToml.startsWith("name = \"app\""))
+    assertTrue(result.newToml.endsWith("\n"))
+  }
+
+  // Pre-existing empty section (the user already had `[dependencies]`
+  // with nothing under it) must NOT be touched: removeDependencyFromToml
+  // only normalizes sections it removed from, so it does only what its
+  // name suggests. Mirrors the existing emptySectionAtEndOfFileIsHandled
+  // case, but spelled out as an invariant guard.
+  @Test
+  fun preExistingEmptyHeaderSurvivesWhenNothingWasRemoved() {
+    val toml =
+      """
+        |name = "app"
+        |
+        |[dependencies]
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "foo:bar")
+
+    assertTrue(result.removed.isEmpty())
+    assertTrue("[dependencies]" in result.newToml, "untouched empty header must survive")
+    assertEquals(toml, result.newToml)
+  }
+
+  // Stray non-blank content (a comment, leftover hand edit) inside the
+  // section must block elision: dropping the header in that case would
+  // leave the comment dangling without a section, which silently changes
+  // the file's meaning. Pins the "blank-only" predicate so a future
+  // refactor doesn't broaden it to "blank or comment".
+  @Test
+  fun headerWithCommentInBodySurvivesElision() {
+    val toml =
+      """
+        |[dependencies]
+        |# kept across releases
+        |"foo:bar" = "1.0"
+        |"""
+        .trimMargin()
+
+    val result = removeDependencyFromToml(toml, "foo:bar")
+
+    assertEquals(1, result.removed.size)
+    assertTrue("[dependencies]" in result.newToml, "comment must keep header alive")
+    assertTrue("# kept across releases" in result.newToml)
+  }
+
   @Test
   fun preservesUnrelatedSectionsAndTrailingNewline() {
     val toml =

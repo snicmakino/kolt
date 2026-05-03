@@ -34,6 +34,10 @@ private val VERSION_PATTERN = Regex("""=\s*['"]([^'"]+)['"]""")
 fun removeDependencyFromToml(toml: String, groupArtifact: String): RemoveResult {
   val lines = toml.lines().toMutableList()
   val removed = mutableListOf<RemovedEntry>()
+  // Headers we removed at least one entry from. Only these are eligible
+  // for elision so a pre-existing bare `[dependencies]` (no removal) is
+  // left intact — the function does only what its name suggests.
+  val touchedHeaders = mutableSetOf<String>()
 
   for ((header, isTest) in SECTIONS) {
     val sectionStart = lines.indexOfFirst { it.trim() == header }
@@ -51,8 +55,25 @@ fun removeDependencyFromToml(toml: String, groupArtifact: String): RemoveResult 
         val version = VERSION_PATTERN.find(lines[i])?.groupValues?.get(1) ?: ""
         removed.add(RemovedEntry(version, isTest))
         lines.removeAt(i)
+        touchedHeaders.add(header)
       } else {
         i++
+      }
+    }
+  }
+
+  // Drop newly-emptied section headers (#360). The blank line that used
+  // to sit BEFORE this header (if any) survives and becomes the
+  // separator before the following section, so we don't double up
+  // separators when we delete the header + its blank-only body.
+  for (header in touchedHeaders) {
+    val headerIdx = lines.indexOfFirst { it.trim() == header }
+    if (headerIdx < 0) continue
+    val bodyEnd = nextSectionStart(lines, headerIdx + 1)
+    val bodyEmpty = (headerIdx + 1 until bodyEnd).all { lines[it].isBlank() }
+    if (bodyEmpty) {
+      for (k in (bodyEnd - 1) downTo headerIdx) {
+        lines.removeAt(k)
       }
     }
   }
@@ -60,4 +81,11 @@ fun removeDependencyFromToml(toml: String, groupArtifact: String): RemoveResult 
   val joined = lines.joinToString("\n")
   val final = if (toml.endsWith("\n") && !joined.endsWith("\n")) "$joined\n" else joined
   return RemoveResult(final, removed)
+}
+
+private fun nextSectionStart(lines: List<String>, from: Int): Int {
+  for (i in from until lines.size) {
+    if (lines[i].trim().startsWith("[")) return i
+  }
+  return lines.size
 }
