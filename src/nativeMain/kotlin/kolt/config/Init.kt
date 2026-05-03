@@ -91,7 +91,15 @@ fun generateLibTestKt(packageDecl: String? = null): String = buildString {
   appendLine("}")
 }
 
-fun generateGitignore(): String = "build/\n"
+fun generateGitignore(): String =
+  """
+  build/
+  workspace.json
+  .idea/
+  *.iml
+  .DS_Store
+  """
+    .trimIndent() + "\n"
 
 fun inferProjectName(dirPath: String): String {
   val name = dirPath.trimEnd('/').substringAfterLast('/')

@@ -77,8 +77,17 @@ class InitTest {
   }
 
   @Test
-  fun generateGitignoreContainsBuildDir() {
-    assertEquals("build/\n", generateGitignore())
+  fun generateGitignoreCoversBuildAndCommonNoise() {
+    val expected =
+      """
+      build/
+      workspace.json
+      .idea/
+      *.iml
+      .DS_Store
+      """
+        .trimIndent() + "\n"
+    assertEquals(expected, generateGitignore())
   }
 
   @Test
