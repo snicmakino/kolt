@@ -82,8 +82,8 @@ fun resolveNative(
           { buildKlibDownloadUrl(targetCoord, it) },
           deps::downloadFile,
         )
-        .getOrElse {
-          return Err(ResolveError.DownloadFailed(node.groupArtifact, it))
+        .getOrElse { failure ->
+          return Err(ResolveError.DownloadFailed(node.groupArtifact, failure))
         }
     }
 
@@ -267,7 +267,8 @@ private fun fetchAndRead(
       return Err(ResolveError.DirectoryCreateFailed(parentDir))
     }
     downloadFromRepositories(repos, cachePath, urlBuilder, deps::downloadFile).getOrElse {
-      return Err(ResolveError.DownloadFailed(groupArtifact, it))
+      failure ->
+      return Err(ResolveError.DownloadFailed(groupArtifact, failure))
     }
   }
   val content =

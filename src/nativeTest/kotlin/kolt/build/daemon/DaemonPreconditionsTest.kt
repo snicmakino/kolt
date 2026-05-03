@@ -6,6 +6,8 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.config.KoltPaths
 import kolt.infra.DownloadError
+import kolt.resolve.RepositoryAttempt
+import kolt.resolve.RepositoryDownloadFailure
 import kolt.resolve.ResolveError
 import kolt.tool.ToolchainError
 import kotlin.test.Test
@@ -222,7 +224,11 @@ class DaemonPreconditionsTest {
         "2.3.10",
         ResolveError.DownloadFailed(
           "org.jetbrains.kotlin:kotlin-build-tools-impl",
-          DownloadError.HttpFailed("http://example", 503),
+          RepositoryDownloadFailure.AllAttemptsFailed(
+            listOf(
+              RepositoryAttempt("http://example", DownloadError.HttpFailed("http://example", 503))
+            )
+          ),
         ),
       )
     val result =
@@ -442,7 +448,14 @@ class DaemonPreconditionsTest {
               "2.3.10",
               ResolveError.DownloadFailed(
                 "org.jetbrains.kotlin:kotlin-build-tools-impl",
-                DownloadError.HttpFailed("http://example", 503),
+                RepositoryDownloadFailure.AllAttemptsFailed(
+                  listOf(
+                    RepositoryAttempt(
+                      "http://example",
+                      DownloadError.HttpFailed("http://example", 503),
+                    )
+                  )
+                ),
               ),
             ),
         )

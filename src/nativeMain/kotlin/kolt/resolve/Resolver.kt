@@ -8,13 +8,35 @@ import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
 import kolt.infra.Sha256Error
 
+// Per-repository attempt captured by `downloadFromRepositories`. The
+// resolver keeps the URL it tried alongside the underlying error so
+// `formatResolveError` can render a per-repo dump (#355). For 404s we
+// continue to the next repo and append; any other error stops the loop
+// and surfaces with the singleton attempts list.
+data class RepositoryAttempt(val url: String, val error: DownloadError)
+
+// Splits "no repositories were tried" from "all attempts failed" — the
+// two have different remediations (config fix vs. network/auth) so the
+// formatter renders distinct hints.
+sealed class RepositoryDownloadFailure {
+  data object NoRepositoriesConfigured : RepositoryDownloadFailure()
+
+  data class AllAttemptsFailed(val attempts: List<RepositoryAttempt>) : RepositoryDownloadFailure()
+}
+
 sealed class ResolveError {
   data class InvalidDependency(val input: String) : ResolveError()
 
   data class Sha256Mismatch(val groupArtifact: String, val expected: String, val actual: String) :
     ResolveError()
 
-  data class DownloadFailed(val groupArtifact: String, val error: DownloadError) : ResolveError()
+  data class DownloadFailed(val groupArtifact: String, val failure: RepositoryDownloadFailure) :
+    ResolveError()
+
+  data class MetadataDownloadFailed(
+    val groupArtifact: String,
+    val failure: RepositoryDownloadFailure,
+  ) : ResolveError()
 
   data class HashComputeFailed(val groupArtifact: String, val error: Sha256Error) : ResolveError()
 
@@ -49,7 +71,16 @@ fun formatResolveError(error: ResolveError): String =
         appendLine("  expected: ${error.expected}")
         append("  got:      ${error.actual}")
       }
-    is ResolveError.DownloadFailed -> "error: failed to download ${error.groupArtifact}"
+    is ResolveError.DownloadFailed ->
+      buildString {
+        append("error: failed to download ${error.groupArtifact}")
+        appendRepositoryDownloadFailure(error.failure)
+      }
+    is ResolveError.MetadataDownloadFailed ->
+      buildString {
+        append("error: could not fetch metadata for ${error.groupArtifact}")
+        appendRepositoryDownloadFailure(error.failure)
+      }
     is ResolveError.HashComputeFailed -> "error: failed to compute hash for ${error.groupArtifact}"
     is ResolveError.DirectoryCreateFailed -> "error: could not create directory ${error.path}"
     is ResolveError.NoNativeVariant ->
@@ -68,6 +99,28 @@ fun formatResolveError(error: ResolveError): String =
     is ResolveError.RejectedVersionResolved ->
       "error: resolved ${error.groupArtifact}:${error.version} is rejected by constraint '${error.rejectPattern}'"
   }
+
+internal fun formatAttemptStatus(error: DownloadError): String =
+  when (error) {
+    is DownloadError.HttpFailed -> error.statusCode.toString()
+    is DownloadError.NetworkError -> error.message
+    // The download itself reached the server and got a 200 — the *local*
+    // write of the tempfile is what failed. Rendering on the same per-repo
+    // line keeps the dump uniform; the wording flags it as local so the
+    // URL doesn't read as the offender.
+    is DownloadError.WriteFailed -> "local write failed (${error.path})"
+  }
+
+private fun StringBuilder.appendRepositoryDownloadFailure(failure: RepositoryDownloadFailure) {
+  when (failure) {
+    is RepositoryDownloadFailure.NoRepositoriesConfigured ->
+      append("\n  no repositories configured (add a `[repositories]` entry to kolt.toml)")
+    is RepositoryDownloadFailure.AllAttemptsFailed ->
+      for (attempt in failure.attempts) {
+        append("\n  ${attempt.url} -> ${formatAttemptStatus(attempt.error)}")
+      }
+  }
+}
 
 enum class Origin {
   MAIN,

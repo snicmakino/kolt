@@ -153,7 +153,7 @@ private fun fetchLatestVersion(
     return Err(EXIT_DEPENDENCY_ERROR)
   }
 
-  val fetchErr =
+  val failure =
     downloadFromRepositories(
         repos,
         metadataPath,
@@ -161,17 +161,8 @@ private fun fetchLatestVersion(
         ::downloadFile,
       )
       .getError()
-  if (fetchErr != null) {
-    when (fetchErr) {
-      is DownloadError.HttpFailed ->
-        eprintln(
-          "error: could not fetch metadata for $group:$artifact (HTTP ${fetchErr.statusCode})"
-        )
-      is DownloadError.WriteFailed ->
-        eprintln("error: could not write metadata to ${fetchErr.path}")
-      is DownloadError.NetworkError ->
-        eprintln("error: network error fetching metadata for $group:$artifact: ${fetchErr.message}")
-    }
+  if (failure != null) {
+    eprintln(formatResolveError(ResolveError.MetadataDownloadFailed("$group:$artifact", failure)))
     return Err(EXIT_DEPENDENCY_ERROR)
   }
 

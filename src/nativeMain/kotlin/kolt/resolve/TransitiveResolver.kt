@@ -75,25 +75,29 @@ internal fun resolveSourcesPath(
   return if (error == null) sourcesCachePath else null
 }
 
-// Falls back to next repo only on 404; any other error stops immediately.
+// Falls back to next repo only on 404; any other error stops the loop
+// and surfaces with the attempts list. Each attempt records the URL we
+// tried so the resolver can dump per-repo status (#355). Empty repos
+// surfaces as `NoRepositoriesConfigured` so the user gets a config-fix
+// hint instead of a "tried nothing" misread.
 internal fun downloadFromRepositories(
   repos: List<String>,
   destPath: String,
   urlBuilder: (String) -> String,
   download: (String, String) -> Result<Unit, DownloadError>,
-): Result<Unit, DownloadError> {
-  var lastError: DownloadError? = null
+): Result<Unit, RepositoryDownloadFailure> {
+  if (repos.isEmpty()) return Err(RepositoryDownloadFailure.NoRepositoriesConfigured)
+  val attempts = mutableListOf<RepositoryAttempt>()
   for (repo in repos) {
     val url = urlBuilder(repo)
     val error = download(url, destPath).getError()
     if (error == null) return Ok(Unit)
-    if (error is DownloadError.HttpFailed && error.statusCode == 404) {
-      lastError = error
-    } else {
-      return Err(error)
+    attempts.add(RepositoryAttempt(url, error))
+    if (error !is DownloadError.HttpFailed || error.statusCode != 404) {
+      return Err(RepositoryDownloadFailure.AllAttemptsFailed(attempts))
     }
   }
-  return Err(lastError ?: DownloadError.NetworkError("", "no repositories configured"))
+  return Err(RepositoryDownloadFailure.AllAttemptsFailed(attempts))
 }
 
 internal fun createPomLookup(
@@ -227,8 +231,8 @@ private fun materialize(
           { buildDownloadUrl(coord, it) },
           deps::downloadFile,
         )
-        .getOrElse { error ->
-          return Err(ResolveError.DownloadFailed(node.groupArtifact, error))
+        .getOrElse { failure ->
+          return Err(ResolveError.DownloadFailed(node.groupArtifact, failure))
         }
       lockChanged = true
     }

@@ -16,6 +16,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class TransitiveResolverTest {
 
@@ -1241,8 +1242,18 @@ class TransitiveResolverTest {
         download = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) },
       )
 
-    val error = assertIs<DownloadError.HttpFailed>(result.getError())
-    assertEquals(404, error.statusCode)
+    val failure = assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
+    assertEquals(2, failure.attempts.size)
+    assertTrue(failure.attempts.all { it.error is DownloadError.HttpFailed })
+    assertEquals(
+      "https://repo1.example.com/com/example/lib/1.0.0/lib-1.0.0.jar",
+      failure.attempts[0].url,
+    )
+    assertEquals(404, (failure.attempts[0].error as DownloadError.HttpFailed).statusCode)
+    assertEquals(
+      "https://repo2.example.com/com/example/lib/1.0.0/lib-1.0.0.jar",
+      failure.attempts[1].url,
+    )
   }
 
   @Test
@@ -1261,8 +1272,55 @@ class TransitiveResolverTest {
         },
       )
 
-    assertIs<DownloadError.NetworkError>(result.getError())
+    val failure = assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
+    assertEquals(1, failure.attempts.size)
+    assertIs<DownloadError.NetworkError>(failure.attempts[0].error)
     assertEquals(1, downloadedUrls.size)
+  }
+
+  @Test
+  fun downloadFromRepositoriesMixedSequenceStopsOnFirstNon404AfterFallback() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+    val repo1 = "https://repo1.example.com"
+    val repo2 = "https://repo2.example.com"
+    val repo3 = "https://repo3.example.com"
+    val touched = mutableListOf<String>()
+
+    val result =
+      downloadFromRepositories(
+        repos = listOf(repo1, repo2, repo3),
+        destPath = "/cache/lib.jar",
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+        download = { url, _ ->
+          touched.add(url)
+          when {
+            url.startsWith(repo1) -> Err(DownloadError.HttpFailed(url, 404))
+            url.startsWith(repo2) -> Err(DownloadError.HttpFailed(url, 503))
+            else -> fail("repo3 should not be tried after a non-404 stop")
+          }
+        },
+      )
+
+    val failure = assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
+    assertEquals(2, failure.attempts.size)
+    assertEquals(404, (failure.attempts[0].error as DownloadError.HttpFailed).statusCode)
+    assertEquals(503, (failure.attempts[1].error as DownloadError.HttpFailed).statusCode)
+    assertEquals(2, touched.size)
+  }
+
+  @Test
+  fun downloadFromRepositoriesEmptyReposSurfacesAsNoRepositoriesConfigured() {
+    val coord = Coordinate("com.example", "lib", "1.0.0")
+
+    val result =
+      downloadFromRepositories(
+        repos = emptyList(),
+        destPath = "/cache/lib.jar",
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
+        download = { _, _ -> fail("should not be invoked") },
+      )
+
+    assertEquals(RepositoryDownloadFailure.NoRepositoriesConfigured, result.getError())
   }
 
   @Test

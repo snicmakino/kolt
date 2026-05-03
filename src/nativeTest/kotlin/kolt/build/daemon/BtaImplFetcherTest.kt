@@ -10,6 +10,8 @@ import kolt.infra.DownloadError
 import kolt.infra.OpenFailed
 import kolt.infra.Sha256Error
 import kolt.resolve.Lockfile
+import kolt.resolve.RepositoryAttempt
+import kolt.resolve.RepositoryDownloadFailure
 import kolt.resolve.ResolveError
 import kolt.resolve.ResolveResult
 import kolt.resolve.ResolvedDep
@@ -104,7 +106,11 @@ class BtaImplFetcherTest {
     val cause =
       ResolveError.DownloadFailed(
         "org.jetbrains.kotlin:kotlin-build-tools-impl",
-        DownloadError.HttpFailed("http://example/", 503),
+        RepositoryDownloadFailure.AllAttemptsFailed(
+          listOf(
+            RepositoryAttempt("http://example/", DownloadError.HttpFailed("http://example/", 503))
+          )
+        ),
       )
     val result =
       ensureBtaImplJars(
