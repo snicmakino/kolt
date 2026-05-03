@@ -16,7 +16,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     assertTrue(isTestBuildUpToDate(current = state, cached = state))
   }
@@ -28,7 +28,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     assertFalse(isTestBuildUpToDate(current = state, cached = null))
   }
@@ -40,7 +40,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     val current = cached.copy(configMtime = 1500L)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
@@ -53,7 +53,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     val current = cached.copy(sourcesNewestMtime = 2800L)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
@@ -66,35 +66,35 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     val current = cached.copy(testSourcesNewestMtime = 2900L)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
   }
 
   @Test
-  fun notUpToDateWhenTestKexeMtimeChanged() {
+  fun notUpToDateWhenTestArtifactMtimeChanged() {
     val cached =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
-    val current = cached.copy(testKexeMtime = 3500L)
+    val current = cached.copy(testArtifactMtime = 3500L)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
   }
 
   @Test
-  fun notUpToDateWhenTestKexeMissing() {
+  fun notUpToDateWhenTestArtifactMissing() {
     val cached =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
-    val current = cached.copy(testKexeMtime = null)
+    val current = cached.copy(testArtifactMtime = null)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
   }
 
@@ -105,71 +105,98 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
         defNewestMtime = 2700L,
       )
     val current = cached.copy(defNewestMtime = 2800L)
     assertFalse(isTestBuildUpToDate(current = current, cached = cached))
   }
 
-  // Cross-check: any input newer than the test kexe means the kexe is stale.
   @Test
-  fun notUpToDateWhenSourcesNewerThanTestKexe() {
+  fun notUpToDateWhenLockfileMtimeChanged() {
+    val cached =
+      TestBuildState(
+        configMtime = 1000L,
+        sourcesNewestMtime = 2000L,
+        testSourcesNewestMtime = 2500L,
+        testArtifactMtime = 3000L,
+        lockfileMtime = 2600L,
+      )
+    val current = cached.copy(lockfileMtime = 2800L)
+    assertFalse(isTestBuildUpToDate(current = current, cached = cached))
+  }
+
+  // Cross-check: any input newer than the test artifact means the artifact is stale.
+  @Test
+  fun notUpToDateWhenSourcesNewerThanTestArtifact() {
     val state =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 5000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     assertFalse(isTestBuildUpToDate(current = state, cached = state))
   }
 
   @Test
-  fun notUpToDateWhenTestSourcesNewerThanTestKexe() {
+  fun notUpToDateWhenTestSourcesNewerThanTestArtifact() {
     val state =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 5000L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
       )
     assertFalse(isTestBuildUpToDate(current = state, cached = state))
   }
 
   @Test
-  fun notUpToDateWhenDefNewerThanTestKexe() {
+  fun notUpToDateWhenDefNewerThanTestArtifact() {
     val state =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
         defNewestMtime = 4000L,
       )
     assertFalse(isTestBuildUpToDate(current = state, cached = state))
   }
 
   @Test
-  fun notUpToDateWhenTestKexeMtimeNullEvenIfStateMatches() {
+  fun notUpToDateWhenLockfileNewerThanTestArtifact() {
     val state =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = null,
+        testArtifactMtime = 3000L,
+        lockfileMtime = 4000L,
       )
     assertFalse(isTestBuildUpToDate(current = state, cached = state))
   }
 
   @Test
-  fun upToDateWhenInputsNotNewerThanTestKexe() {
+  fun notUpToDateWhenTestArtifactMtimeNullEvenIfStateMatches() {
     val state =
       TestBuildState(
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = null,
+      )
+    assertFalse(isTestBuildUpToDate(current = state, cached = state))
+  }
+
+  @Test
+  fun upToDateWhenInputsNotNewerThanTestArtifact() {
+    val state =
+      TestBuildState(
+        configMtime = 1000L,
+        sourcesNewestMtime = 2000L,
+        testSourcesNewestMtime = 2500L,
+        testArtifactMtime = 3000L,
         defNewestMtime = 2700L,
       )
     assertTrue(isTestBuildUpToDate(current = state, cached = state))
@@ -182,7 +209,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
         defNewestMtime = 2700L,
       )
     val json = serializeTestBuildState(state)
@@ -197,7 +224,7 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
         defNewestMtime = null,
       )
     val json = serializeTestBuildState(state)
@@ -214,16 +241,18 @@ class TestBuildCacheTest {
         configMtime = 1000L,
         sourcesNewestMtime = 2000L,
         testSourcesNewestMtime = 2500L,
-        testKexeMtime = 3000L,
+        testArtifactMtime = 3000L,
         defNewestMtime = 2700L,
+        lockfileMtime = 2600L,
       )
     val json = serializeTestBuildState(state)
     assertTrue(
       json.contains("test_sources_newest_mtime"),
       "Expected 'test_sources_newest_mtime' in: $json",
     )
-    assertTrue(json.contains("test_kexe_mtime"), "Expected 'test_kexe_mtime' in: $json")
+    assertTrue(json.contains("test_artifact_mtime"), "Expected 'test_artifact_mtime' in: $json")
     assertTrue(json.contains("def_newest_mtime"), "Expected 'def_newest_mtime' in: $json")
+    assertTrue(json.contains("lockfile_mtime"), "Expected 'lockfile_mtime' in: $json")
   }
 
   @Test
