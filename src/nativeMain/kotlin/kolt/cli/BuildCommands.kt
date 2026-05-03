@@ -1035,6 +1035,41 @@ private fun doTestInner(
 
   val testStartMark = TimeSource.Monotonic.markNow()
 
+  // Cache hit short-circuits compile *and* the JUnit launcher entirely
+  // — same semantics as `kolt build`'s `is up to date` line: variant of
+  // input-unchanged ⇒ no work. Stays a pure mtime compare so offline
+  // cached test runs don't hard-exit on a failed fetch (mirror of
+  // doBuildInner up-to-date invariant).
+  //
+  // Test compile is intentionally NOT routed through the JVM compile
+  // daemon here: doing so corrupts `build/classes/` because the daemon's
+  // BTA wrapper assumes one project ⇒ one module ⇒ one outputDir, and
+  // sees the test compile as the same module relocating its output.
+  // Daemon engagement for the test compile path is tracked separately.
+  val currentState =
+    TestBuildState(
+      configMtime = fileMtime(KOLT_TOML) ?: 0L,
+      sourcesNewestMtime = newestMtime(config.build.sources),
+      testSourcesNewestMtime = newestMtime(existingTestSources),
+      testArtifactMtime =
+        if (fileExists(TEST_CLASSES_DIR)) newestMtimeAll(TEST_CLASSES_DIR) else null,
+      lockfileMtime = if (fileExists(LOCK_FILE)) fileMtime(LOCK_FILE) else null,
+    )
+  val cachedState =
+    readFileAsString(TEST_BUILD_STATE_FILE).getOrElse { null }?.let { parseTestBuildState(it) }
+
+  if (isTestBuildUpToDate(current = currentState, cached = cachedState)) {
+    val elapsed = testStartMark.elapsedNow()
+    lock.close()
+    println("${config.name} tests are up to date (${formatDuration(elapsed)})")
+    return Ok(Unit)
+  }
+
+  // Out of date → rebuild. Drop the state file first so any failure
+  // below leaves cached=null for the next run (mirror of BuildCache's
+  // delete-then-write pattern).
+  if (fileExists(TEST_BUILD_STATE_FILE)) deleteFile(TEST_BUILD_STATE_FILE)
+
   val paths =
     resolveKoltPaths().getOrElse {
       eprintln("error: $it")
@@ -1072,6 +1107,19 @@ private fun doTestInner(
   executeCommand(testCmd.args, testCompileEnv).getOrElse { error ->
     eprintln("error: " + formatProcessError(error, "test compilation"))
     return Err(EXIT_BUILD_ERROR)
+  }
+
+  // Persist new state — only `testArtifactMtime` moves between the
+  // cache check above and here. The lockfile / sources / config / def
+  // mtimes can't change under the project lock, so reusing the
+  // pre-compile snapshot avoids a redundant filesystem walk.
+  val newState =
+    currentState.copy(
+      testArtifactMtime =
+        if (fileExists(TEST_CLASSES_DIR)) newestMtimeAll(TEST_CLASSES_DIR) else null
+    )
+  writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
+    eprintln("warning: could not write test state file")
   }
 
   val existingTestResourceDirs = filterExistingDirs(config.build.testResources, "test resource")
@@ -1138,116 +1186,127 @@ private fun doNativeTest(
       configMtime = fileMtime(KOLT_TOML) ?: 0L,
       sourcesNewestMtime = newestMtime(config.build.sources),
       testSourcesNewestMtime = newestMtime(existingTestSources),
-      testKexeMtime = if (fileExists(testKexePath)) fileMtime(testKexePath) else null,
+      testArtifactMtime = if (fileExists(testKexePath)) fileMtime(testKexePath) else null,
       defNewestMtime = newestDefMtime(config),
+      lockfileMtime = if (fileExists(LOCK_FILE)) fileMtime(LOCK_FILE) else null,
     )
   val cachedState =
     readFileAsString(TEST_BUILD_STATE_FILE).getOrElse { null }?.let { parseTestBuildState(it) }
 
-  if (!isTestBuildUpToDate(current = currentState, cached = cachedState)) {
-    // Out of date → rebuild. Drop the state file first so any failure
-    // below leaves cached=null for the next run (mirror of #50).
-    if (fileExists(TEST_BUILD_STATE_FILE)) deleteFile(TEST_BUILD_STATE_FILE)
+  // Cache hit short-circuits compile *and* the kexe entirely — same
+  // semantics as `kolt build` and the JVM test path: input-unchanged ⇒
+  // no work. The kexe run is ~24ms warm so the saving is small, but
+  // keeping the rule uniform across targets removes a long-standing
+  // asymmetry with `kolt build`.
+  if (isTestBuildUpToDate(current = currentState, cached = cachedState)) {
+    val elapsed = testStartMark.elapsedNow()
+    lock.close()
+    println("${config.name} tests are up to date (${formatDuration(elapsed)})")
+    return Ok(Unit)
+  }
 
-    val paths =
-      resolveKoltPaths().getOrElse {
-        eprintln("error: $it")
-        return Err(EXIT_TEST_ERROR)
-      }
-    val managedKonancBin =
-      ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-        eprintln("error: ${it.message}")
-        return Err(EXIT_TEST_ERROR)
-      }
-    val managedJdkBins =
-      ensureJdkBinsFromConfig(config, paths).getOrElse {
-        return Err(it)
-      }
-    val nativePluginArgs =
-      resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
-        eprintln("error: ${it.message}")
-        return Err(it.exitCode)
-      }
+  // Out of date → rebuild. Drop the state file first so any failure
+  // below leaves cached=null for the next run (mirror of #50).
+  if (fileExists(TEST_BUILD_STATE_FILE)) deleteFile(TEST_BUILD_STATE_FILE)
 
-    val depKlibs =
-      resolveNativeDependencies(config, paths).getOrElse {
-        return Err(it)
-      }
-
-    ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-      eprintln("error: could not create directory ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
+  val paths =
+    resolveKoltPaths().getOrElse {
+      eprintln("error: $it")
+      return Err(EXIT_TEST_ERROR)
+    }
+  val managedKonancBin =
+    ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse {
+      eprintln("error: ${it.message}")
+      return Err(EXIT_TEST_ERROR)
+    }
+  val managedJdkBins =
+    ensureJdkBinsFromConfig(config, paths).getOrElse {
+      return Err(it)
+    }
+  val nativePluginArgs =
+    resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
+      eprintln("error: ${it.message}")
+      return Err(it.exitCode)
     }
 
-    val cinteropKlibs =
-      runCinterop(config, paths, javaHome = managedJdkBins.home).getOrElse {
-        return Err(it)
+  val depKlibs =
+    resolveNativeDependencies(config, paths).getOrElse {
+      return Err(it)
+    }
+
+  ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
+    eprintln("error: could not create directory ${error.path}")
+    return Err(EXIT_BUILD_ERROR)
+  }
+
+  val cinteropKlibs =
+    runCinterop(config, paths, javaHome = managedJdkBins.home).getOrElse {
+      return Err(it)
+    }
+  val klibs = depKlibs + cinteropKlibs
+
+  val cwd =
+    currentWorkingDirectory()
+      ?: run {
+        eprintln("error: could not determine current working directory")
+        return Err(EXIT_BUILD_ERROR)
       }
-    val klibs = depKlibs + cinteropKlibs
+  val subprocessBackend =
+    NativeSubprocessBackend(
+      konancBin = managedKonancBin,
+      javaHome = managedJdkBins.home,
+      jdkMajorVersion = jdkMajorVersionFor(config),
+    )
+  val backend: NativeCompilerBackend =
+    resolveNativeCompilerBackend(
+      config = config,
+      paths = paths,
+      subprocessBackend = subprocessBackend,
+      useDaemon = useDaemon,
+      absProjectPath = cwd,
+    )
 
-    val cwd =
-      currentWorkingDirectory()
-        ?: run {
-          eprintln("error: could not determine current working directory")
-          return Err(EXIT_BUILD_ERROR)
-        }
-    val subprocessBackend =
-      NativeSubprocessBackend(
-        konancBin = managedKonancBin,
-        javaHome = managedJdkBins.home,
-        jdkMajorVersion = jdkMajorVersionFor(config),
-      )
-    val backend: NativeCompilerBackend =
-      resolveNativeCompilerBackend(
-        config = config,
-        paths = paths,
-        subprocessBackend = subprocessBackend,
-        useDaemon = useDaemon,
-        absProjectPath = cwd,
-      )
+  val libraryCmd =
+    nativeTestLibraryCommand(
+      testConfig,
+      pluginArgs = nativePluginArgs,
+      konancPath = managedKonancBin,
+      klibs = klibs,
+      profile = profile,
+    )
+  ensureDirectoryRecursive(libraryCmd.outputPath.substringBeforeLast('/')).getOrElse { error ->
+    eprintln("error: could not create directory ${error.path}")
+    return Err(EXIT_BUILD_ERROR)
+  }
+  println("compiling tests (native)...")
+  // ADR 0024 §4: backend.compile takes konanc args *after* the binary;
+  // mirror doNativeBuildInner's drop(1).
+  backend.compile(libraryCmd.args.drop(1)).getOrElse { error ->
+    reportNativeCompileError(error, "test compilation")
+    return Err(EXIT_BUILD_ERROR)
+  }
 
-    val libraryCmd =
-      nativeTestLibraryCommand(
-        testConfig,
-        pluginArgs = nativePluginArgs,
-        konancPath = managedKonancBin,
-        klibs = klibs,
-        profile = profile,
-      )
-    ensureDirectoryRecursive(libraryCmd.outputPath.substringBeforeLast('/')).getOrElse { error ->
-      eprintln("error: could not create directory ${error.path}")
-      return Err(EXIT_BUILD_ERROR)
-    }
-    println("compiling tests (native)...")
-    // ADR 0024 §4: backend.compile takes konanc args *after* the binary;
-    // mirror doNativeBuildInner's drop(1).
-    backend.compile(libraryCmd.args.drop(1)).getOrElse { error ->
-      reportNativeCompileError(error, "test compilation")
-      return Err(EXIT_BUILD_ERROR)
-    }
+  val linkCmd =
+    nativeTestLinkCommand(
+      testConfig,
+      konancPath = managedKonancBin,
+      klibs = klibs,
+      profile = profile,
+    )
+  println("linking tests (native)...")
+  backend.compile(linkCmd.args.drop(1)).getOrElse { error ->
+    reportNativeCompileError(error, "test linking")
+    return Err(EXIT_BUILD_ERROR)
+  }
 
-    val linkCmd =
-      nativeTestLinkCommand(
-        testConfig,
-        konancPath = managedKonancBin,
-        klibs = klibs,
-        profile = profile,
-      )
-    println("linking tests (native)...")
-    backend.compile(linkCmd.args.drop(1)).getOrElse { error ->
-      reportNativeCompileError(error, "test linking")
-      return Err(EXIT_BUILD_ERROR)
-    }
+  if (!fileExists(linkCmd.outputPath)) {
+    eprintln("error: ${linkCmd.outputPath} not produced by konanc")
+    return Err(EXIT_BUILD_ERROR)
+  }
 
-    if (!fileExists(linkCmd.outputPath)) {
-      eprintln("error: ${linkCmd.outputPath} not produced by konanc")
-      return Err(EXIT_BUILD_ERROR)
-    }
-
-    val newState = currentState.copy(testKexeMtime = fileMtime(linkCmd.outputPath))
-    writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
-      eprintln("warning: could not write test state file")
-    }
+  val newState = currentState.copy(testArtifactMtime = fileMtime(linkCmd.outputPath))
+  writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
+    eprintln("warning: could not write test state file")
   }
 
   val runCmd = nativeTestRunCommand(testConfig, testArgs, profile)
