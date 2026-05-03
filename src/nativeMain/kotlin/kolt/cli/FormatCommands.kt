@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
+import kolt.build.daemon.BOOTSTRAP_JDK_VERSION
 import kolt.build.formatCommand
 import kolt.config.*
 import kolt.infra.*
@@ -59,6 +60,7 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
     return Ok(Unit)
   }
 
+  val jdkVersion = config.build.jdk ?: BOOTSTRAP_JDK_VERSION
   val cmd =
     formatCommand(
       ktfmtPath,
@@ -66,6 +68,7 @@ internal fun doFmt(args: List<String>): Result<Unit, Int> {
       checkOnly,
       style = config.fmt.style,
       javaPath = managedJdkBins.java,
+      jdkMajorVersion = jdkVersion.substringBefore('.').toIntOrNull(),
     )
 
   if (checkOnly) {

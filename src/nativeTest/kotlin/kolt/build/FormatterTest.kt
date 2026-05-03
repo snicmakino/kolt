@@ -121,4 +121,82 @@ class FormatterTest {
       cmd.args,
     )
   }
+
+  @Test
+  fun formatCommandOmitsUnsafeFlagOnPreJdk23() {
+    val cmd =
+      formatCommand(
+        ktfmtJarPath = "/tools/ktfmt.jar",
+        files = listOf("src/Main.kt"),
+        checkOnly = false,
+        jdkMajorVersion = 22,
+      )
+
+    assertEquals(
+      listOf("java", "-jar", "/tools/ktfmt.jar", "--google-style", "src/Main.kt"),
+      cmd.args,
+    )
+  }
+
+  @Test
+  fun formatCommandOmitsUnsafeFlagWhenJdkVersionUnknown() {
+    val cmd =
+      formatCommand(
+        ktfmtJarPath = "/tools/ktfmt.jar",
+        files = listOf("src/Main.kt"),
+        checkOnly = false,
+        jdkMajorVersion = null,
+      )
+
+    assertEquals(
+      listOf("java", "-jar", "/tools/ktfmt.jar", "--google-style", "src/Main.kt"),
+      cmd.args,
+    )
+  }
+
+  @Test
+  fun formatCommandAddsUnsafeFlagBeforeJarOnJdk23() {
+    val cmd =
+      formatCommand(
+        ktfmtJarPath = "/tools/ktfmt.jar",
+        files = listOf("src/Main.kt"),
+        checkOnly = false,
+        jdkMajorVersion = 23,
+      )
+
+    assertEquals(
+      listOf(
+        "java",
+        "--sun-misc-unsafe-memory-access=allow",
+        "-jar",
+        "/tools/ktfmt.jar",
+        "--google-style",
+        "src/Main.kt",
+      ),
+      cmd.args,
+    )
+  }
+
+  @Test
+  fun formatCommandAddsUnsafeFlagOnJdk25() {
+    val cmd =
+      formatCommand(
+        ktfmtJarPath = "/tools/ktfmt.jar",
+        files = listOf("src/Main.kt"),
+        checkOnly = false,
+        jdkMajorVersion = 25,
+      )
+
+    assertEquals(
+      listOf(
+        "java",
+        "--sun-misc-unsafe-memory-access=allow",
+        "-jar",
+        "/tools/ktfmt.jar",
+        "--google-style",
+        "src/Main.kt",
+      ),
+      cmd.args,
+    )
+  }
 }
