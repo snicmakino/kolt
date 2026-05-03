@@ -66,6 +66,22 @@ private fun doAddInner(args: List<String>): Result<Unit, Int> {
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
+  // Resolve before persisting kolt.toml so an unfetchable coordinate
+  // leaves the file byte-identical. `resolveDependencies` may rewrite
+  // kolt.lock on the success path, so on a subsequent kolt.toml write
+  // failure the lockfile can be ahead of kolt.toml — self-healing on
+  // the next resolve.
+  val newConfig =
+    parseConfig(updatedToml).getOrElse {
+      // Unreachable: `addDependencyToToml` produced `updatedToml` from
+      // an already-parsed `toml` plus a validated coordinate, so the
+      // result must reparse.
+      error("invariant violation: addDependencyToToml emitted unparseable TOML: $it")
+    }
+  resolveDependencies(newConfig, allowLockfileMigration = true).getOrElse {
+    return Err(it)
+  }
+
   writeFileAsString(KOLT_TOML, updatedToml).getOrElse { error ->
     eprintln("error: could not write ${error.path}")
     return Err(EXIT_CONFIG_ERROR)
@@ -73,11 +89,8 @@ private fun doAddInner(args: List<String>): Result<Unit, Int> {
 
   val section = if (addArgs.isTest) "[test-dependencies]" else "[dependencies]"
   println("added $groupArtifact = \"$version\" to $section")
-
-  // doFetchInner (not doFetch) — the outer lock acquired by doAdd
-  // already covers the fetch; calling doFetch would attempt a second
-  // flock(2) acquire on a fresh OFD and deadlock against ourselves.
-  return doFetchInner()
+  println("fetch complete")
+  return Ok(Unit)
 }
 
 internal fun doRemove(args: List<String>): Result<Unit, Int> = withDependencyLock {
