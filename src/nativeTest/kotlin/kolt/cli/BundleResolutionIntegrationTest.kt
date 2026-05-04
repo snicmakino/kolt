@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
+import com.github.michaelbull.result.getError
 import kolt.build.ResolvedJar
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
@@ -13,9 +14,11 @@ import kolt.resolve.BundleResolution
 import kolt.resolve.LockEntry
 import kolt.resolve.Lockfile
 import kolt.resolve.Origin
+import kolt.resolve.ResolveError
 import kolt.resolve.ResolvedDep
 import kolt.resolve.ResolverDeps
 import kolt.resolve.buildLockfileFromResolved
+import kolt.resolve.materialiseBundleJarsFromLock
 import kolt.testConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -245,9 +248,15 @@ class BundleResolutionIntegrationTest {
           ),
       )
 
-    // No POMs / no jar SHAs configured: any attempt to resolveTransitive
-    // would explode on a missing pom lookup or download.
-    val deps = countingDeps(sha256Results = emptyMap(), pomContents = emptyMap())
+    // No POMs configured: any attempt to resolveTransitive would explode
+    // on a missing pom lookup. cachedFiles is pre-populated so the
+    // materialise step also short-circuits without downloads.
+    val deps =
+      countingDeps(
+        cachedFiles = mutableSetOf("/cache/com/example/fix/1.0.0/fix-1.0.0.jar"),
+        sha256Results = emptyMap(),
+        pomContents = emptyMap(),
+      )
 
     val result =
       assertNotNull(
@@ -264,8 +273,200 @@ class BundleResolutionIntegrationTest {
     assertEquals(1, fixture.jars.size)
     assertEquals("/cache/com/example/fix/1.0.0/fix-1.0.0.jar", fixture.jars[0].cachePath)
     assertEquals("/cache/com/example/fix/1.0.0/fix-1.0.0.jar", fixture.classpath)
-    assertEquals(0, deps.downloadCount, "no downloads should occur when declaration matches lock")
+    assertEquals(
+      0,
+      deps.downloadCount,
+      "no downloads should occur when declaration matches lock and cache is warm",
+    )
     assertEquals(0, deps.readFileCount, "no POM lookups should occur when declaration matches lock")
+  }
+
+  // A clean ~/.kolt/cache plus an existing lockfile that records bundle
+  // jars must materialise those jars during `kolt fetch` (which routes
+  // through `resolveAllBundles`). Otherwise subsequent kolt build /
+  // kolt test reads bundle classpaths through the lockfile-trusted reuse
+  // path and hands consumers paths to non-existent jars, surfacing as
+  // `Unresolved reference` at compile time.
+  @Test
+  fun resolveAllBundlesMaterialisesMissingJarsWhenLockMatchesAndCacheIsCold() {
+    val config =
+      testConfig().copy(classpaths = mapOf("fixture" to mapOf("com.example:fix" to "1.0.0")))
+
+    val existingLock =
+      Lockfile(
+        version = 4,
+        kotlin = config.kotlin.version,
+        jvmTarget = config.build.jvmTarget,
+        dependencies = emptyMap(),
+        classpathBundles =
+          mapOf(
+            "fixture" to
+              mapOf(
+                "com.example:fix" to
+                  LockEntry(version = "1.0.0", sha256 = "fixSha", transitive = false, test = false)
+              )
+          ),
+      )
+
+    // No POMs (no fresh resolve walk), but the post-download sha verify
+    // must succeed against the lock entry so a real Sha256Mismatch path
+    // stays reachable. cachedFiles starts empty — clean cache.
+    val deps =
+      countingDeps(
+        sha256Results = mapOf("/cache/com/example/fix/1.0.0/fix-1.0.0.jar" to "fixSha"),
+        pomContents = emptyMap(),
+      )
+
+    val result =
+      assertNotNull(
+        resolveAllBundles(
+            config,
+            existingLock = existingLock,
+            cacheBase = "/cache",
+            resolverDeps = deps,
+          )
+          .get()
+      )
+
+    val fixture = assertNotNull(result["fixture"])
+    assertEquals(1, fixture.jars.size)
+    assertEquals("/cache/com/example/fix/1.0.0/fix-1.0.0.jar", fixture.jars[0].cachePath)
+    assertEquals(1, deps.downloadCount, "missing bundle jar must be downloaded")
+    assertEquals(0, deps.readFileCount, "no POM lookups should occur when declaration matches lock")
+  }
+
+  // When a freshly downloaded bundle jar's sha256 does not match the
+  // locked entry, the materialise step must surface the same Sha256Mismatch
+  // the main-deps materialise() raises — this is the only line of defense
+  // once the lockfile-trusted reuse path is doing I/O.
+  @Test
+  fun resolveAllBundlesReportsSha256MismatchWhenDownloadedBundleJarDiffersFromLock() {
+    val config =
+      testConfig().copy(classpaths = mapOf("fixture" to mapOf("com.example:fix" to "1.0.0")))
+
+    val existingLock =
+      Lockfile(
+        version = 4,
+        kotlin = config.kotlin.version,
+        jvmTarget = config.build.jvmTarget,
+        dependencies = emptyMap(),
+        classpathBundles =
+          mapOf(
+            "fixture" to
+              mapOf(
+                "com.example:fix" to
+                  LockEntry(
+                    version = "1.0.0",
+                    sha256 = "expectedSha",
+                    transitive = false,
+                    test = false,
+                  )
+              )
+          ),
+      )
+
+    val deps =
+      countingDeps(
+        sha256Results = mapOf("/cache/com/example/fix/1.0.0/fix-1.0.0.jar" to "tamperedSha"),
+        pomContents = emptyMap(),
+      )
+
+    val outcome =
+      resolveAllBundles(
+        config,
+        existingLock = existingLock,
+        cacheBase = "/cache",
+        resolverDeps = deps,
+      )
+
+    val error = outcome.getError()
+    assertTrue(
+      error is ResolveError.Sha256Mismatch,
+      "expected ResolveError.Sha256Mismatch, got: $error",
+    )
+  }
+
+  // The materialise step must derive the download URL from `dep.cachePath`,
+  // not from `parseCoordinate(dep.groupArtifact)`. KMP module-metadata
+  // redirects (e.g. `kotlinx-coroutines-core` ⇒ `-core-jvm`) are not
+  // persisted in the lockfile, so a redirect-shaped cachePath that
+  // diverges from the GA must still produce a URL pointing at the
+  // redirected jar. This direct call bypasses reuseBundleFromLock so
+  // we can hand the function a redirected cachePath / non-redirected GA
+  // pair the lockfile alone could never round-trip.
+  @Test
+  fun materialiseBundleJarsFromLockBuildsUrlFromCachePathNotGroupArtifact() {
+    val config = testConfig().copy(repositories = mapOf("central" to "https://example.org/m2"))
+
+    val redirectedRelativePath = "org/example/lib-jvm/1.0.0/lib-jvm-1.0.0.jar"
+    val redirectedCachePath = "/cache/$redirectedRelativePath"
+    val expectedUrl = "https://example.org/m2/$redirectedRelativePath"
+
+    val downloadedUrls = mutableListOf<String>()
+    val deps =
+      object : ResolverDeps {
+        val cached = mutableSetOf<String>()
+
+        override fun fileExists(path: String): Boolean = path in cached
+
+        override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
+
+        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+          downloadedUrls.add(url)
+          cached.add(destPath)
+          return Ok(Unit)
+        }
+
+        override fun computeSha256(filePath: String): Result<String, Sha256Error> = Ok("sha")
+
+        override fun readFileContent(path: String): Result<String, OpenFailed> =
+          Err(OpenFailed(path))
+      }
+
+    val resolution =
+      BundleResolution(
+        jars = listOf(ResolvedJar(redirectedCachePath, "org.example:lib:1.0.0")),
+        classpath = redirectedCachePath,
+        deps =
+          listOf(
+            ResolvedDep(
+              groupArtifact = "org.example:lib",
+              version = "1.0.0",
+              sha256 = "sha",
+              cachePath = redirectedCachePath,
+              origin = Origin.MAIN,
+            )
+          ),
+      )
+
+    val existingLock =
+      Lockfile(
+        version = 4,
+        kotlin = config.kotlin.version,
+        jvmTarget = config.build.jvmTarget,
+        dependencies = emptyMap(),
+        classpathBundles =
+          mapOf(
+            "redirected" to
+              mapOf(
+                "org.example:lib" to
+                  LockEntry(version = "1.0.0", sha256 = "sha", transitive = false, test = false)
+              )
+          ),
+      )
+
+    val outcome =
+      materialiseBundleJarsFromLock(
+        resolution = resolution,
+        config = config,
+        existingLock = existingLock,
+        bundleName = "redirected",
+        cacheBase = "/cache",
+        deps = deps,
+      )
+
+    assertTrue(outcome.get() != null, "expected Ok, got ${outcome.getError()}")
+    assertEquals(listOf(expectedUrl), downloadedUrls)
   }
 
   // Req 4.4: when the declared version differs from the locked version, the
