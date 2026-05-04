@@ -50,7 +50,8 @@ class BtaIncrementalRecompileSetTest {
     val workRoot = Files.createTempDirectory("bta-recompile-set-")
     val sourcesDir = workRoot.resolve("src").apply { createDirectories() }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     // Linear chain: F1 calls F2 calls F3 calls F4 calls F5. Each file
     // holds one top-level function. F5 is the leaf whose body we

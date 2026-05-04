@@ -47,8 +47,9 @@ class BtaIncrementalCompilerWarmPathTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
     // Intentionally NOT created — the adapter must materialise it.
-    val workingDir = workRoot.resolve("ic-state")
+    val workingDir = projectStateDir.resolve("main")
     assertTrue(!Files.exists(workingDir), "precondition: workingDir must not exist")
 
     val compiler =
@@ -88,7 +89,8 @@ class BtaIncrementalCompilerWarmPathTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val compiler =
       BtaIncrementalCompiler.create(btaImplJars).getOrElse {
@@ -160,7 +162,8 @@ class BtaIncrementalCompilerWarmPathTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val metrics = RecordingMetricsSink()
     val compiler =
