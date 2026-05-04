@@ -522,10 +522,10 @@ class SelfHealingIncrementalCompilerTest {
 
   @Test
   fun `same project but different workingDir keeps independent self-heal latches`() {
-    // #384: scope-segregated workingDirs (main / test under the same
-    // project) must each get their own self-heal chance. A latch keyed
-    // by projectId alone would let the main compile's self-heal
-    // suppress the next test compile's first retry.
+    // Scope-segregated workingDirs (main / test under the same project)
+    // must each get their own self-heal chance. A latch keyed by
+    // projectId alone would let the main compile's self-heal suppress
+    // the next test compile's first retry.
     val metrics = RecordingMetricsSink()
     val delegate = FakeCompiler { _ ->
       com.github.michaelbull.result.Err(IcError.InternalError(RuntimeException("corrupt")))
