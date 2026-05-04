@@ -103,6 +103,8 @@ Daemon-owned: the daemon is the sole writer, reader, and invalidation authority.
 
 **Scope segment (#376).** The original "1 project ⇒ 1 module ⇒ 1 outputDir" framing this section assumed does not match the JVM `kolt test` shape, which compiles the same project twice — once for main (`build/classes/`) and once for test (`build/test-classes/`). BTA persists its `inputsCache` under `workingDir/inputs/` keyed by source-file path. Sharing one workingDir across the two compiles makes BTA see the *other* compile's source list as "removed" and invoke `removeOutputForSourceFiles` against the previously-tracked outputs — wiping `build/classes/` after a test compile. The `<scope>` segment (`main` / `test`) gives each scope its own workingDir under the shared `<projectIdHash>` directory, mirroring Gradle KGP's one-task-one-workingDir model. `LOCK` and the `project.path` breadcrumb stay at the `<projectIdHash>` level (one per project) so the reaper continues to see one entry per project regardless of scope.
 
+**Future axes (#382).** A third flat scope (Benchmark, IntegrationTest) is additive: the wire enum and the layout absorb it without migration. A KMP-target axis (e.g. `linuxX64`, `jvmMain`) collides at `<scope>` and forces a layout reshape — either `<projectIdHash>/<target>/<scope>/` or one packed segment. Inserting a `<LAYOUT_VERSION>` segment would make such a migration detectable on disk and let the reaper drop the prior version; deferred until the second axis is real because the migration also needs a reaper rule for the prior layout.
+
 ### §6 Session model: no wire state
 
 `BuildSession` is JVM-local and `AutoCloseable`. The daemon opens one at the start of each `Message.Compile` dispatch and closes it on completion. `ProjectId` = `sha256(projectRoot)`. Neither appears on the wire. No `previousBuildId` field is added to `Message.Compile`; `SourcesChanges.ToBeCalculated` handles change detection from on-disk state.
@@ -181,6 +183,7 @@ IC is the default compile path from the first B-2 release. No opt-in flag, no `k
 - #104 — Phase B-1b `kotlin-build-tools-api` spike and REPORT.md
 - #105 — this ADR's tracking issue
 - #376 — JVM `kolt test` daemon route + scope segment in §5
+- #382 — future-axes note in §5 (third flat scope vs KMP-target reshape)
 - ADR 0001 — `Result<V, E>` discipline applied to `IncrementalCompiler` and `IcError`
 - ADR 0016 — JVM daemon (compile backend this ADR extends; wire protocol unchanged)
 - ADR 0022 — Kotlin version policy (supersedes §1's single-version pin)

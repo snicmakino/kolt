@@ -49,7 +49,8 @@ class BtaIncrementalAbiCascadeTest {
     val workRoot = Files.createTempDirectory("bta-abi-cascade-")
     val sourcesDir = workRoot.resolve("src").apply { createDirectories() }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     // Each file owns exactly one top-level `fun` so .class files map
     // 1:1 to source files (modulo synthetic artefacts BTA may emit).

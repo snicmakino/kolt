@@ -47,7 +47,8 @@ class SelfHealingBtaCompositionTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val metrics = RecordingMetricsSink()
     val adapter =
@@ -93,7 +94,8 @@ class SelfHealingBtaCompositionTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic-state")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val metrics = RecordingMetricsSink()
     val adapter =
