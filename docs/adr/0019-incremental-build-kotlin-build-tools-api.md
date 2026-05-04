@@ -10,8 +10,8 @@ date: 2026-04-16
 - Drive incremental JVM compilation through `kotlin-build-tools-api` (approach B). The entry point is `@ExperimentalBuildToolsApi`; the BTA artifact version moves lockstep with `kotlinc`. (§1; §1 single-version pin superseded by ADR 0022 §7)
 - Scope: JVM daemon path only (main + test sources). Subprocess fallback and native/`konanc` compilation remain full-recompile. (§2)
 - Isolate all `@ExperimentalBuildToolsApi` types in a thin `BtaIncrementalCompiler` adapter (`kolt-compiler-daemon/ic/`). Daemon core must not import any `-api`/`-impl` type. (§3)
-- `Message.Compile` wire format is unchanged — no version negotiation, no new frame type. BTA performs its own change detection via `SourcesChanges.ToBeCalculated`. (§4)
-- IC state lives at `~/.kolt/daemon/ic/<kotlinVersion>/<sha256(projectRoot)>/`, daemon-owned and outside `build/`. `kolt clean` does not destroy IC caches. (§5)
+- `Message.Compile` wire format gained `compileScope` and `friendPaths` fields in #376 (multi-target-per-project shape). Strict deserialization (no `ignoreUnknownKeys`) is intentional: stale daemons fail-loud at frame parse rather than silently dropping the scope discriminator. BTA performs its own change detection via `SourcesChanges.ToBeCalculated`. (§4)
+- IC state lives at `~/.kolt/daemon/ic/<kotlinVersion>/<sha256(projectRoot)>/<scope>/`, daemon-owned and outside `build/`. The `<scope>` segment (`main` / `test`) was added in #376 so each compile scope owns its own BTA `inputsCache`; `kolt clean` does not destroy IC caches. (§5)
 - On any non-`VirtualMachineError` BTA failure the adapter wipes `workingDir` and retries full recompile silently; `VirtualMachineError` is rethrown so `FallbackCompilerBackend` (ADR 0016 §5) handles it. (§7)
 - BuildCache's 0.00–0.01 s no-op path is preserved; IC is only invoked after `BuildCache` returns `Stale`. (§8)
 
@@ -89,13 +89,19 @@ sealed interface IcError {
 
 Deferred: a file-watcher client (e.g. `kolt watch`, #15) may later pass `modifiedSources`/`removedSources` so the daemon can use `SourcesChanges.Known(...)`. That extension is additive and does not break existing clients.
 
+**Wire evolution (#376).** The original framing assumed one compile per project per session; `kolt test` invalidates this by issuing a second compile against the same project. `Message.Compile` gained two fields: `compileScope: CompileScope = Main` (discriminates main vs test for §5 workingDir routing) and `friendPaths: List<String> = []` (replaces ad-hoc `-Xfriend-paths` in `extraArgs`, since the daemon strips unknown extraArgs). Both have defaults so old clients continue to work against new daemons. New clients against old daemons fail at deserialization (`kotlinx.serialization` strict mode) — a `SerializationException` propagates as `FrameError.Malformed`, triggering `FallbackCompilerBackend` (ADR 0016 §5) to retry via subprocess. This is the desired failure mode: silent ignore of `compileScope` would route test compiles to `main` workingDir and re-introduce the `build/classes/` wipe bug §5 fixes.
+
+The fail-loud guarantee is asymmetric: `kotlinx.serialization` defaults `encodeDefaults = false`, so `compileScope = Main` (the default) is wire-omitted entirely and an old daemon parses the frame as pre-#376 main-compile. Only the test compile (`compileScope = Test`) carries a non-default value and triggers strict-mode rejection. This is why `ignoreUnknownKeys = true` would be a regression: it would silently downgrade the test compile to main-scope routing, while the default-omission already keeps the main path silently working.
+
 ### §5 IC state: daemon-owned, outside build/
 
 ```
-~/.kolt/daemon/ic/<kotlinVersion>/<sha256(projectRoot)>/
+~/.kolt/daemon/ic/<kotlinVersion>/<sha256(projectRoot)>/<scope>/
 ```
 
 Daemon-owned: the daemon is the sole writer, reader, and invalidation authority. Outside `build/`: `kolt clean` destroys source/dependency outputs, not IC caches — a user investigating a build problem is not asking to pay a cold IC penalty. Version-stamped: a `kotlinc` bump invalidates the cache by switching the directory segment; the old segment is left for a future reaper. `sha256(projectRoot)` matches ADR 0016's socket path convention — renaming a project invalidates both the daemon and IC state in the same move.
+
+**Scope segment (#376).** The original "1 project ⇒ 1 module ⇒ 1 outputDir" framing this section assumed does not match the JVM `kolt test` shape, which compiles the same project twice — once for main (`build/classes/`) and once for test (`build/test-classes/`). BTA persists its `inputsCache` under `workingDir/inputs/` keyed by source-file path. Sharing one workingDir across the two compiles makes BTA see the *other* compile's source list as "removed" and invoke `removeOutputForSourceFiles` against the previously-tracked outputs — wiping `build/classes/` after a test compile. The `<scope>` segment (`main` / `test`) gives each scope its own workingDir under the shared `<projectIdHash>` directory, mirroring Gradle KGP's one-task-one-workingDir model. `LOCK` and the `project.path` breadcrumb stay at the `<projectIdHash>` level (one per project) so the reaper continues to see one entry per project regardless of scope.
 
 ### §6 Session model: no wire state
 
@@ -174,6 +180,7 @@ IC is the default compile path from the first B-2 release. No opt-in flag, no `k
 - #103 — Phase B-1a incremental ceiling
 - #104 — Phase B-1b `kotlin-build-tools-api` spike and REPORT.md
 - #105 — this ADR's tracking issue
+- #376 — JVM `kolt test` daemon route + scope segment in §5
 - ADR 0001 — `Result<V, E>` discipline applied to `IncrementalCompiler` and `IcError`
 - ADR 0016 — JVM daemon (compile backend this ADR extends; wire protocol unchanged)
 - ADR 0022 — Kotlin version policy (supersedes §1's single-version pin)
