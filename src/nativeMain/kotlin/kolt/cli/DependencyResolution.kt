@@ -217,10 +217,23 @@ internal fun resolveAllBundles(
 
   val out = LinkedHashMap<String, BundleResolution>(config.classpaths.size)
   for ((bundleName, bundleSeeds) in config.classpaths) {
-    val cached = reuseBundleFromLock(bundleName, bundleSeeds, existingLock, cacheBase)
-    if (cached != null) {
-      out[bundleName] = cached
-      continue
+    if (existingLock != null) {
+      val cached = reuseBundleFromLock(bundleName, bundleSeeds, existingLock, cacheBase)
+      if (cached != null) {
+        materialiseBundleJarsFromLock(
+            cached,
+            config,
+            existingLock,
+            bundleName,
+            cacheBase,
+            resolverDeps,
+          )
+          .getOrElse {
+            return Err(it)
+          }
+        out[bundleName] = cached
+        continue
+      }
     }
     val resolution =
       resolveBundle(
