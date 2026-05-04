@@ -205,6 +205,17 @@ jobs:
       # spawn path is exercised cold (otherwise a daemon left over from
       # the prior step would short-circuit).
       #
+      # `kolt update` is called explicitly because `kolt build` and
+      # `kolt fetch` do not materialise jars under `[classpaths.<bundle>]`
+      # — `[classpaths.X]` is only download-driven by `kolt update`
+      # (DependencyCommands.kt: `doFetchInner` skips bundles, `doUpdateInner`
+      # resolves them with `existingLock = null`). On a CI cache that
+      # pre-dates this branch's first JVM `kolt test`, the bundle jars
+      # have never been written to disk, even though the lockfile knows
+      # about them. `kolt update` populates them. Lockfile is regenerated
+      # but byte-identical when seeds match — see #386 for the longer-
+      # term fix that lets `kolt build` / `kolt test` self-heal a
+      # missing bundle jar without `kolt update`.
       - name: kolt test at kolt-jvm-compiler-daemon (#376 regression guard)
         env:
           KOLT_DAEMON_JAR: ${{ github.workspace }}/kolt-jvm-compiler-daemon/build/debug/kolt-jvm-compiler-daemon.jar
@@ -212,6 +223,7 @@ jobs:
           set -euo pipefail
           rm -rf "$HOME/.kolt/daemon"
           cd kolt-jvm-compiler-daemon
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" update
           "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" test 2> kolt-test.stderr
           echo "--- kolt-test.stderr ---"
           cat kolt-test.stderr || true
