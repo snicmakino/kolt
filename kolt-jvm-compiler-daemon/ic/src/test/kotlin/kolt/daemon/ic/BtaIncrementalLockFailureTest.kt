@@ -35,11 +35,13 @@ class BtaIncrementalLockFailureTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic").apply { createDirectories() }
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
     // Precreate LOCK as a directory so `FileChannel.open(lockPath,
     // CREATE, READ, WRITE)` cannot open it — EISDIR on Linux surfaces
-    // as `FileSystemException` from the JDK.
-    workingDir.resolve("LOCK").createDirectories()
+    // as `FileSystemException` from the JDK. #376: LOCK lives at the
+    // projectStateDir level (parent of workingDir).
+    projectStateDir.resolve("LOCK").createDirectories()
 
     val metrics = RecordingMetricsSink()
     val compiler =
@@ -69,7 +71,7 @@ class BtaIncrementalLockFailureTest {
     )
     // If ensureLock failed but compile continued, breadcrumb would leak here.
     assertTrue(
-      !Files.exists(workingDir.resolve("project.path")),
+      !Files.exists(projectStateDir.resolve("project.path")),
       "breadcrumb must not be written when ensureLock failed",
     )
   }
@@ -88,8 +90,10 @@ class BtaIncrementalLockFailureTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic").apply { createDirectories() }
-    val lockPath = workingDir.resolve("LOCK")
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
+    // #376: LOCK is at the projectStateDir level, shared across scopes.
+    val lockPath = projectStateDir.resolve("LOCK")
 
     // Holding an exclusive FileLock from another channel in the same JVM
     // makes the adapter's subsequent `tryLock` raise

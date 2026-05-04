@@ -10,6 +10,7 @@ import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
+import kolt.daemon.ic.CompileScope
 import kolt.daemon.ic.IcError
 import kolt.daemon.ic.IcRequest
 import kolt.daemon.ic.IcResponse
@@ -127,8 +128,57 @@ class DaemonServerTest {
       // call sites cannot drift apart.
       assertEquals(IcStateLayout.projectIdFor(Path.of("/w")), observed.projectId)
       assertEquals(
-        IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w")),
+        IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w"), CompileScope.Main),
         observed.workingDir,
+      )
+    }
+  }
+
+  // #376 regression guard: a wire `Message.Compile(compileScope = Test, friendPaths = [...])`
+  // must route to a `Test`-scoped workingDir and forward `friendPaths` verbatim. A regression
+  // that drops the scope discriminator on the wire->IC mapping would silently re-introduce
+  // the `build/classes/` wipe bug because the test compile would land in the main scope's
+  // BTA workingDirectory.
+  @Test
+  fun `Compile with compileScope Test routes to test scope and forwards friendPaths`() {
+    val observedRequests = mutableListOf<IcRequest>()
+    val compiler =
+      FakeCompiler(
+        onCompile = { req ->
+          observedRequests += req
+          Ok(IcResponse(wallMillis = 3, compiledFileCount = 1))
+        }
+      )
+    startServer(compiler)
+
+    connect().use { ch ->
+      val input = Channels.newInputStream(ch)
+      val output = Channels.newOutputStream(ch)
+      FrameCodec.writeFrame(
+        output,
+        Message.Compile(
+          workingDir = "/w",
+          classpath = emptyList(),
+          sources = listOf("TestA.kt"),
+          outputPath = "build/test-classes",
+          moduleName = "mod-a",
+          extraArgs = emptyList(),
+          compileScope = kolt.daemon.protocol.CompileScope.Test,
+          friendPaths = listOf("/w/build/classes", "/w/build/extra-classes"),
+        ),
+      )
+      val response = FrameCodec.readFrame(input).get()
+      assertNotNull(response)
+      val result = response as Message.CompileResult
+      assertEquals(0, result.exitCode)
+      val observed = observedRequests.single()
+      assertEquals(
+        IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w"), CompileScope.Test),
+        observed.workingDir,
+      )
+      assertEquals(
+        listOf(Path.of("/w/build/classes"), Path.of("/w/build/extra-classes")),
+        observed.friendPaths,
       )
     }
   }

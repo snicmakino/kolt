@@ -50,7 +50,10 @@ class BtaIncrementalCompilerColdPathTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic").apply { createDirectories() }
+    // #376: workingDir is `<projectStateDir>/<scope>`. LOCK and breadcrumb
+    // live at projectStateDir so the reaper sees one set per project.
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val compiler =
       BtaIncrementalCompiler.create(btaImplJars).getOrElse {
@@ -78,21 +81,21 @@ class BtaIncrementalCompilerColdPathTest {
     )
 
     // ADR 0019 §Negative follow-up — IC reaper coordination: the
-    // cold path must drop a `project.path` breadcrumb inside
-    // workingDir pointing at the request's projectRoot, so the
+    // cold path must drop a `project.path` breadcrumb at the
+    // projectStateDir level (one per project, not per scope) so the
     // reaper can distinguish live projectId dirs from stale ones
     // after a project is moved or deleted.
-    val breadcrumb = workingDir.resolve("project.path")
+    val breadcrumb = projectStateDir.resolve("project.path")
     assertTrue(breadcrumb.exists(), "expected project.path breadcrumb at $breadcrumb")
     assertEquals(workRoot.toString(), breadcrumb.readText().trim())
 
-    // #199: LOCK must exist under workingDir after compile and its
+    // #199: LOCK must exist under projectStateDir after compile and its
     // mtime must be no later than the breadcrumb's — a literal
     // swap of the write order back to breadcrumb-first would flip
     // this. Strict `<` would be flaky on WSL2 9p (1s mtime
     // granularity); `<=` catches the swap without false positives
     // on fast filesystems.
-    val lock = workingDir.resolve("LOCK")
+    val lock = projectStateDir.resolve("LOCK")
     assertTrue(lock.exists(), "expected LOCK at $lock")
     val lockMtime = Files.getLastModifiedTime(lock)
     val breadcrumbMtime = Files.getLastModifiedTime(breadcrumb)
@@ -120,7 +123,8 @@ class BtaIncrementalCompilerColdPathTest {
         )
       }
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic").apply { createDirectories() }
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val compiler =
       BtaIncrementalCompiler.create(btaImplJars).getOrElse {
@@ -213,7 +217,8 @@ class BtaIncrementalCompilerColdPathTest {
           .trimIndent()
       )
     val outputDir = workRoot.resolve("classes").apply { createDirectories() }
-    val workingDir = workRoot.resolve("ic").apply { createDirectories() }
+    val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
+    val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
     val resolverCalls = mutableListOf<String>()
     val compiler =

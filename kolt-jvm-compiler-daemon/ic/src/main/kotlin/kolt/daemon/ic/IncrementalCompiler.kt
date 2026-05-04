@@ -31,6 +31,10 @@ data class IcRequest(
   val classpath: List<Path>,
   val outputDir: Path,
   val workingDir: Path,
+  // #376: the test compile passes the main classes directory here so
+  // BTA emits `-Xfriend-paths=<dir>` and grants `internal` access from
+  // test sources to main classes. Empty for the main compile.
+  val friendPaths: List<Path> = emptyList(),
 )
 
 // Success-only payload. Before B-2b the type carried a `status: Status`

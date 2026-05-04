@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalBuildToolsApi::class)
+@file:OptIn(ExperimentalBuildToolsApi::class, ExperimentalCompilerArgument::class)
 
 package kolt.daemon.ic
 
@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.buildtools.api.ExperimentalBuildToolsApi
 import org.jetbrains.kotlin.buildtools.api.KotlinToolchains
 import org.jetbrains.kotlin.buildtools.api.SharedApiClassesClassLoader
 import org.jetbrains.kotlin.buildtools.api.SourcesChanges
+import org.jetbrains.kotlin.buildtools.api.arguments.ExperimentalCompilerArgument
 import org.jetbrains.kotlin.buildtools.api.arguments.JvmCompilerArguments
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmPlatformToolchain.Companion.jvm
 import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperation
@@ -114,11 +115,18 @@ private constructor(
     // exists, which is the common case for every non-initial request.
     Files.createDirectories(request.workingDir)
 
-    // LOCK must be the first write on workingDir — IcReaper treats
+    // #376: with scope-segregated workingDirs (`<projectIdDir>/<scope>`),
+    // LOCK and breadcrumb live at `projectIdDir` so a single project owns
+    // exactly one of each — the reaper still walks `projectIdDir` and
+    // does not need to know about the scope dimension.
+    val projectStateDir = request.workingDir.parent
+    Files.createDirectories(projectStateDir)
+
+    // LOCK must be the first write on projectStateDir — IcReaper treats
     // LOCK-existence as proof the dir is alive, so any earlier write
     // opens a concurrent-boot wipe window. Contended LOCK continues:
     // reaper keys off existence, not ownership.
-    ensureLock(request.workingDir).getOrElse {
+    ensureLock(projectStateDir).getOrElse {
       return Err(it)
     }
 
@@ -127,17 +135,14 @@ private constructor(
     Files.createDirectories(btaWorkingDir)
 
     // ADR 0019 §Negative follow-up (IC reaper): drop a `project.path`
-    // breadcrumb next to BTA state so the reaper can decide whether
+    // breadcrumb at projectStateDir so the reaper can decide whether
     // this projectId's source tree still exists. Idempotent on every
-    // compile — overwrite is cheap and resilient to a truncation by
-    // the self-heal path. Kept above `btaWorkingDir` because BTA
-    // clears its workingDirectory on cold-path startup; a breadcrumb
-    // sitting inside BTA state would be swept away on every first
-    // compile. Failure to write is logged as a reaper concern and
-    // does not fail the compile.
+    // compile (across all scopes) — the project root is the same
+    // regardless of which scope is compiling. Failure to write is
+    // logged as a reaper concern and does not fail the compile.
     runCatching {
         Files.writeString(
-          request.workingDir.resolve(PROJECT_PATH_BREADCRUMB),
+          projectStateDir.resolve(PROJECT_PATH_BREADCRUMB),
           request.projectRoot.toString(),
           StandardOpenOption.CREATE,
           StandardOpenOption.WRITE,
@@ -178,6 +183,13 @@ private constructor(
         request.classpath.joinToString(File.pathSeparator) { it.toString() }
     }
     builder.compilerArguments[JvmCompilerArguments.MODULE_NAME] = moduleNameFor(request)
+    if (request.friendPaths.isNotEmpty()) {
+      // #376: test compile gets `-Xfriend-paths=<main classes dir>` so it
+      // sees `internal` symbols from the main classes — same friend-path
+      // contract as `testBuildCommand` on the subprocess path.
+      builder.compilerArguments[JvmCompilerArguments.X_FRIEND_PATHS] =
+        request.friendPaths.map { it.toString() }.toTypedArray()
+    }
 
     // #127: cached by ClasspathSnapshotCache; see class doc for key/error policy.
     val dependenciesSnapshotFiles = classpathSnapshotCache.getOrComputeSnapshots(request.classpath)
@@ -299,9 +311,13 @@ private constructor(
   // Err = LOCK file could not be created; caller must abort before any
   // non-LOCK write. Ok = either we hold it or another owner does
   // (reaper's existence probe is load-bearing in both cases).
-  private fun ensureLock(workingDir: Path): Result<Unit, IcError.InternalError> {
-    val lockPath = workingDir.resolve(LOCK_FILE)
-    val cached = heldLocks[workingDir]
+  // #376: keyed by projectStateDir (= projectIdDir), shared across all
+  // scopes of a project so main- and test-compile within the same
+  // daemon process reuse one lock instead of contending against
+  // themselves through different file channels.
+  private fun ensureLock(projectStateDir: Path): Result<Unit, IcError.InternalError> {
+    val lockPath = projectStateDir.resolve(LOCK_FILE)
+    val cached = heldLocks[projectStateDir]
     if (cached != null && cached.lock.isValid && Files.isRegularFile(lockPath)) {
       return Ok(Unit)
     }
@@ -311,7 +327,7 @@ private constructor(
       // it cleaned `workingDir`. Close the dead channel and drop
       // the entry so the next block re-acquires cleanly.
       runCatching { cached.channel.close() }
-      heldLocks.remove(workingDir)
+      heldLocks.remove(projectStateDir)
     }
     val channel =
       try {
@@ -342,7 +358,7 @@ private constructor(
       metrics.record(METRIC_REAPER_LOCK_CONFLICT)
       return Ok(Unit)
     }
-    heldLocks[workingDir] = HeldLock(channel, lock)
+    heldLocks[projectStateDir] = HeldLock(channel, lock)
     return Ok(Unit)
   }
 
