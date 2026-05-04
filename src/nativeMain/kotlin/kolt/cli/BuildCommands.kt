@@ -1086,13 +1086,17 @@ private fun doTestInner(
       return Err(EXIT_TEST_ERROR)
     }
 
-  val pArgs =
-    resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
+  val pluginJarPathsByAlias =
+    resolveEnabledPluginJarPaths(config, paths, EXIT_TEST_ERROR).getOrElse {
       eprintln("error: ${it.message}")
       return Err(it.exitCode)
     }
+  val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
+  val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
 
   val testConfig = config.copy(build = config.build.copy(testSources = existingTestSources))
+  // testBuildCommand still informs the run-side `testCmd.outputPath` and the
+  // language-version args used as extraArgs for the subprocess fallback.
   val testCmd =
     testBuildCommand(
       testConfig,
@@ -1102,10 +1106,69 @@ private fun doTestInner(
       kotlincPath = managedKotlincBin,
       profile = profile,
     )
+
+  val cwd =
+    currentWorkingDirectory()
+      ?: run {
+        eprintln("error: could not determine current working directory")
+        return Err(EXIT_TEST_ERROR)
+      }
+
+  val testSubprocessBackend =
+    SubprocessCompilerBackend(kotlincBin = managedKotlincBin, javaHome = javaHome)
+  // #376: route the test compile through the same daemon-or-fallback path as
+  // the main compile. The compileScope=Test segment isolates the BTA
+  // workingDirectory so test-side IC state cannot wipe `build/classes/` via
+  // BTA's `removeOutputForSourceFiles` reconciliation (root cause: BTA's
+  // inputsCache lives under `workingDir/inputs/` and is keyed by source path,
+  // so a shared workingDir treats the *other* compile's sources as removed).
+  val testBackend: CompilerBackend =
+    resolveCompilerBackend(
+      config = config,
+      paths = paths,
+      subprocessBackend = testSubprocessBackend,
+      useDaemon = useDaemon,
+      absProjectPath = cwd,
+      pluginJars = pluginJarsForDaemon,
+    )
+  val absMainClassesDir = absolutise(CLASSES_DIR, cwd)
+  val testSources =
+    expandKotlinSources(existingTestSources.map { absolutise(it, cwd) }).getOrElse { err ->
+      eprintln("error: could not list Kotlin sources under ${err.path}")
+      return Err(EXIT_TEST_ERROR)
+    }
+  val testRequestClasspath = buildList {
+    add(absMainClassesDir)
+    if (!testClasspath.isNullOrEmpty()) {
+      addAll(testClasspath.split(":").filter { it.isNotEmpty() })
+    }
+  }
+  val testRequest =
+    CompileRequest(
+      workingDir = cwd,
+      classpath = testRequestClasspath,
+      sources = testSources,
+      outputPath = absolutise(TEST_CLASSES_DIR, cwd),
+      // Match `testBuildCommand`: test set shares the main module's identity
+      // for `internal` access. `-Xfriend-paths` carries the rest.
+      moduleName = config.name,
+      extraArgs =
+        buildList {
+          add("-jvm-target")
+          add(config.build.jvmTarget)
+          addAll(languageVersionArgs(config))
+          addAll(pArgs)
+        },
+      compileScope = kolt.daemon.wire.CompileScope.Test,
+      friendPaths = listOf(absMainClassesDir),
+    )
   println("compiling tests...")
-  val testCompileEnv = if (javaHome != null) mapOf("JAVA_HOME" to javaHome) else emptyMap()
-  executeCommand(testCmd.args, testCompileEnv).getOrElse { error ->
-    eprintln("error: " + formatProcessError(error, "test compilation"))
+  testBackend.compile(testRequest).getOrElse { error ->
+    if (error is CompileError.CompilationFailed) {
+      val body = renderCompilationFailure(error)
+      if (body.isNotEmpty()) eprintln(body)
+    }
+    eprintln(formatCompileError(error, "test compilation"))
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -1123,16 +1186,10 @@ private fun doTestInner(
   }
 
   val existingTestResourceDirs = filterExistingDirs(config.build.testResources, "test resource")
-  val projectRoot =
-    currentWorkingDirectory()
-      ?: run {
-        eprintln("error: could not determine current working directory")
-        return Err(EXIT_TEST_ERROR)
-      }
   val runArgs =
     jvmTestArgv(
       config = config,
-      projectRoot = projectRoot,
+      projectRoot = cwd,
       bundleClasspaths = buildResult.bundleClasspaths,
       classesDir = CLASSES_DIR,
       testClassesDir = testCmd.outputPath,

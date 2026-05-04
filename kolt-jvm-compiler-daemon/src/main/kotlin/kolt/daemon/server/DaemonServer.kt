@@ -19,11 +19,13 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kolt.daemon.ic.CompileScope as IcCompileScope
 import kolt.daemon.ic.IcError
 import kolt.daemon.ic.IcRequest
 import kolt.daemon.ic.IcResponse
 import kolt.daemon.ic.IcStateLayout
 import kolt.daemon.ic.IncrementalCompiler
+import kolt.daemon.protocol.CompileScope
 import kolt.daemon.protocol.Diagnostic
 import kolt.daemon.protocol.DiagnosticParser
 import kolt.daemon.protocol.FrameCodec
@@ -250,6 +252,7 @@ class DaemonServer(
     // list, double-loading the plugin classpath. If a future change
     // wants to forward subset args, it MUST filter `-Xplugin=` first
     // (or the native client must stop emitting it on the daemon path).
+    val scope = wireScopeToIcScope(request.compileScope)
     return IcRequest(
       projectId = IcStateLayout.projectIdFor(projectRoot),
       projectRoot = projectRoot,
@@ -261,9 +264,16 @@ class DaemonServer(
       // DaemonLifecycleTest was just a shape-only label and never reached
       // a real compile.
       outputDir = Path.of(request.outputPath),
-      workingDir = IcStateLayout.workingDirFor(icRoot, kotlinVersion, projectRoot),
+      workingDir = IcStateLayout.workingDirFor(icRoot, kotlinVersion, projectRoot, scope),
+      friendPaths = request.friendPaths.map { Path.of(it) },
     )
   }
+
+  private fun wireScopeToIcScope(scope: CompileScope): IcCompileScope =
+    when (scope) {
+      CompileScope.Main -> IcCompileScope.Main
+      CompileScope.Test -> IcCompileScope.Test
+    }
 
   private fun icResponseToReply(
     @Suppress("UNUSED_PARAMETER") response: IcResponse

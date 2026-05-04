@@ -176,9 +176,9 @@
       }
     },
     "serialization_plugin": {
-      "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": {
+      "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin": {
         "version": "2.3.20",
-        "sha256": "178edb62cda3e255fc80e270656f2848b6e0752f7b4b4c27e4a88cc537bea674"
+        "sha256": "2c8c84a9902d04541828c77c1ddf953c8ea67a1d77d9aeefa8a063187165b2a5"
       }
     },
     "serialization_runtime": {

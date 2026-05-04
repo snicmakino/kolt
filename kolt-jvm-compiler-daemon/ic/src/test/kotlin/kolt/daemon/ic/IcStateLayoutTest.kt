@@ -49,14 +49,14 @@ class IcStateLayoutTest {
   }
 
   @Test
-  fun `workingDirFor composes icRoot kotlinVersion and projectId`() {
+  fun `workingDirFor composes icRoot kotlinVersion projectId and scope`() {
     val icRoot = Path.of("/home/alice/.kolt/daemon/ic")
     val projectRoot = Path.of("/work/proj")
     val projectId = IcStateLayout.projectIdFor(projectRoot)
 
-    val workingDir = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot)
+    val workingDir = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot, CompileScope.Main)
 
-    assertEquals(icRoot.resolve("2.3.20").resolve(projectId), workingDir)
+    assertEquals(icRoot.resolve("2.3.20").resolve(projectId).resolve("main"), workingDir)
   }
 
   @Test
@@ -64,22 +64,41 @@ class IcStateLayoutTest {
     val icRoot = Path.of("/ic")
     val projectRoot = Path.of("/w")
 
-    val v1 = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot)
-    val v2 = IcStateLayout.workingDirFor(icRoot, "2.4.0", projectRoot)
+    val v1 = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot, CompileScope.Main)
+    val v2 = IcStateLayout.workingDirFor(icRoot, "2.4.0", projectRoot, CompileScope.Main)
 
     assertNotEquals(v1, v2)
-    assertEquals(icRoot.resolve("2.3.20"), v1.parent)
-    assertEquals(icRoot.resolve("2.4.0"), v2.parent)
+    assertEquals(icRoot.resolve("2.3.20"), v1.parent.parent)
+    assertEquals(icRoot.resolve("2.4.0"), v2.parent.parent)
   }
 
   @Test
   fun `workingDirFor separates by project root`() {
     val icRoot = Path.of("/ic")
 
-    val a = IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w/a"))
-    val b = IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w/b"))
+    val a = IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w/a"), CompileScope.Main)
+    val b = IcStateLayout.workingDirFor(icRoot, "2.3.20", Path.of("/w/b"), CompileScope.Main)
 
     assertNotEquals(a, b)
-    assertEquals(a.parent, b.parent, "same kotlinVersion directory hosts both")
+    assertEquals(a.parent.parent, b.parent.parent, "same kotlinVersion directory hosts both")
+  }
+
+  // Issue #376: main and test compile in the same project must NOT share
+  // BTA's workingDirectory. BTA's inputsCache lives under
+  // `workingDir/inputs/` (per `IncrementalCompilerRunner`), so two compiles
+  // sharing a workingDir cross-contaminate: the second compile sees the
+  // first compile's sources as "removed" and removes their .class outputs
+  // via `removeOutputForSourceFiles`. The fix is a per-scope segment so
+  // each (project, scope) gets its own inputsCache.
+  @Test
+  fun `workingDirFor separates main and test under the same project`() {
+    val icRoot = Path.of("/ic")
+    val projectRoot = Path.of("/w/proj")
+
+    val main = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot, CompileScope.Main)
+    val test = IcStateLayout.workingDirFor(icRoot, "2.3.20", projectRoot, CompileScope.Test)
+
+    assertNotEquals(main, test)
+    assertEquals(main.parent, test.parent, "same projectId directory hosts both scopes")
   }
 }

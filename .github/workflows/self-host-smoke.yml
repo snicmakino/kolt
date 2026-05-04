@@ -191,6 +191,53 @@ jobs:
           cd kolt-jvm-compiler-daemon
           "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" build
 
+      # #376 regression guard: route a JVM `kolt test` through the JVM
+      # compile daemon and assert that (a) the test compile actually goes
+      # via the daemon (not subprocess fallback) and (b) `build/classes/`
+      # is preserved across the test compile. Pre-#376 the daemon-routed
+      # test compile would wipe the project's main outputDir via BTA's
+      # `removeOutputForSourceFiles` reconciliation; this guard catches a
+      # regression to that shape directly.
+      #
+      # KOLT_DAEMON_JAR points the bootstrap-kexe at the just-built thin
+      # jar so the daemon path engages even though bootstrap-kexe lacks a
+      # libexec/ sibling tree. `~/.kolt/daemon` is wiped first so the
+      # spawn path is exercised cold (otherwise a daemon left over from
+      # the prior step would short-circuit).
+      #
+      # `kolt update` is called explicitly because `kolt build` and
+      # `kolt fetch` do not materialise jars under `[classpaths.<bundle>]`
+      # — `[classpaths.X]` is only download-driven by `kolt update`
+      # (DependencyCommands.kt: `doFetchInner` skips bundles, `doUpdateInner`
+      # resolves them with `existingLock = null`). On a CI cache that
+      # pre-dates this branch's first JVM `kolt test`, the bundle jars
+      # have never been written to disk, even though the lockfile knows
+      # about them. `kolt update` populates them. Lockfile is regenerated
+      # but byte-identical when seeds match — see #386 for the longer-
+      # term fix that lets `kolt build` / `kolt test` self-heal a
+      # missing bundle jar without `kolt update`.
+      - name: kolt test at kolt-jvm-compiler-daemon (#376 regression guard)
+        env:
+          KOLT_DAEMON_JAR: ${{ github.workspace }}/kolt-jvm-compiler-daemon/build/debug/kolt-jvm-compiler-daemon.jar
+        run: |
+          set -euo pipefail
+          rm -rf "$HOME/.kolt/daemon"
+          cd kolt-jvm-compiler-daemon
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" update
+          "$GITHUB_WORKSPACE/bootstrap-kexe/kolt.kexe" test 2> kolt-test.stderr
+          echo "--- kolt-test.stderr ---"
+          cat kolt-test.stderr || true
+          echo "--- end stderr ---"
+          if [ ! -f build/classes/kolt/daemon/MainKt.class ]; then
+            echo "#376 regression: daemon-routed test compile wiped build/classes/" >&2
+            exit 1
+          fi
+          if grep -q "falling back to subprocess" kolt-test.stderr; then
+            echo "#376 regression: test compile fell back to subprocess (daemon path failed)" >&2
+            exit 1
+          fi
+          echo "#376 smoke OK: test compile went via the daemon, build/classes/ intact"
+
       - name: kolt build at kolt-native-compiler-daemon
         run: |
           set -euo pipefail

@@ -278,6 +278,8 @@ internal fun CompileRequest.toWireMessage(): Message.Compile =
     outputPath = outputPath,
     moduleName = moduleName,
     extraArgs = extraArgs,
+    compileScope = compileScope,
+    friendPaths = friendPaths,
   )
 
 private fun describe(err: UnixSocketError?): String =

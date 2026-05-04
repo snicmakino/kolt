@@ -1,6 +1,7 @@
 package kolt.build
 
 import com.github.michaelbull.result.Result
+import kolt.daemon.wire.CompileScope
 import kolt.daemon.wire.Diagnostic
 import kolt.daemon.wire.Severity
 
@@ -16,6 +17,8 @@ data class CompileRequest(
   val outputPath: String,
   val moduleName: String,
   val extraArgs: List<String> = emptyList(),
+  val compileScope: CompileScope = CompileScope.Main,
+  val friendPaths: List<String> = emptyList(),
 )
 
 data class CompileOutcome(val stdout: String, val stderr: String)

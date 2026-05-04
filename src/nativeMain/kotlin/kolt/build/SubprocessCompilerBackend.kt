@@ -39,6 +39,9 @@ internal fun subprocessArgv(kotlincBin: String, request: CompileRequest): List<S
   // source set in `testBuildCommand`.
   add("-module-name")
   add(request.moduleName)
+  for (friendPath in request.friendPaths) {
+    add("-Xfriend-paths=$friendPath")
+  }
   add("-d")
   add(request.outputPath)
 }

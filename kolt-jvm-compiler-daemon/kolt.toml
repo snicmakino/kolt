@@ -33,7 +33,14 @@ test_sources = ["src/test/kotlin", "ic/src/test/kotlin"]
 "org.jetbrains.kotlin:kotlin-stdlib" = "2.3.20"
 
 [classpaths.serialization_plugin]
-"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable" = "2.3.20"
+# `-embeddable` redirects via Gradle module metadata to the unsuffixed
+# artifact, but kolt's `reuseBundleFromLock` keeps the lockfile entry
+# under the declared key — the path it computes is `<...>-embeddable.jar`
+# which never lands on disk. Declaring the redirect target directly
+# aligns the lockfile key with the on-disk path. The unsuffixed artifact
+# is also what `[kotlin.plugins.serialization]=true` injects on the
+# build path (PluginJarFetcher), so both call sites converge.
+"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin" = "2.3.20"
 
 [classpaths.serialization_runtime]
 "org.jetbrains.kotlin:kotlin-stdlib" = "2.3.20"
