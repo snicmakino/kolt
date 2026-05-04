@@ -204,6 +204,7 @@ jobs:
       # libexec/ sibling tree. `~/.kolt/daemon` is wiped first so the
       # spawn path is exercised cold (otherwise a daemon left over from
       # the prior step would short-circuit).
+      #
       - name: kolt test at kolt-jvm-compiler-daemon (#376 regression guard)
         env:
           KOLT_DAEMON_JAR: ${{ github.workspace }}/kolt-jvm-compiler-daemon/build/debug/kolt-jvm-compiler-daemon.jar
