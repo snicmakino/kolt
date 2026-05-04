@@ -86,6 +86,32 @@ class SubprocessCompilerBackendArgvTest {
       )
     assertTrue(argv.containsAll(listOf("-jvm-target", "21", "-Xplugin=foo.jar")))
   }
+
+  // #376: subprocess fallback must translate friendPaths to
+  // `-Xfriend-paths=<dir>` so the test compile sees `internal`
+  // symbols from main classes — same contract as the daemon path.
+  @Test
+  fun argvForwardsFriendPathsAsXfriendPaths() {
+    val req =
+      CompileRequest(
+        workingDir = "",
+        classpath = emptyList(),
+        sources = listOf("test/Foo.kt"),
+        outputPath = "build/test-classes",
+        moduleName = "demo",
+        extraArgs = emptyList(),
+        friendPaths = listOf("/abs/build/classes", "/abs/build/extra-classes"),
+      )
+    val argv = subprocessArgv("kotlinc", req)
+    assertTrue("-Xfriend-paths=/abs/build/classes" in argv)
+    assertTrue("-Xfriend-paths=/abs/build/extra-classes" in argv)
+  }
+
+  @Test
+  fun argvOmitsXfriendPathsWhenEmpty() {
+    val argv = subprocessArgv("kotlinc", request())
+    assertTrue(argv.none { it.startsWith("-Xfriend-paths=") })
+  }
 }
 
 class SubprocessCompilerBackendMapProcessErrorTest {

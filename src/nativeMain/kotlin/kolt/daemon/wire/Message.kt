@@ -17,6 +17,12 @@ sealed interface Message {
     val outputPath: String,
     val moduleName: String,
     val extraArgs: List<String> = emptyList(),
+    // #376: governs the daemon's BTA workingDirectory segment so main
+    // and test compiles in the same project don't share an inputsCache.
+    val compileScope: CompileScope = CompileScope.Main,
+    // #376: forwarded as `-Xfriend-paths=<dir>` so the test compile
+    // sees `internal` symbols from the main classes.
+    val friendPaths: List<String> = emptyList(),
   ) : Message
 
   @Serializable
@@ -50,4 +56,12 @@ enum class Severity {
   Warning,
   Info,
   Logging,
+}
+
+// #376 — mirror of `kolt.daemon.protocol.CompileScope`. Wire-level enum
+// shared by the native client and the JVM daemon.
+@Serializable
+enum class CompileScope {
+  Main,
+  Test,
 }
