@@ -521,6 +521,52 @@ class SelfHealingIncrementalCompilerTest {
   }
 
   @Test
+  fun `same project but different workingDir keeps independent self-heal latches`() {
+    // Scope-segregated workingDirs (main / test under the same project)
+    // must each get their own self-heal chance. A latch keyed by
+    // projectId alone would let the main compile's self-heal suppress
+    // the next test compile's first retry.
+    val metrics = RecordingMetricsSink()
+    val delegate = FakeCompiler { _ ->
+      com.github.michaelbull.result.Err(IcError.InternalError(RuntimeException("corrupt")))
+    }
+    val wrapper =
+      SelfHealingIncrementalCompiler(
+        delegate = delegate,
+        wipe = { emptyList() },
+        metrics = metrics,
+        stderrWarn = {},
+      )
+    val mainScope =
+      IcRequest(
+        projectId = "shared-project",
+        projectRoot = tmpRoot,
+        sources = emptyList(),
+        classpath = emptyList(),
+        outputDir = tmpRoot.resolve("out"),
+        workingDir = tmpRoot.resolve("ic/main").also { Files.createDirectories(it) },
+      )
+    val testScope =
+      mainScope.copy(workingDir = tmpRoot.resolve("ic/test").also { Files.createDirectories(it) })
+
+    wrapper.compile(mainScope) // main self-heals
+    wrapper.compile(testScope) // test independently self-heals
+    wrapper.compile(mainScope) // main skipped (latch set)
+    wrapper.compile(testScope) // test skipped (latch set)
+
+    assertEquals(
+      2,
+      metrics.events.count { it.first == "ic.self_heal" },
+      "each scope must self-heal independently on first InternalError",
+    )
+    assertEquals(
+      2,
+      metrics.events.count { it.first == "ic.self_heal_skipped_consecutive" },
+      "consecutive failure on each scope is skipped independently",
+    )
+  }
+
+  @Test
   fun `no self-heal events when the failure is a CompilationFailed`() {
     val metrics = RecordingMetricsSink()
     val delegate = FakeCompiler { _ ->

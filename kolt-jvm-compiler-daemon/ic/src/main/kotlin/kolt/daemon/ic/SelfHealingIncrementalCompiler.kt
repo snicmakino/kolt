@@ -61,42 +61,46 @@ class SelfHealingIncrementalCompiler(
   private val stderrWarn: (String) -> Unit = ::defaultStderrWarn,
 ) : IncrementalCompiler {
 
-  // Per-project latch: when the previous compile for a given
-  // `projectId` fired the self-heal retry path, we mark the project
-  // "just self-healed". The next `IcError.InternalError` for the
-  // same project skips the retry and surfaces the error directly
-  // instead of wiping + re-running. Issue #117 part 2: without this
-  // latch, a persistent client-side bug (e.g. the native client
-  // sending a directory where BTA expects a file) makes every
-  // incoming `Message.Compile` burn one wipe cycle with no chance
-  // of making progress. Any successful compile — or any non-
-  // InternalError failure — clears the latch for that project so a
-  // later transient corruption still gets a fresh self-heal chance.
+  // Per-(project, workingDir) latch: when the previous compile for a
+  // given (projectId, workingDir) fired the self-heal retry path, we
+  // mark that pair "just self-healed". The next `IcError.InternalError`
+  // for the same pair skips the retry and surfaces the error directly
+  // instead of wiping + re-running. Issue #117 part 2 set the policy
+  // for project-wide latching; #376 split each project into per-scope
+  // workingDirs (main / test) so the latch must match that granularity
+  // — keying by projectId alone would let a self-heal on the main
+  // compile suppress the test compile's first retry. workingDir is the
+  // natural proxy for scope: every wipe targets exactly one workingDir.
+  // Any successful compile — or any non-InternalError failure — clears
+  // the latch for that pair so a later transient corruption still gets
+  // a fresh self-heal chance.
   //
   // The set is synchronised because `DaemonServer` currently
   // serialises compile traffic, but a future parallel dispatch
   // would still want the read/modify/write to be atomic.
-  private val projectsJustSelfHealed: MutableSet<String> =
-    Collections.synchronizedSet(mutableSetOf())
+  private val justSelfHealed: MutableSet<LatchKey> = Collections.synchronizedSet(mutableSetOf())
+
+  private data class LatchKey(val projectId: String, val workingDir: Path)
 
   override fun compile(request: IcRequest): Result<IcResponse, IcError> {
+    val latchKey = LatchKey(request.projectId, request.workingDir)
     val first = delegate.compile(request)
     return first.mapBoth(
       success = {
         // Any successful compile clears the latch for this
-        // project — we just proved that whatever was wrong
-        // last time is either fixed or transient, so we
-        // should allow the next InternalError to self-heal
+        // (project, workingDir) — we just proved that whatever
+        // was wrong last time is either fixed or transient, so
+        // we should allow the next InternalError to self-heal
         // normally.
-        projectsJustSelfHealed.remove(request.projectId)
+        justSelfHealed.remove(latchKey)
         first
       },
       failure = { error ->
         if (error is IcError.InternalError) {
-          if (projectsJustSelfHealed.contains(request.projectId)) {
+          if (justSelfHealed.contains(latchKey)) {
             // Consecutive InternalError for the same
-            // project. The previous self-heal cycle
-            // already wiped the workingDir and retried;
+            // (project, workingDir). The previous self-heal
+            // cycle already wiped the workingDir and retried;
             // if a second wipe+retry would help, it would
             // have helped last time. Skip the retry, emit
             // an observability metric, and surface the
@@ -105,7 +109,7 @@ class SelfHealingIncrementalCompiler(
             metrics.record(METRIC_SELF_HEAL_SKIPPED_CONSECUTIVE)
             return@mapBoth first
           }
-          projectsJustSelfHealed.add(request.projectId)
+          justSelfHealed.add(latchKey)
           metrics.record(METRIC_SELF_HEAL)
           stderrWarn(
             "kolt-jvm-compiler-daemon: self-heal fired for project working dir " +
@@ -149,11 +153,11 @@ class SelfHealingIncrementalCompiler(
         } else {
           // Non-InternalError failure (CompilationFailed —
           // a user type error). Clear the latch so a later
-          // InternalError on the same project still gets
-          // a fresh self-heal chance; a failed compile
-          // that is the user's fault is unrelated to
-          // cache corruption.
-          projectsJustSelfHealed.remove(request.projectId)
+          // InternalError on the same (project, workingDir)
+          // still gets a fresh self-heal chance; a failed
+          // compile that is the user's fault is unrelated
+          // to cache corruption.
+          justSelfHealed.remove(latchKey)
           first
         }
       },
