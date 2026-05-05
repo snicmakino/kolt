@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Foundation: IT skeleton with gate and skip notice
-- [ ] 1.1 Establish gated IT class with silent-skip and invalid-path failure
+- [x] 1. Foundation: IT skeleton with gate and skip notice
+- [x] 1.1 Establish gated IT class with silent-skip and invalid-path failure
   - 新規ファイルを `src/nativeTest/kotlin/kolt/cli/` 配下に作成し、 IT class と一つの no-op `@Test` (gate check のみを呼ぶ) を置く
   - File-private gate helper を実装: `KOLT_DAEMON_JAR` env が unset なら 1 度だけ stderr に skip notice を出して early return、 set されているが指す path が存在しなければ `fail(...)` で明示メッセージ付き失敗
   - Top-level `const val FIXTURE_KOTLIN_VERSION = "2.3.20"` を file 先頭に置き、 後続タスクで fixture toml と IC path 計算が共通参照する
