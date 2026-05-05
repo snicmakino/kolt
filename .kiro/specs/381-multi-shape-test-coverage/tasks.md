@@ -9,7 +9,7 @@
   - _Requirements: 4.1, 4.4, 5.1, 5.2_
 
 - [ ] 2. Core: per-shape end-to-end coverage
-- [ ] 2.1 Plugin なし shape の end-to-end test と共通 helper 一式
+- [x] 2.1 Plugin なし shape の end-to-end test と共通 helper 一式
   - File-private helpers を IT 内に追加: `scaffoldNoPluginFixture`、 `runKoltBuildAndTest`、 `snapshotMainClassFiles`、 `assertMainClassesSurvive`、 `assertIcSegmentsPopulated`。 IC path 計算は `daemonIcProjectIdOf` を呼ぶか visibility が `private/internal` で見えなければ同算式を IT 内に再実装する
   - `scaffoldNoPluginFixture` は `mkdtemp` で温度 dir を作り、 `[kotlin] version`、 `[build] target = "jvm"` のみの `kolt.toml` と `src/main/kotlin/Main.kt` + `src/test/kotlin/MainTest.kt` (kolt.test の最小ケース) を書き出す
   - `runKoltBuildAndTest` は `executeCommand` で `bash -c "cd <fixture> && <kolt.kexe> build && <kolt.kexe> test"` を実行、 `KOLT_DAEMON_JAR` を child env に明示注入、 exit code を返す
