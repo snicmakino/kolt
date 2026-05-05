@@ -25,8 +25,8 @@
   - Observable: `KOLT_DAEMON_JAR` 設定下で parent `kolt test` を回したとき、 当該 `@Test` が緑になり、 fixture の `Payload.class` が `$serializer` を含む状態で生成され、 build → test 通過後も artifact が残る
   - _Requirements: 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.2, 4.3_
 
-- [ ] 3. Validation
-- [ ] 3.1 多モード手動実走と boundary 検査
+- [x] 3. Validation
+- [x] 3.1 多モード手動実走と boundary 検査
   - Parent `kolt test` を 3 モードで実走させ各挙動を確認: (a) `KOLT_DAEMON_JAR` 未設定 → IT 2 件 silent skip + stderr に 1 行 notice、 (b) `KOLT_DAEMON_JAR=<repo>/kolt-jvm-compiler-daemon/build/kolt-jvm-compiler-daemon.jar` (dev thin jar) → IT 2 件 pass、 (c) `KOLT_DAEMON_JAR=/nonexistent/path` → IT 失敗メッセージに env var 名と invalid path が含まれる
   - 当該 IT ファイルの import 文を grep し、 production import が `kolt.infra.executeCommand`、 `kolt.infra.sha256Hex`、 `kolt.build.daemon.daemonIcProjectIdOf` (借用が成立した場合)、 POSIX cinterop に限定されていることを確認
   - 借用 helper (`locateKoltKexe`、 `currentWorkingDir`、 `printOnceSkipNotice` 等) が `JvmTestSysPropIT` 内で `private` だった場合、 本 IT 内に同等関数として再実装が完了しており、 import で参照していないことを確認
