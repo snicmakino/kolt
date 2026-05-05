@@ -135,6 +135,11 @@ data class ResolvedDep(
   val transitive: Boolean = false,
   val origin: Origin = Origin.MAIN,
   val sourcesPath: String? = null,
+  // "group:artifact" of the redirect target when this dep was resolved through
+  // a Gradle Module Metadata `available-at` redirect (ADR 0005). Null when no
+  // redirect occurred. Persisted into the lockfile so the bundle reuse path
+  // can reconstruct cachePath without re-fetching .module.
+  val redirectTarget: String? = null,
 )
 
 data class ResolveResult(val deps: List<ResolvedDep>, val lockChanged: Boolean)
@@ -204,6 +209,7 @@ fun buildLockfileFromResolved(
             sha256 = it.sha256,
             transitive = it.transitive,
             test = it.origin == Origin.TEST,
+            redirectTarget = it.redirectTarget,
           )
       },
     classpathBundles =
@@ -217,6 +223,7 @@ fun buildLockfileFromResolved(
               // Bundle entries are scope-distinct from test deps; the test bit
               // applies only to [test-dependencies] origin within `dependencies`.
               test = false,
+              redirectTarget = it.redirectTarget,
             )
         }
       },

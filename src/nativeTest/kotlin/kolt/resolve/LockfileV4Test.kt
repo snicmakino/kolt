@@ -93,6 +93,47 @@ class LockfileV4Test {
     assertEquals(emptyMap(), parsed.classpathBundles)
   }
 
+  // Locked entries that originally resolved through a Gradle Module Metadata
+  // redirect (ADR 0005) must persist the redirect target so the bundle reuse
+  // path can reconstruct cachePath without re-fetching .module.
+  @Test
+  fun roundtripsV4LockfileWithRedirectTarget() {
+    val original =
+      Lockfile(
+        version = 4,
+        kotlin = "2.3.20",
+        jvmTarget = "25",
+        dependencies =
+          mapOf(
+            "com.squareup.okhttp3:okhttp" to
+              LockEntry(
+                version = "5.0.0",
+                sha256 = "main-sha",
+                transitive = false,
+                test = false,
+                redirectTarget = "com.squareup.okhttp3:okhttp-jvm",
+              )
+          ),
+        classpathBundles =
+          mapOf(
+            "fixture" to
+              mapOf(
+                "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable" to
+                  LockEntry(
+                    version = "2.3.20",
+                    sha256 = "bundle-sha",
+                    transitive = false,
+                    test = false,
+                    redirectTarget = "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin",
+                  )
+              )
+          ),
+      )
+    val json = serializeLockfile(original)
+    val parsed = assertNotNull(parseLockfile(json).get())
+    assertEquals(original, parsed)
+  }
+
   @Test
   fun rejectsV3LockfileViaParseLockfile() {
     val json =

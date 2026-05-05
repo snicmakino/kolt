@@ -23,6 +23,13 @@ data class LockEntry(
   val sha256: String,
   val transitive: Boolean = false,
   val test: Boolean = false,
+  // Set when the entry was originally resolved through a Gradle Module
+  // Metadata redirect (ADR 0005). The cache path is then computed from this
+  // GA rather than the lockfile key, so the trusted-lock reuse path lands
+  // on the same on-disk jar as a fresh resolve. Format: "group:artifact".
+  // Without this, the reuse path computes the cache path from the declared
+  // GA and points consumers at a jar that was never written.
+  val redirectTarget: String? = null,
 )
 
 data class Lockfile(
@@ -83,6 +90,7 @@ private data class LockEntryJson(
   val sha256: String,
   val transitive: Boolean = false,
   @SerialName("test") val test: Boolean = false,
+  @SerialName("redirect_target") val redirectTarget: String? = null,
 )
 
 @Serializable
@@ -119,11 +127,13 @@ fun parseLockfile(jsonString: String): Result<Lockfile, LockfileError> {
       jvmTarget = parsed.jvmTarget,
       dependencies =
         parsed.dependencies.mapValues { (_, v) ->
-          LockEntry(v.version, v.sha256, v.transitive, v.test)
+          LockEntry(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
         },
       classpathBundles =
         parsed.classpathBundles.mapValues { (_, bundleEntries) ->
-          bundleEntries.mapValues { (_, v) -> LockEntry(v.version, v.sha256, v.transitive, v.test) }
+          bundleEntries.mapValues { (_, v) ->
+            LockEntry(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
+          }
         },
     )
   )
@@ -133,7 +143,9 @@ fun serializeLockfile(lockfile: Lockfile): String {
   val sortedDeps =
     lockfile.dependencies.entries
       .sortedBy { it.key }
-      .associate { (k, v) -> k to LockEntryJson(v.version, v.sha256, v.transitive, v.test) }
+      .associate { (k, v) ->
+        k to LockEntryJson(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
+      }
   val sortedBundles =
     lockfile.classpathBundles.entries
       .sortedBy { it.key }
@@ -141,7 +153,9 @@ fun serializeLockfile(lockfile: Lockfile): String {
         bundleName to
           entries.entries
             .sortedBy { it.key }
-            .associate { (k, v) -> k to LockEntryJson(v.version, v.sha256, v.transitive, v.test) }
+            .associate { (k, v) ->
+              k to LockEntryJson(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
+            }
       }
   val json =
     LockfileJson(

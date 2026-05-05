@@ -273,10 +273,15 @@ private fun reuseBundleFromLock(
   // entries. Each entry keeps its locked transitive bit; cache paths are
   // computed from coordinates (no I/O, no SHA verification — the lockfile is
   // trusted while it remains in sync with kolt.toml).
+  // When the entry was originally resolved via a Gradle Module Metadata
+  // redirect (ADR 0005), the on-disk jar lives at the redirect target's
+  // coordinate path, so cachePath is computed from that GA rather than the
+  // declared lockfile key.
   val reconstructed = mutableListOf<ResolvedDep>()
   for ((ga, entry) in locked) {
+    val cachePathGa = entry.redirectTarget ?: ga
     val coord =
-      parseCoordinate(ga, entry.version).getOrElse {
+      parseCoordinate(cachePathGa, entry.version).getOrElse {
         return null
       }
     val cachePath = "$cacheBase/${buildCachePath(coord)}"
@@ -288,6 +293,7 @@ private fun reuseBundleFromLock(
         cachePath = cachePath,
         transitive = entry.transitive,
         origin = Origin.MAIN,
+        redirectTarget = entry.redirectTarget,
       )
     )
   }

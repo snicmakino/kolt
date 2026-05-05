@@ -263,6 +263,7 @@ private fun materialize(
         transitive = !node.direct,
         origin = node.origin,
         sourcesPath = sourcesPath,
+        redirectTarget = redirects[node.groupArtifact],
       )
     )
   }

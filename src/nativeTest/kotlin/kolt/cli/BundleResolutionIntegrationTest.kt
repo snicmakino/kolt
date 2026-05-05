@@ -521,6 +521,71 @@ class BundleResolutionIntegrationTest {
     assertTrue(deps.downloadCount > 0, "fresh resolve should hit downloadFile at least once")
   }
 
+  // When a bundle entry was originally resolved through a Gradle module
+  // metadata redirect (ADR 0005), the lockfile key keeps the declared GA
+  // but the on-disk jar lives at the redirect target's coordinate path.
+  // The reuse path must reconstruct cachePath from the persisted redirect
+  // target — otherwise the fabricated path never lands on disk and the
+  // bundle classpath leaks dangling references to sysprop / runtime
+  // consumers.
+  @Test
+  fun resolveAllBundlesUsesRedirectTargetForCachePathOnReuse() {
+    val config =
+      testConfig().copy(classpaths = mapOf("fixture" to mapOf("com.example:lib" to "1.0.0")))
+
+    val redirectedCachePath = "/cache/com/example/lib-jvm/1.0.0/lib-jvm-1.0.0.jar"
+
+    val existingLock =
+      Lockfile(
+        version = 4,
+        kotlin = config.kotlin.version,
+        jvmTarget = config.build.jvmTarget,
+        dependencies = emptyMap(),
+        classpathBundles =
+          mapOf(
+            "fixture" to
+              mapOf(
+                "com.example:lib" to
+                  LockEntry(
+                    version = "1.0.0",
+                    sha256 = "libSha",
+                    transitive = false,
+                    test = false,
+                    redirectTarget = "com.example:lib-jvm",
+                  )
+              )
+          ),
+      )
+
+    // Cache is warm at the redirect target only. If the reuse path
+    // mistakenly used the declared GA, fileExists would miss and trigger
+    // a download against the wrong URL.
+    val deps =
+      countingDeps(
+        cachedFiles = mutableSetOf(redirectedCachePath),
+        sha256Results = emptyMap(),
+        pomContents = emptyMap(),
+      )
+
+    val result =
+      assertNotNull(
+        resolveAllBundles(
+            config,
+            existingLock = existingLock,
+            cacheBase = "/cache",
+            resolverDeps = deps,
+          )
+          .get()
+      )
+
+    val fixture = assertNotNull(result["fixture"])
+    assertEquals(1, fixture.jars.size)
+    assertEquals(redirectedCachePath, fixture.jars[0].cachePath)
+    assertEquals(redirectedCachePath, fixture.classpath)
+    assertEquals(0, deps.downloadCount, "no downloads when cache is warm at the redirect target")
+    assertEquals(0, deps.readFileCount, "no POM lookups when declaration matches lock")
+  }
+
   // Req 4.1 / 7.1: empty config.classpaths produces an empty bundle map and
   // no resolver activity.
   @Test

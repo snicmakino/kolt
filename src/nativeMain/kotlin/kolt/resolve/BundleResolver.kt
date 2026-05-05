@@ -78,9 +78,9 @@ internal fun resolveBundle(
 // verify shape of `materialize()` in TransitiveResolver but derives the
 // download URL from `dep.cachePath` rather than rebuilding it from the
 // `groupArtifact`: KMP module-metadata redirects (e.g. `kotlinx-coroutines-
-// core` ⇒ `-core-jvm`) are not persisted in the lockfile, so reusing the
-// stored GA to compose the URL would 404 against the redirected jar. The
-// cachePath is the source of truth for where the jar lives — swapping the
+// core` ⇒ `-core-jvm`) make the declared GA diverge from the on-disk jar
+// path. cachePath is reconstructed by reuseBundleFromLock from the locked
+// `redirect_target` and is the single source of truth here — swapping the
 // cacheBase prefix for a repo URL gives a URL that matches the cachePath.
 //
 // Sha-verify asymmetry: only freshly downloaded jars are re-hashed against
