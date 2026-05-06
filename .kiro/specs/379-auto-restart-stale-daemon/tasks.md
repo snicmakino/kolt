@@ -10,7 +10,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.5_
   - _Boundary: kolt.build.CompilerBackend (JVM error sealed)_
 
-- [ ] 1.2 (P) Native 側エラー sealed 階層に WireMismatch 変位を追加
+- [x] 1.2 (P) Native 側エラー sealed 階層に WireMismatch 変位を追加
   - `NativeCompileError.BackendUnavailable` sealed に `WireMismatch(detail: String)` を追加
   - `formatNativeCompileError` で同形の分岐を追加
   - `isNativeFallbackEligible` は変更不要、 網羅性のみ確認

@@ -16,6 +16,11 @@ fun reportNativeFallback(err: NativeCompileError, sink: (String) -> Unit = ::epr
     is NativeCompileError.BackendUnavailable.SignalKilled,
     is NativeCompileError.BackendUnavailable.PopenFailed ->
       sink("warning: native compiler daemon unavailable, falling back to subprocess compile")
+    is NativeCompileError.BackendUnavailable.WireMismatch ->
+      // stub branch overridden by reporter task
+      sink(
+        "warning: native compiler daemon unavailable (${err.detail}), falling back to subprocess compile"
+      )
     is NativeCompileError.BackendUnavailable.Other ->
       sink(
         "warning: native compiler daemon unavailable (${err.detail}), falling back to subprocess compile"
