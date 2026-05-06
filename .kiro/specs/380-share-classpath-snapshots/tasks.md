@@ -51,7 +51,7 @@
   - _Boundary: ShrunkClasspathSnapshotCache_
   - _Depends: 2.1_
 
-- [ ] 3.2 (P) Modify IcReaper to skip cache subdirs at the current-version branch
+- [x] 3.2 (P) Modify IcReaper to skip cache subdirs at the current-version branch
   - Reference `IcStateLayout.CACHE_SUBDIRS_AT_VERSION_LEVEL` from IcReaper to keep the skip set as a single source of truth
   - In the current-version `directoryChildren(versionDir).forEach` loop (IcReaper.kt:71-79), short-circuit `return@forEach` when the child name is in the skip set, before incrementing `scanned`
   - Leave the non-current-version branch (lines 60-67) unchanged — when the kotlin version is stale the entire dir is wiped including cache content, which is the correct behavior

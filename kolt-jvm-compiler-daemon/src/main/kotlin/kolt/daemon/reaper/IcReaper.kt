@@ -69,6 +69,15 @@ object IcReaper {
           runCatching { Files.deleteIfExists(versionDir) }
         } else {
           directoryChildren(versionDir).forEach { projectIdDir ->
+            // Recomputable cache subdirs (per-jar `classpath-snapshots/`,
+            // shrunk `shrunk-snapshots/`) live alongside `<projectIdHash>`
+            // dirs at the version level. They have no breadcrumb / LOCK,
+            // so without this skip the reaper would treat them as stale
+            // projectId dirs and wipe them on every run, defeating the
+            // cross-restart cache. Skip BEFORE counting `scanned` since
+            // they are not stale-projectIdDir candidates.
+            if (projectIdDir.fileName.toString() in IcStateLayout.CACHE_SUBDIRS_AT_VERSION_LEVEL)
+              return@forEach
             scanned++
             if (breadcrumbPointsToExistingPath(projectIdDir)) return@forEach
             when (val outcome = tryDelete(projectIdDir)) {
