@@ -37,7 +37,7 @@
   - _Boundary: kolt.build.nativedaemon.NativeDaemonBackend_
   - _Depends: 1.2_
 
-- [ ] 2.3 (P) StaleDaemonNotice モジュールで compile-pass スコープ 1 回限り通知を実装
+- [x] 2.3 (P) StaleDaemonNotice モジュールで compile-pass スコープ 1 回限り通知を実装
   - 新規 `kolt.build.StaleDaemonNotice` を `object` として作成。 `emit(label, detail, sink)` と `reset()` を public API として公開（`reset` は test だけでなく caller integration からも呼ばれるため public）
   - `emit` は flag が false のとき stderr に `"warning: stale {label} detected ({detail}); recycling — this build runs as subprocess, the next build will spawn a fresh daemon"` を 1 行書き、 flag を立てて true を返す。 すでに true なら何も書かず false を返す
   - `reset()` は flag を false に戻す
