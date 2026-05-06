@@ -164,7 +164,19 @@ class ShrunkClasspathSnapshotCache(
             "${key.hex}.${ProcessHandle.current().pid()}-${java.util.UUID.randomUUID()}.bin.tmp"
           )
         try {
-          Files.copy(producedSnapshot, tmp, StandardCopyOption.REPLACE_EXISTING)
+          // COPY_ATTRIBUTES carries the source mtime through `tmp` and
+          // (via atomic_move) into `target`, so a later storeIfNew call
+          // with an unchanged producedSnapshot sees `existing.mtime ==
+          // producedSnapshot.mtime` and short-circuits via the size+mtime
+          // skip branch above. Without it, target inherits wall-clock
+          // mtime and the skip never fires (the per-jar cache works
+          // because its key already includes mtime).
+          Files.copy(
+            producedSnapshot,
+            tmp,
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.COPY_ATTRIBUTES,
+          )
           Files.move(
             tmp,
             target,
