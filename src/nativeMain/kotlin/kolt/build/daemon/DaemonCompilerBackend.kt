@@ -13,6 +13,7 @@ import kolt.daemon.wire.FrameCodec
 import kolt.daemon.wire.FrameError
 import kolt.daemon.wire.Message
 import kolt.infra.ProcessError
+import kolt.infra.eprintln
 import kolt.infra.net.UnixSocket
 import kolt.infra.net.UnixSocketError
 import kolt.infra.spawnDetached
@@ -45,6 +46,7 @@ internal constructor(
   private val clockMs: () -> Long = ::monotonicMs,
   private val sleeper: (Int) -> Unit = defaultSleeper,
   private val onSpawn: () -> Unit = {},
+  private val warnSink: (String) -> Unit = ::eprintln,
 ) : CompilerBackend {
 
   constructor(
@@ -83,8 +85,20 @@ internal constructor(
       if (sendErr != null) return Err(mapFrameErrorToSendError(sendErr))
       val reply = it.receiveReply()
       val replyErr = reply.getError()
-      if (replyErr != null) return Err(mapFrameErrorToReceiveError(replyErr))
-      return mapReplyToOutcome(reply.get()!!)
+      val mapped: Result<CompileOutcome, CompileError> =
+        if (replyErr != null) Err(mapFrameErrorToReceiveError(replyErr))
+        else mapReplyToOutcome(reply.get()!!)
+
+      // Wire-mismatch auto-recycle (ADR 0016 §5): nudge the stale daemon to release
+      // its socket so the next invocation lands on a fresh one. Best-effort — a send
+      // failure is logged but does not change the returned error.
+      val errored = mapped.getError()
+      if (errored is CompileError.BackendUnavailable.WireMismatch) {
+        it.sendRequest(Message.Shutdown).getError()?.let { shutdownErr ->
+          warnSink("warning: failed to send Shutdown to stale daemon: $shutdownErr")
+        }
+      }
+      return mapped
     }
   }
 
@@ -225,15 +239,15 @@ internal fun mapFrameErrorToSendError(err: FrameError): CompileError =
 internal fun mapFrameErrorToReceiveError(err: FrameError): CompileError =
   when (err) {
     is FrameError.Eof ->
-      CompileError.BackendUnavailable.Other("daemon closed connection before replying")
+      CompileError.BackendUnavailable.WireMismatch("daemon closed connection before replying")
     is FrameError.Truncated ->
-      CompileError.BackendUnavailable.Other(
+      CompileError.BackendUnavailable.WireMismatch(
         "truncated reply: wanted=${err.wantedBytes} got=${err.gotBytes}"
       )
     is FrameError.Malformed ->
-      CompileError.BackendUnavailable.Other("malformed reply: ${err.reason}")
+      CompileError.BackendUnavailable.WireMismatch("malformed reply: ${err.reason}")
     is FrameError.Transport ->
-      CompileError.BackendUnavailable.Other("receive failed: ${describe(err.cause)}")
+      CompileError.BackendUnavailable.WireMismatch("receive failed: ${describe(err.cause)}")
   }
 
 internal fun mapReplyToOutcome(reply: Message): Result<CompileOutcome, CompileError> =
@@ -258,7 +272,9 @@ internal fun mapReplyToOutcome(reply: Message): Result<CompileOutcome, CompileEr
     is Message.Pong,
     is Message.Shutdown ->
       Err(
-        CompileError.BackendUnavailable.Other("unexpected reply type: ${reply::class.simpleName}")
+        CompileError.BackendUnavailable.WireMismatch(
+          "unexpected reply type: ${reply::class.simpleName}"
+        )
       )
   }
 

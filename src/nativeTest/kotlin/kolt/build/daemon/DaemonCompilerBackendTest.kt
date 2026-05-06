@@ -24,13 +24,21 @@ private class FakeConnection(
   val reply: Result<Message, FrameError> =
     Ok(Message.CompileResult(exitCode = 0, diagnostics = emptyList(), stdout = "", stderr = "")),
   val sendResult: Result<Unit, FrameError> = Ok(Unit),
+  // Per-call override: index 0 = first sendRequest, index 1 = second, etc.
+  // null entries fall through to sendResult.
+  private val sendResults: List<Result<Unit, FrameError>?> = emptyList(),
 ) : DaemonConnection {
-  var lastSent: Message? = null
+  val sent: MutableList<Message> = mutableListOf()
+  val lastSent: Message?
+    get() = sent.lastOrNull()
+
   var closed = false
 
   override fun sendRequest(message: Message): Result<Unit, FrameError> {
-    lastSent = message
-    return sendResult
+    val index = sent.size
+    sent += message
+    val override = sendResults.getOrNull(index)
+    return override ?: sendResult
   }
 
   override fun receiveReply(): Result<Message, FrameError> = reply
@@ -60,6 +68,7 @@ private fun newBackend(
   spawner: DaemonSpawner = { _, _ -> Ok(Unit) },
   clock: FakeClock = FakeClock(),
   pluginJars: Map<String, List<String>> = emptyMap(),
+  warnSink: (String) -> Unit = {},
 ): DaemonCompilerBackend =
   DaemonCompilerBackend(
     javaBin = "/opt/jdk/bin/java",
@@ -73,6 +82,7 @@ private fun newBackend(
     spawner = spawner,
     clockMs = clock.clock,
     sleeper = clock.sleeper,
+    warnSink = warnSink,
   )
 
 class DaemonCompilerBackendHappyPathTest {
@@ -481,16 +491,56 @@ class DaemonCompilerBackendConnectAndSpawnTest {
 class DaemonCompilerBackendReplyMappingTest {
 
   @Test
-  fun unexpectedReplyTypeIsMappedToBackendUnavailable() {
-    val fake = FakeConnection(reply = Ok(Message.Pong))
+  fun sendSerializationFailureIsInternalMisuse() {
+    val fake = FakeConnection(sendResult = Err(FrameError.Malformed("not serialisable")))
     val backend = newBackend(connector = { Ok(fake) })
     val err = assertNotNull(backend.compile(sampleRequest()).getError())
-    val unavailable = assertIs<CompileError.BackendUnavailable.Other>(err)
-    assertTrue(unavailable.detail.contains("Pong"))
+    val misuse = assertIs<CompileError.InternalMisuse>(err)
+    assertTrue(misuse.detail.contains("serialise"))
+  }
+}
+
+class DaemonCompilerBackendWireMismatchTest {
+
+  @Test
+  fun eofOnReadMapsToWireMismatchAndSendsShutdown() {
+    val fake = FakeConnection(reply = Err(FrameError.Eof))
+    val backend = newBackend(connector = { Ok(fake) })
+    val err = assertNotNull(backend.compile(sampleRequest()).getError())
+    val mismatch = assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertTrue(
+      mismatch.detail.contains("daemon closed connection before replying"),
+      "detail mismatch: ${mismatch.detail}",
+    )
+    assertEquals(2, fake.sent.size, "expected Compile then Shutdown, got ${fake.sent}")
+    assertIs<Message.Compile>(fake.sent[0])
+    assertEquals(Message.Shutdown, fake.sent[1])
   }
 
   @Test
-  fun transportErrorOnReadMapsToBackendUnavailable() {
+  fun truncatedOnReadMapsToWireMismatchAndSendsShutdown() {
+    val fake = FakeConnection(reply = Err(FrameError.Truncated(wantedBytes = 16, gotBytes = 7)))
+    val backend = newBackend(connector = { Ok(fake) })
+    val err = assertNotNull(backend.compile(sampleRequest()).getError())
+    val mismatch = assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertTrue(mismatch.detail.contains("truncated reply"), "detail mismatch: ${mismatch.detail}")
+    assertEquals(2, fake.sent.size)
+    assertEquals(Message.Shutdown, fake.sent[1])
+  }
+
+  @Test
+  fun malformedOnReadMapsToWireMismatchAndSendsShutdown() {
+    val fake = FakeConnection(reply = Err(FrameError.Malformed("unknown discriminator")))
+    val backend = newBackend(connector = { Ok(fake) })
+    val err = assertNotNull(backend.compile(sampleRequest()).getError())
+    val mismatch = assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertTrue(mismatch.detail.contains("malformed reply"), "detail mismatch: ${mismatch.detail}")
+    assertEquals(2, fake.sent.size)
+    assertEquals(Message.Shutdown, fake.sent[1])
+  }
+
+  @Test
+  fun transportErrorOnReadMapsToWireMismatchAndSendsShutdown() {
     val fake =
       FakeConnection(
         reply =
@@ -498,25 +548,74 @@ class DaemonCompilerBackendReplyMappingTest {
       )
     val backend = newBackend(connector = { Ok(fake) })
     val err = assertNotNull(backend.compile(sampleRequest()).getError())
-    val unavailable = assertIs<CompileError.BackendUnavailable.Other>(err)
-    assertTrue(unavailable.detail.contains("Connection reset"))
+    val mismatch = assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertTrue(mismatch.detail.contains("Connection reset"), "detail mismatch: ${mismatch.detail}")
+    assertEquals(2, fake.sent.size)
+    assertEquals(Message.Shutdown, fake.sent[1])
   }
 
   @Test
-  fun eofOnReadMapsToBackendUnavailable() {
-    val fake = FakeConnection(reply = Err(FrameError.Eof))
+  fun unexpectedReplyVariantMapsToWireMismatchAndSendsShutdown() {
+    val fake = FakeConnection(reply = Ok(Message.Pong))
     val backend = newBackend(connector = { Ok(fake) })
     val err = assertNotNull(backend.compile(sampleRequest()).getError())
-    assertIs<CompileError.BackendUnavailable.Other>(err)
+    val mismatch = assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertTrue(
+      mismatch.detail.contains("unexpected reply type"),
+      "detail mismatch: ${mismatch.detail}",
+    )
+    assertTrue(mismatch.detail.contains("Pong"), "detail mismatch: ${mismatch.detail}")
+    assertEquals(2, fake.sent.size, "expected Compile then Shutdown, got ${fake.sent}")
+    assertEquals(Message.Shutdown, fake.sent[1])
   }
 
   @Test
-  fun sendSerializationFailureIsInternalMisuse() {
-    val fake = FakeConnection(sendResult = Err(FrameError.Malformed("not serialisable")))
-    val backend = newBackend(connector = { Ok(fake) })
+  fun shutdownSendFailureLogsWarningAndStillReturnsWireMismatch() {
+    val warnings = mutableListOf<String>()
+    val fake =
+      FakeConnection(
+        reply = Err(FrameError.Eof),
+        // First sendRequest (Compile) succeeds; second (Shutdown) fails.
+        sendResults =
+          listOf(Ok(Unit), Err(FrameError.Transport(UnixSocketError.SendFailed(32, "Broken pipe")))),
+      )
+    val backend = newBackend(connector = { Ok(fake) }, warnSink = { warnings += it })
     val err = assertNotNull(backend.compile(sampleRequest()).getError())
-    val misuse = assertIs<CompileError.InternalMisuse>(err)
-    assertTrue(misuse.detail.contains("serialise"))
+    assertIs<CompileError.BackendUnavailable.WireMismatch>(err)
+    assertEquals(2, fake.sent.size, "Shutdown send must still be attempted")
+    assertEquals(Message.Shutdown, fake.sent[1])
+    assertTrue(
+      warnings.any { it.contains("failed to send Shutdown") },
+      "expected warn-line about failed Shutdown send, got: $warnings",
+    )
+  }
+
+  @Test
+  fun happyPathDoesNotSendShutdown() {
+    val fake = FakeConnection()
+    val backend = newBackend(connector = { Ok(fake) })
+    backend.compile(sampleRequest())
+    assertEquals(1, fake.sent.size, "happy path must send only Compile, got ${fake.sent}")
+    assertIs<Message.Compile>(fake.sent[0])
+  }
+
+  @Test
+  fun compilationFailedDoesNotSendShutdown() {
+    val fake =
+      FakeConnection(
+        reply =
+          Ok(
+            Message.CompileResult(
+              exitCode = 1,
+              diagnostics = emptyList(),
+              stdout = "",
+              stderr = "compile error",
+            )
+          )
+      )
+    val backend = newBackend(connector = { Ok(fake) })
+    backend.compile(sampleRequest())
+    assertEquals(1, fake.sent.size, "compilation failure must not trigger Shutdown")
   }
 }
 

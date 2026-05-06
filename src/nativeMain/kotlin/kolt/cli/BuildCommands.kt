@@ -368,6 +368,7 @@ private fun doBuildInner(
   profile: Profile,
   quietUpToDate: Boolean = false,
 ): Result<BuildResult, Int> {
+  StaleDaemonNotice.reset()
   val startMark = TimeSource.Monotonic.markNow()
   val config =
     loadProjectConfig().getOrElse {
@@ -1001,6 +1002,7 @@ private fun doTestInner(
   cliSysProps: List<Pair<String, String>>,
   lock: LockHandle,
 ): Result<Unit, Int> {
+  StaleDaemonNotice.reset()
   val config =
     loadProjectConfig().getOrElse {
       return Err(it)

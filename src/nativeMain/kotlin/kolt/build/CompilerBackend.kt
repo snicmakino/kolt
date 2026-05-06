@@ -43,6 +43,11 @@ sealed interface CompileError {
 
     data object PopenFailed : BackendUnavailable
 
+    // Receive-side wire incompatibility (frame error or unexpected reply variant).
+    // Carries fallback eligibility from BackendUnavailable; the auto-recycle path
+    // owns Shutdown send and stale-daemon notification (ADR 0016 §5).
+    data class WireMismatch(val detail: String) : BackendUnavailable
+
     data class Other(val detail: String) : BackendUnavailable
   }
 
@@ -93,6 +98,8 @@ fun formatCompileError(error: CompileError, context: String): String =
     is CompileError.BackendUnavailable.PopenFailed -> "error: failed to start $context process"
     is CompileError.BackendUnavailable.WaitFailed -> "error: failed waiting for $context process"
     is CompileError.BackendUnavailable.SignalKilled -> "error: $context process was killed"
+    is CompileError.BackendUnavailable.WireMismatch ->
+      "error: $context wire mismatch: ${error.detail}"
     is CompileError.BackendUnavailable.Other ->
       "error: $context backend unavailable: ${error.detail}"
     is CompileError.NoCommand -> "error: no command to execute"

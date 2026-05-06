@@ -14,6 +14,7 @@ date: 2026-04-14
 - The daemon is the default compile backend from day one (`FallbackCompilerBackend(DaemonCompilerBackend, SubprocessCompilerBackend)`). `--no-daemon` bypasses it per invocation. Only `BackendUnavailable` / `InternalMisuse` trigger fallback; `CompilationFailed` does not. (§5)
 - Cold-spawn connect budget is 10s (was 3s through 2026-04-30). Budget covers cold spawn only — warm reconnects short-circuit before the retry loop and are unaffected. (§5)
 - `kolt-compiler-daemon/` is an independent Gradle build included via `includeBuild`, not a subproject, to allow separate distribution per ADR 0018. (§6)
+- A reply the client cannot decode (`FrameError.*`, payload deserialize failure, or unexpected reply variant) raises `BackendUnavailable.WireMismatch`; the client sends `Message.Shutdown` best-effort, prints one stderr line via `StaleDaemonNotice`, falls back to subprocess for the in-flight compile, and lets the next invocation spawn a fresh daemon (introduced in #379). (§7)
 
 ## Context and Problem Statement
 
@@ -95,9 +96,15 @@ The opt-in plan (ship as `kolt build --daemon`, flip default after spikes #88–
 
 Cold-spawn connect budget: `DaemonCompilerBackend.CONNECT_TOTAL_BUDGET_MS = 10_000`. The 3s default shipped with #14 false-positively fell back on cold-cache CI (#310): the §2 cold-start figure (~2.6s) plus the WSL2/CI 9p stat-storm outlier (~3.3s, see Benchmark notes) routinely cleared 3s before the daemon listened. The retry loop runs only after a spawn — warm reconnects succeed on the first `connector()` call and never enter `retryConnect()` — so the headroom is invisible to dev-loop builds. Cost: when the daemon is genuinely broken, fallback now takes up to ~10s per build; this is paid once because subsequent builds still re-spawn rather than wait, but the failure mode is louder than before.
 
+Wire-incompatibility from a stale daemon left over across a kolt upgrade is treated as a distinct fallback case — see §7.
+
 ### §6 Independent Gradle build via includeBuild
 
 `kolt-compiler-daemon/` is an independent Gradle build included from the root via `includeBuild`, not `include`. `./gradlew build` rebuilds both via an explicit `dependsOn`; `DaemonJarResolver.kt` never sees a stale jar. This boundary enables the distribution plan in ADR 0018 and keeps the native/JVM build split clean.
+
+### §7 Wire-mismatch auto-recycle (introduced in #379)
+
+A daemon reply the client cannot consume — frame decode failure (`FrameError.{Eof,Truncated,Malformed,Transport}`), payload deserialize failure, or a reply variant that does not match the request — is classified as `CompileError.BackendUnavailable.WireMismatch(detail)`, a sibling of `BackendUnavailable.Other` under the same fallback-eligible umbrella defined in §5. On classification, the client sends `Message.Shutdown` on the still-open connection before closing it; if that send itself fails, `eprintln` writes one warn line and the build continues. `StaleDaemonNotice` writes one stderr line per compile pass identifying the stale daemon, suppressing duplicates within the same `kolt build` / `kolt test` invocation. The in-flight compile completes through the existing `FallbackCompilerBackend` subprocess path; the next invocation reaches `connectOrSpawn` normally and spawns a fresh daemon once the recycled one has released its socket. No daemon-side change is required.
 
 ## Benchmark results — Scaling (#96, 2026-04-14)
 

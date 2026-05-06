@@ -13,6 +13,7 @@ date: 2026-04-19
 - Wire protocol reuses ADR 0016's frame format (u32 length + JSON) with a new `NativeCompile { args: List<String> }` / `NativeCompileResult { exitCode: Int, stderr: String }` message pair. Args are passed as a flat list; no structured compilation API exists for native. (§4)
 - Both build stages (library and link) go through the daemon; the client calls it twice per build as it currently calls `konanc` twice. (§5)
 - IC flags (`-Xenable-incremental-compilation`, `-Xic-cache-dir`) pass through as konanc args; the daemon does not manage IC state. (§6)
+- A reply the client cannot decode raises `NativeCompileError.BackendUnavailable.WireMismatch`; the client sends `Message.Shutdown` best-effort, prints one stderr line via `StaleDaemonNotice`, falls back to the `konanc` subprocess for the in-flight stage, and lets the next invocation spawn a fresh daemon (introduced in #379). (§9)
 
 ## Context and Problem Statement
 
@@ -97,9 +98,15 @@ IC flags (`-Xenable-incremental-compilation`, `-Xic-cache-dir`) are part of the 
 
 `FallbackCompilerBackend(NativeDaemonBackend, NativeSubprocessBackend)` — same pattern as ADR 0016 §5. On any daemon failure (connect refused, spawn failure, unexpected disconnect), the client falls back to the existing `konanc` subprocess path. `CompileError.CompilationFailed` does not trigger fallback.
 
+Wire-incompatibility from a stale daemon left over across a kolt upgrade is treated as a distinct fallback case — see §9.
+
 ### §8 Daemon jar
 
 `kolt-native-daemon/` is a new module: an independent Gradle build included via `includeBuild`, same pattern as `kolt-compiler-daemon/`.
+
+### §9 Wire-mismatch auto-recycle (introduced in #379)
+
+A daemon reply the client cannot consume — frame decode failure (`FrameError.{Eof,Truncated,Malformed,Transport}`), payload deserialize failure, or a reply variant that does not match the request — is classified as `NativeCompileError.BackendUnavailable.WireMismatch(detail)`, a sibling under the same fallback-eligible umbrella as §7. On classification, the client sends `kolt.nativedaemon.wire.Message.Shutdown` on the still-open connection before closing it; if that send itself fails, `eprintln` writes one warn line and the build continues. `StaleDaemonNotice` writes one stderr line per compile pass identifying the stale native daemon, suppressing duplicates within the same `kolt build` / `kolt test` invocation. The in-flight stage (library or link) completes through `FallbackNativeCompilerBackend` against the existing `konanc` subprocess path; the next invocation reaches `connectOrSpawn` normally and spawns a fresh native daemon once the recycled one has released its socket. No daemon-side change is required, and the once-per-pass notification is shared with the JVM daemon path so a mixed JVM+native build emits at most one stale-daemon line per pass.
 
 ## Consequences
 

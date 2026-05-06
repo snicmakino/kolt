@@ -1,10 +1,23 @@
 package kolt.build
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class FallbackReporterTest {
+
+  @BeforeTest
+  fun setUp() {
+    StaleDaemonNotice.reset()
+  }
+
+  @AfterTest
+  fun tearDown() {
+    StaleDaemonNotice.reset()
+  }
 
   private fun capture(err: CompileError): List<String> {
     val out = mutableListOf<String>()
@@ -18,6 +31,31 @@ class FallbackReporterTest {
     assertEquals(1, messages.size)
     assertTrue(messages.single().startsWith("warning: "))
     assertTrue(messages.single().contains("connect refused"))
+  }
+
+  @Test
+  fun wireMismatchRoutesThroughStaleDaemonNotice() {
+    val messages = capture(CompileError.BackendUnavailable.WireMismatch("malformed reply"))
+    assertEquals(1, messages.size, "WireMismatch should produce exactly one stderr line")
+    val line = messages.single()
+    assertTrue(line.contains("stale"), "expected stale-daemon wording, got: $line")
+    assertTrue(line.contains("compiler daemon"), "expected label 'compiler daemon', got: $line")
+    assertTrue(line.contains("malformed reply"), "expected detail 'malformed reply', got: $line")
+    assertFalse(
+      line.contains("warning: compiler daemon unavailable"),
+      "WireMismatch should not fall through to the generic warning, got: $line",
+    )
+  }
+
+  @Test
+  fun backendUnavailableOtherStillEmitsLegacyGenericWarning() {
+    val messages = capture(CompileError.BackendUnavailable.Other("foo"))
+    assertEquals(1, messages.size)
+    val line = messages.single()
+    assertEquals(
+      "warning: compiler daemon unavailable (foo), falling back to subprocess compile",
+      line,
+    )
   }
 
   @Test
