@@ -39,7 +39,7 @@
 
 - [ ] 3. ShrunkClasspathSnapshotCache and IcReaper skip-set integration
 
-- [ ] 3.1 (P) Implement ShrunkClasspathSnapshotCache with classpath hashing, place-on-lookup, and atomic store
+- [x] 3.1 (P) Implement ShrunkClasspathSnapshotCache with classpath hashing, place-on-lookup, and atomic store
   - Implement `classpathKey` derivation: per-entry SHA-256 of `path|mtime|size`, accumulator-hashed and truncated to 16-byte hex (matching the existing per-jar cache key idiom)
   - Implement `lookupAndPlace(classpath, destination)`: exact-match first, longest-prefix-match second (bounded depth, e.g. 8 entries), placement via `Files.copy` (NOT hardlink — see design §Decision notes), returning `Empty` / `Placed(key)` / `PlacedPrefix(key, prefixLen)` outcomes inside `Result<PlacementOutcome, CacheError>`
   - Implement `storeIfNew(classpath, producedSnapshot)`: write to `<key>.bin.tmp`, atomic rename to `<key>.bin`, skip when target exists with identical size+mtime
