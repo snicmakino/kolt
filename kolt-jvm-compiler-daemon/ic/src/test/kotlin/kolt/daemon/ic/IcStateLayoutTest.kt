@@ -101,4 +101,75 @@ class IcStateLayoutTest {
     assertNotEquals(main, test)
     assertEquals(main.parent, test.parent, "same projectId directory hosts both scopes")
   }
+
+  @Test
+  fun `SHRUNK_SNAPSHOTS_SUBDIR has the stable on-disk name`() {
+    assertEquals("shrunk-snapshots", IcStateLayout.SHRUNK_SNAPSHOTS_SUBDIR)
+  }
+
+  @Test
+  fun `CLASSPATH_SNAPSHOTS_SUBDIR has the stable on-disk name`() {
+    assertEquals("classpath-snapshots", IcStateLayout.CLASSPATH_SNAPSHOTS_SUBDIR)
+  }
+
+  @Test
+  fun `CACHE_SUBDIRS_AT_VERSION_LEVEL contains both per-jar and shrunk subdirs`() {
+    assertEquals(
+      setOf(IcStateLayout.CLASSPATH_SNAPSHOTS_SUBDIR, IcStateLayout.SHRUNK_SNAPSHOTS_SUBDIR),
+      IcStateLayout.CACHE_SUBDIRS_AT_VERSION_LEVEL,
+    )
+  }
+
+  @Test
+  fun `shrunkSnapshotsDirFor composes icRoot kotlinVersion and subdir`() {
+    val icRoot = Path.of("/home/alice/.kolt/daemon/ic")
+
+    val dir = IcStateLayout.shrunkSnapshotsDirFor(icRoot, "2.3.20")
+
+    assertEquals(icRoot.resolve("2.3.20").resolve("shrunk-snapshots"), dir)
+  }
+
+  @Test
+  fun `shrunkSnapshotsDirFor separates by kotlin version`() {
+    val icRoot = Path.of("/ic")
+
+    val v1 = IcStateLayout.shrunkSnapshotsDirFor(icRoot, "2.3.20")
+    val v2 = IcStateLayout.shrunkSnapshotsDirFor(icRoot, "2.4.0")
+
+    assertNotEquals(v1, v2)
+    assertEquals(icRoot.resolve("2.3.20"), v1.parent)
+    assertEquals(icRoot.resolve("2.4.0"), v2.parent)
+  }
+
+  @Test
+  fun `shrunkSnapshotsDirFor sits next to classpathSnapshotsDirFor at the version level`() {
+    val icRoot = Path.of("/ic")
+
+    val perJar = IcStateLayout.classpathSnapshotsDirFor(icRoot, "2.3.20")
+    val shrunk = IcStateLayout.shrunkSnapshotsDirFor(icRoot, "2.3.20")
+
+    assertEquals(perJar.parent, shrunk.parent, "both cache subdirs live under <v>/")
+    assertNotEquals(perJar, shrunk)
+  }
+
+  @Test
+  fun `shrunkSnapshotPathFor composes the dir and the bin filename`() {
+    val icRoot = Path.of("/ic")
+    val key = "0123456789abcdef0123456789abcdef"
+
+    val path = IcStateLayout.shrunkSnapshotPathFor(icRoot, "2.3.20", key)
+
+    assertEquals(icRoot.resolve("2.3.20").resolve("shrunk-snapshots").resolve("$key.bin"), path)
+  }
+
+  @Test
+  fun `shrunkSnapshotPathFor distinguishes different classpath keys`() {
+    val icRoot = Path.of("/ic")
+
+    val a = IcStateLayout.shrunkSnapshotPathFor(icRoot, "2.3.20", "aaaa")
+    val b = IcStateLayout.shrunkSnapshotPathFor(icRoot, "2.3.20", "bbbb")
+
+    assertNotEquals(a, b)
+    assertEquals(a.parent, b.parent, "same shrunk-snapshots dir hosts both keys")
+  }
 }

@@ -1,0 +1,8 @@
+# Q1 portability
+Wed May  6 19:56:41 JST 2026
+main shrunk: size=1085820 sha256=1e2956b1d7ea96e274fa28d79923a6aa8bfa1a21663b41af8f0d70e5bb3e1e55
+pre-placed at test/bta: sha256=1e2956b1d7ea96e274fa28d79923a6aa8bfa1a21663b41af8f0d70e5bb3e1e55
+test compile after pre-place: SUCCESS wall_ms=86566
+test shrunk after compile: size=1074741 sha256=1bd9b9619fa673060925c4cec2f36f6223d8476b5c8c4d0ea4e8afac64fee065
+build/**/*.class count: 139
+VERDICT_Q1: PORTABLE_GREEN (BTA accepted pre-placed file, .class produced)

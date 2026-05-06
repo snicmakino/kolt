@@ -72,6 +72,14 @@ private constructor(
   // version-stamped directory so kotlin-stdlib and common deps are
   // snapshotted once per daemon lifetime.
   private val classpathSnapshotCache: ClasspathSnapshotCache,
+  // Global content-keyed cache for BTA's `shrunk-classpath-snapshot.bin`,
+  // shared across projectIds and scopes. Pre-compile `lookupAndPlace`
+  // may seed the per-scope shrunk file from an exact or longest-prefix
+  // cache hit; post-compile `storeIfNew` returns the freshly produced
+  // file to the cache. Cache failures are logged by the cache itself
+  // and never affect the compile Result — the cache is a best-effort
+  // optimisation on top of BTA's existing from-scratch shrink path.
+  private val shrunkSnapshotCache: ShrunkClasspathSnapshotCache,
 ) : IncrementalCompiler {
 
   // Advisory `flock` held on `<workingDir>/LOCK` for the daemon
@@ -195,6 +203,14 @@ private constructor(
     val dependenciesSnapshotFiles = classpathSnapshotCache.getOrComputeSnapshots(request.classpath)
 
     val shrunkClasspathSnapshot = btaWorkingDir.resolve(SHRUNK_CLASSPATH_SNAPSHOT)
+
+    // Best-effort seed: place an exact-match or longest-prefix cache
+    // file at the per-scope shrunk path before BTA runs. BTA always
+    // executes — it will consume the pre-placed file if present or
+    // shrink from scratch if not. The placement outcome and any I/O
+    // failure are logged by the cache itself; nothing branches here.
+    shrunkSnapshotCache.lookupAndPlace(request.classpath, shrunkClasspathSnapshot)
+
     val icConfig =
       builder
         .snapshotBasedIcConfigurationBuilder(
@@ -273,6 +289,12 @@ private constructor(
         if (wasEmptyBeforeCompile) {
           metrics.record(METRIC_FALLBACK_TO_FULL)
         }
+        // Return the freshly produced shrunk file to the global cache
+        // so the next compile against the same classpath can hit it.
+        // Only on the success branch — a failed compile may have left
+        // a torn shrunk file behind. Cache errors are logged and never
+        // propagate to the compile Result.
+        shrunkSnapshotCache.storeIfNew(request.classpath, shrunkClasspathSnapshot)
         Ok(IcResponse(wallMillis = wall, compiledFileCount = null))
       }
       // User source does not type-check. The captured logger
@@ -428,6 +450,12 @@ private constructor(
       // ClasspathEntrySnapshot files. When null, a temp directory is used
       // (test convenience — production always passes the real path).
       classpathSnapshotsDir: Path? = null,
+      // Shared content-keyed cache for BTA's shrunk-classpath snapshot.
+      // When null, a tempDir-backed instance is constructed so test
+      // callers that do not care about cache observability stay terse;
+      // production passes a `~/.kolt/daemon/ic/<v>/shrunk-snapshots/`
+      // instance so the cache survives across daemon lifetimes.
+      shrunkSnapshotCache: ShrunkClasspathSnapshotCache? = null,
     ): Result<BtaIncrementalCompiler, IcError.InternalError> =
       try {
         require(btaImplJars.isNotEmpty()) {
@@ -437,12 +465,19 @@ private constructor(
         val implLoader = URLClassLoader(urls, SharedApiClassesClassLoader())
         val toolchain = KotlinToolchains.loadImplementation(implLoader)
         val snapshotsDir = classpathSnapshotsDir ?: Files.createTempDirectory("kolt-cp-snapshots-")
+        val effectiveShrunkCache =
+          shrunkSnapshotCache
+            ?: ShrunkClasspathSnapshotCache(
+              cacheDir = Files.createTempDirectory("kolt-shrunk-snapshots-"),
+              metrics = metrics,
+            )
         Ok(
           BtaIncrementalCompiler(
             toolchain = toolchain,
             pluginJarResolver = pluginJarResolver,
             metrics = metrics,
             classpathSnapshotCache = ClasspathSnapshotCache(toolchain, snapshotsDir, metrics),
+            shrunkSnapshotCache = effectiveShrunkCache,
           )
         )
       } catch (vme: VirtualMachineError) {

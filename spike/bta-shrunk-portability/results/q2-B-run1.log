@@ -1,0 +1,217 @@
+resolving dependencies...
+compiling tests...
+running tests...
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:/home/makino/.kolt/cache/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.3.20/kotlin-compiler-embeddable-2.3.20.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+=== ClasspathEntrySnapshot computation cost ===
+classpath entries: 2
+  entry: kotlin-stdlib-2.3.20.jar (1762 KB)
+    warmup:  629ms (snapshot file: 2153 KB)
+    steady:  248ms
+  entry: annotations-13.0.jar (17 KB)
+    warmup:  4ms (snapshot file: 14 KB)
+    steady:  2ms
+  third-run total: 252ms (249, 3ms each)
+=== end ===
+kolt-jvm-compiler-daemon: self-heal fired for project working dir /tmp/kolt-ic-selfheal-9968190901098031609/ic-state: cache corrupt
+kolt-jvm-compiler-daemon: self-heal fired for project working dir /tmp/kolt-ic-selfheal-11355127756046866652/ic-state: attempt-1
+kolt-jvm-compiler-daemon: self-heal fired for project working dir /tmp/kolt-ic-selfheal-18142623365022106546/ic-state: corrupt cache
+kolt-jvm-compiler-daemon: self-heal fired for project working dir /tmp/kolt-ic-selfheal-8381593435744914756/ic-state: boom
+kolt-jvm-compiler-daemon: self-heal fired for project working dir /tmp/bta-corrupt-14765669678383130966/ic/main: /tmp/bta-corrupt-14765669678383130966/ic/main/bta/caches-jvm/lookups/counters.tab exists, but it is empty. Counters file is corrupted
+[36m╷[0m
+[36m├─[0m [36mJUnit Platform Suite[0m [32m✔[0m
+[36m├─[0m [36mJUnit Jupiter[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalRecompileSetTest[0m [32m✔[0m
+[36m│  │  └─[0m [34mwarm compile after leaf body literal change recompiles at most 2 class files()[0m [32m✔[0m
+[36m│  ├─[0m [36mAdapterBoundaryInvariantTest[0m [32m✔[0m
+[36m│  │  └─[0m [34mno daemon core file imports kotlin buildtools types()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaInputsCacheCrossScopeTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mper-scope workingDir keeps main outputDir intact after a test compile()[0m [32m✔[0m
+[36m│  │  └─[0m [34mshared workingDir reproduces the inputsCache cross-scope wipe()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalCompilerColdPathTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcold compile of a single-file fixture produces a class file()[0m [32m✔[0m
+[36m│  │  ├─[0m [34muser type error is reported as CompilationFailed not InternalError()[0m [32m✔[0m
+[36m│  │  └─[0m [34mkotlin_plugins section in kolt_toml reaches the compile path via the resolver()[0m [32m✔[0m
+[36m│  ├─[0m [36mMainCliArgsTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34munknownFlagRejected()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpluginJarsOptionalDefaultsToEmptyMap()[0m [32m✔[0m
+[36m│  │  ├─[0m [34micRootDefaultsToUserHomeKoltDaemonIc()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcompilerJarsFlagIsRequiredEvenThoughDaemonDoesNotLoadItDirectly()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpluginJarsParsesAliasToClasspath()[0m [32m✔[0m
+[36m│  │  ├─[0m [34micRootFlagOverridesDefault()[0m [32m✔[0m
+[36m│  │  ├─[0m [34memptyBtaImplJarsValueRejected()[0m [32m✔[0m
+[36m│  │  ├─[0m [34memptyCompilerJarsValueRejected()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparseArgsAcceptsAllThreeRequiredFlags()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mbtaImplJarsFlagIsRequired()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpluginJarsEmptyAliasRejected()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpluginJarsParsesMultipleAliases()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpluginJarsMalformedEntryRejected()[0m [32m✔[0m
+[36m│  │  └─[0m [34mpluginJarsEmptyClasspathRejected()[0m [32m✔[0m
+[36m│  ├─[0m [36mDiagnosticParserTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparseMessagesSplitsParsedAndUnparsedLines()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparsesInfoLine()[0m [32m✔[0m
+[36m│  │  ├─[0m [34msubprocessShapeWinsOverBtaInlineShapeOnLinesThatMatchBoth()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mbtaInlineShapeWithoutFileUriPrefixStillParses()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparsesWarningLine()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mreturnsNullForNonDiagnosticLine()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mnonAbsolutePathFallsThroughInsteadOfFalsePositiveOnBtaInline()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparsesLineWithExtraSpacesAroundSeverity()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparsesErrorLineWithAbsolutePath()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mstrongWarningCollapsesToWarning()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mtrailingStackFrameLinesStayUnparsed()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mparsesBtaInlineShapeWithFileUriAndNoSeverityWord()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mtrailingNewlineIsStripped()[0m [32m✔[0m
+[36m│  │  └─[0m [34mreturnsNullForMissingSeverity()[0m [32m✔[0m
+[36m│  ├─[0m [36mLanguageVersionTranslatorTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcompiler unset yields no args()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcompiler equal to version yields no args()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mmissing kolt_toml yields no args()[0m [32m✔[0m
+[36m│  │  └─[0m [34mcompiler higher than version emits language and api flags pinned to version()[0m [32m✔[0m
+[36m│  ├─[0m [36mFrameCodecTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mtruncated length prefix returns Truncated()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mmalformed JSON body returns Malformed()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mwriteFrame returns Io error when the stream throws()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mround-trips a Ping frame()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mnegative length returns Malformed()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mempty stream returns Eof()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mreads multiple frames back to back()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mround-trips a Compile frame()[0m [32m✔[0m
+[36m│  │  └─[0m [34mtruncated body returns Truncated()[0m [32m✔[0m
+[36m│  ├─[0m [36mClasspathSnapshotCostTest[0m [32m✔[0m
+[36m│  │  └─[0m [34mmeasure classpath snapshot computation cost per jar()[0m [32m✔[0m
+[36m│  ├─[0m [36mSelfHealingIncrementalCompilerTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mno self-heal events when the first attempt succeeds()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mInternalError then CompilationFailed surfaces the retry's CompilationFailed()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mno self-heal events when the failure is a CompilationFailed()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mVirtualMachineError from the delegate propagates without wipe or retry()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mInternalError twice surfaces the retry's error, not the original()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mInternalError then SUCCESS wipes workingDir and retries transparently()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpartial wipe records ic_self_heal_wipe_failed but still runs the retry()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mVirtualMachineError thrown by wipe still propagates past the self-heal path()[0m [32m✔[0m
+[36m│  │  ├─[0m [34msuccess on first attempt passes through without retry or wipe()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mself-heal emits ic_self_heal metric and a single stderr warning()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mdefault filesystem wipe deletes the workingDir tree()[0m [32m✔[0m
+[36m│  │  ├─[0m [34ma successful compile clears the self-heal latch so a later InternalError still s...[0m [32m✔[0m
+[36m│  │  ├─[0m [34msame project but different workingDir keeps independent self-heal latches()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mthrown wipe is absorbed into ic_self_heal_wipe_failed and retry still runs()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompilationFailed is surfaced without retry or wipe()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompilationFailed between two InternalErrors also clears the latch()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mdifferent projects keep independent self-heal latches()[0m [32m✔[0m
+[36m│  │  └─[0m [34mconsecutive InternalError on the same project skips the retry and emits skipped ...[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalLockFailureTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mLOCK held by another owner lets compile proceed and records lock_conflict()[0m [32m✔[0m
+[36m│  │  └─[0m [34mLOCK file creation failure fails compile with InternalError and skips subsequent...[0m [32m✔[0m
+[36m│  ├─[0m [36mPluginTranslatorTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mmulti-jar resolution emits one arg per jar preserving resolver order()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mdisabled plugin entry is skipped entirely()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mnoarg plugin entry emits -Xplugin= passthrough args()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mmissing kolt_toml yields an empty plugin list()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mserialization plugin entry emits one -Xplugin= arg per resolved jar()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mkolt_toml with no plugins section yields an empty list()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mallopen plugin entry emits -Xplugin= passthrough args()[0m [32m✔[0m
+[36m│  │  └─[0m [34mempty resolver result for an enabled plugin produces no args()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalCorruptionSmokeTest[0m [32m✔[0m
+[36m│  │  └─[0m [34mtruncated working dir triggers self-heal and second compile succeeds()[0m [32m✔[0m
+[36m│  ├─[0m [36mCapturingKotlinLoggerTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34merrorWithoutThrowablePreservesMessage()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mwarnInfoLifecycleAreNotRetainedInErrorList()[0m [32m✔[0m
+[36m│  │  ├─[0m [34merrorWithThrowableWhoseMessageIsNullStillPreservesClassName()[0m [32m✔[0m
+[36m│  │  ├─[0m [34merrorIncrementsMetricCounter()[0m [32m✔[0m
+[36m│  │  └─[0m [34merrorWithThrowableIncludesClassNameAndFirstFrame()[0m [32m✔[0m
+[36m│  ├─[0m [36mMessageSerializationTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompileResult with diagnostics round-trips through JSON()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mPong round-trips through JSON()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompileResult success round-trips through JSON()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompile round-trips through JSON()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mShutdown round-trips through JSON()[0m [32m✔[0m
+[36m│  │  └─[0m [34mPing round-trips through JSON()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaSerializationPluginTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mserialization plugin jars resolve from the classpath system property()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mserialization runtime classpath contains kotlinx-serialization-core()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mplugin and language-version freeArgs coexist in a single applyArgumentStrings ba...[0m [32m✔[0m
+[36m│  │  └─[0m [34mSerializable data class compiles and the plugin generated serializer symbol()[0m [32m✔[0m
+[36m│  ├─[0m [36mSelfHealingBtaCompositionTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcomposed stack returns Ok for a healthy compile()[0m [32m✔[0m
+[36m│  │  └─[0m [34mcomposed stack returns CompilationFailed with real kotlinc diagnostic()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalCompilerWarmPathTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mworkingDir is created lazily if it does not exist when compile is called()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcold compile populates workingDir with IC state and warm compile reuses it()[0m [32m✔[0m
+[36m│  │  └─[0m [34mcold run emits ic_success + ic_fallback_to_full and warm run emits only ic_succe...[0m [32m✔[0m
+[36m│  ├─[0m [36mDaemonServerTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompile with compileScope Test routes to test scope and forwards friendPaths()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mhandles multiple frames on the same connection()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mdelegates Compile to the incremental compiler and returns CompileResult()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mresponds to Ping with Pong()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mCompilationFailed from the adapter becomes a non-zero CompileResult()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mrejects server-only messages with a protocol error reply()[0m [32m✔[0m
+[36m│  │  └─[0m [34mShutdown message stops the server and cleans up the socket file()[0m [32m✔[0m
+[36m│  ├─[0m [36mIcStateLayoutTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mworkingDirFor separates by project root()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mprojectIdFor returns 32 char lowercase hex()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mworkingDirFor separates main and test under the same project()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mprojectIdFor distinguishes different project roots()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mprojectIdFor uses the absolute path string verbatim()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mprojectIdFor is deterministic for the same input()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mworkingDirFor separates by kotlin version()[0m [32m✔[0m
+[36m│  │  └─[0m [34mworkingDirFor composes icRoot kotlinVersion projectId and scope()[0m [32m✔[0m
+[36m│  ├─[0m [36mClassloaderIsolationTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mimpl-only class is NOT reachable from the daemon-core-facing parent()[0m [32m✔[0m
+[36m│  │  └─[0m [34mimpl-only class is reachable from the child URLClassLoader()[0m [32m✔[0m
+[36m│  ├─[0m [36mIcMetricsSinkTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mNoopIcMetricsSink discards every record call()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mStderrIcMetricsSink tolerates names with inner dots and underscores()[0m [32m✔[0m
+[36m│  │  └─[0m [34mStderrIcMetricsSink emits one kolt-ic-metric line per record()[0m [32m✔[0m
+[36m│  ├─[0m [36mIcModuleBoundaryInvariantTest[0m [32m✔[0m
+[36m│  │  └─[0m [34mic test sources do not import root daemon production packages()[0m [32m✔[0m
+[36m│  ├─[0m [36mClasspathSnapshotCacheTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mnon-existent classpath entry causes all-or-nothing fallback to empty list()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mfile-backed recovery after in-memory cache is lost()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcache miss when file mtime changes()[0m [32m✔[0m
+[36m│  │  ├─[0m [34msecond call for same classpath returns cached snapshots without recomputation()[0m [32m✔[0m
+[36m│  │  └─[0m [34mdeleted snapshot file triggers recomputation()[0m [32m✔[0m
+[36m│  ├─[0m [36mBtaIncrementalAbiCascadeTest[0m [32m✔[0m
+[36m│  │  └─[0m [34msignature change on mid chain function cascades to caller but stops short of ful...[0m [32m✔[0m
+[36m│  ├─[0m [36mDaemonLifecycleTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mserve swallows preServeHook failures and keeps serving()[0m [32m✔[0m
+[36m│  │  ├─[0m [34midle timeout stops server when no connection arrives()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mserve returns BindFailed when the parent directory cannot be created()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mpreServeHook fires exactly once after bind and before accept loop()[0m [32m✔[0m
+[36m│  │  └─[0m [34mserver exits after serving maxCompiles compiles()[0m [32m✔[0m
+[36m│  ├─[0m [36mIncrementalCompilerContractTest[0m [32m✔[0m
+[36m│  │  ├─[0m [34mInternalError carries original cause()[0m [32m✔[0m
+[36m│  │  ├─[0m [34mcompiledFileCount is nullable when metrics unavailable()[0m [32m✔[0m
+[36m│  │  ├─[0m [34msuccess path returns Ok IcResponse()[0m [32m✔[0m
+[36m│  │  └─[0m [34mCompilationFailed carries diagnostic messages()[0m [32m✔[0m
+[36m│  └─[0m [36mIcReaperTest[0m [32m✔[0m
+[36m│     ├─[0m [34mRule B removes projectId when breadcrumb points to a missing path()[0m [32m✔[0m
+[36m│     ├─[0m [34mRule B removes projectId when breadcrumb is missing entirely()[0m [32m✔[0m
+[36m│     ├─[0m [34mRule B keeps projectId when breadcrumb points to an existing path()[0m [32m✔[0m
+[36m│     ├─[0m [34mregular files directly under icRoot are ignored without crashing the scan()[0m [32m✔[0m
+[36m│     ├─[0m [34mempty icRoot returns an empty report()[0m [32m✔[0m
+[36m│     ├─[0m [34mmissing icRoot returns an empty report()[0m [32m✔[0m
+[36m│     ├─[0m [34mRule B skips projectId when LOCK is held by another channel()[0m [32m✔[0m
+[36m│     ├─[0m [34mrun emits all counter names through the metrics sink on a mixed fixture()[0m [32m✔[0m
+[36m│     ├─[0m [34mRule B removes projectId when breadcrumb content is empty()[0m [32m✔[0m
+[36m│     └─[0m [34mRule A removes stale version segments wholesale()[0m [32m✔[0m
+[36m└─[0m [36mJUnit Vintage[0m [32m✔[0m
+
+Test run finished after 60241 ms
+[        31 containers found      ]
+[         0 containers skipped    ]
+[        31 containers started    ]
+[         0 containers aborted    ]
+[        31 containers successful ]
+[         0 containers failed     ]
+[       144 tests found           ]
+[         0 tests skipped         ]
+[       144 tests started         ]
+[         0 tests aborted         ]
+[       144 tests successful      ]
+[         0 tests failed          ]
+
+tests passed in 1m 17.1s

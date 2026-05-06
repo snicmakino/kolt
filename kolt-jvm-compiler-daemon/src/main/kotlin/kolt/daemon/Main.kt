@@ -9,6 +9,7 @@ import java.nio.file.Path
 import kolt.daemon.ic.BtaIncrementalCompiler
 import kolt.daemon.ic.IcStateLayout
 import kolt.daemon.ic.SelfHealingIncrementalCompiler
+import kolt.daemon.ic.ShrunkClasspathSnapshotCache
 import kolt.daemon.ic.StderrIcMetricsSink
 import kolt.daemon.reaper.IcReaper
 import kolt.daemon.server.DaemonConfig
@@ -103,6 +104,15 @@ fun main(args: Array<String>) {
   // found error at compile time rather than failing daemon startup.
   val pluginJarResolver: (String) -> List<Path> = { alias -> cli.pluginJars[alias] ?: emptyList() }
 
+  // Shared across daemon lifetimes via `<icRoot>/<kotlinVersion>/shrunk-snapshots/`.
+  // The directory is created lazily inside `storeIfNew`, so daemon startup
+  // does not depend on writable disk for the cache itself.
+  val shrunkSnapshotCache =
+    ShrunkClasspathSnapshotCache(
+      cacheDir = IcStateLayout.shrunkSnapshotsDirFor(cli.icRoot, KOLT_DAEMON_KOTLIN_VERSION),
+      metrics = metrics,
+    )
+
   val adapter =
     BtaIncrementalCompiler.create(
         btaImplJars = cli.btaImplJars.map { it.toPath() },
@@ -110,6 +120,7 @@ fun main(args: Array<String>) {
         metrics = metrics,
         classpathSnapshotsDir =
           IcStateLayout.classpathSnapshotsDirFor(cli.icRoot, KOLT_DAEMON_KOTLIN_VERSION),
+        shrunkSnapshotCache = shrunkSnapshotCache,
       )
       .mapBoth(
         success = { it },

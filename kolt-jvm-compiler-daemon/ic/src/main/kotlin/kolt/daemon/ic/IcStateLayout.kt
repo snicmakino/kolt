@@ -40,6 +40,15 @@ object IcStateLayout {
   const val LOCK_FILE: String = "LOCK"
   const val BTA_SUBDIR: String = "bta"
   const val CLASSPATH_SNAPSHOTS_SUBDIR: String = "classpath-snapshots"
+  const val SHRUNK_SNAPSHOTS_SUBDIR: String = "shrunk-snapshots"
+
+  // Single source of truth for the version-level cache subdirectories
+  // (`<icRoot>/<kotlinVersion>/<name>/`). `IcReaper`'s current-version
+  // scan must skip these names to keep recomputable cache state alive
+  // across daemon restarts; treating any directory name listed here as
+  // a `<projectIdHash>` would wipe the cache on every reap.
+  val CACHE_SUBDIRS_AT_VERSION_LEVEL: Set<String> =
+    setOf(CLASSPATH_SNAPSHOTS_SUBDIR, SHRUNK_SNAPSHOTS_SUBDIR)
 
   // The native client mirrors this in
   // `src/nativeMain/kotlin/kolt/build/daemon/IcStateCleanup.kt`
@@ -59,6 +68,15 @@ object IcStateLayout {
 
   fun classpathSnapshotsDirFor(icRoot: Path, kotlinVersion: String): Path =
     icRoot.resolve(kotlinVersion).resolve(CLASSPATH_SNAPSHOTS_SUBDIR)
+
+  fun shrunkSnapshotsDirFor(icRoot: Path, kotlinVersion: String): Path =
+    icRoot.resolve(kotlinVersion).resolve(SHRUNK_SNAPSHOTS_SUBDIR)
+
+  // `classpathKeyHex` is a plain hex string so this layout helper does
+  // not need to know about `ShrunkClasspathSnapshotCache.ClasspathKey`.
+  // Callers that hold a `ClasspathKey` value class pass `key.hex`.
+  fun shrunkSnapshotPathFor(icRoot: Path, kotlinVersion: String, classpathKeyHex: String): Path =
+    shrunkSnapshotsDirFor(icRoot, kotlinVersion).resolve("$classpathKeyHex.bin")
 }
 
 // Compile-scope axis added by #376: ADR 0019 §5 originally assumed

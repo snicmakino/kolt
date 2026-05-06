@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import kolt.daemon.ic.IcMetricsSink
+import kolt.daemon.ic.IcStateLayout
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
@@ -192,6 +193,76 @@ class IcReaperTest {
       heldLock.release()
       lockChannel.close()
     }
+  }
+
+  @Test
+  fun `current-version cache subdirs survive a reaper run`() {
+    val classpathSnapshots =
+      icRoot.resolve("2.3.20").resolve(IcStateLayout.CLASSPATH_SNAPSHOTS_SUBDIR).createDirectories()
+    classpathSnapshots.resolve("abcd.bin").writeText("per-jar snapshot bytes")
+    val shrunkSnapshots =
+      icRoot.resolve("2.3.20").resolve(IcStateLayout.SHRUNK_SNAPSHOTS_SUBDIR).createDirectories()
+    shrunkSnapshots.resolve("ef01.bin").writeText("shrunk snapshot bytes")
+
+    val report = IcReaper.run(icRoot, "2.3.20", metrics)
+
+    assertTrue(
+      Files.exists(classpathSnapshots),
+      "<v>/classpath-snapshots/ must survive the reaper run",
+    )
+    assertTrue(Files.exists(shrunkSnapshots), "<v>/shrunk-snapshots/ must survive the reaper run")
+    assertTrue(Files.exists(classpathSnapshots.resolve("abcd.bin")))
+    assertTrue(Files.exists(shrunkSnapshots.resolve("ef01.bin")))
+    assertEquals(0, report.scanned, "cache subdirs must not count toward scanned")
+    assertEquals(0, report.removed)
+  }
+
+  @Test
+  fun `stale projectId co-existing with cache subdirs is still deleted`() {
+    val classpathSnapshots =
+      icRoot.resolve("2.3.20").resolve(IcStateLayout.CLASSPATH_SNAPSHOTS_SUBDIR).createDirectories()
+    classpathSnapshots.resolve("abcd.bin").writeText("per-jar snapshot bytes")
+    val shrunkSnapshots =
+      icRoot.resolve("2.3.20").resolve(IcStateLayout.SHRUNK_SNAPSHOTS_SUBDIR).createDirectories()
+    shrunkSnapshots.resolve("ef01.bin").writeText("shrunk snapshot bytes")
+    val orphan = icRoot.resolve("2.3.20").resolve("9999999999999999").createDirectories()
+    orphan.resolve("state.bin").writeText("orphan")
+
+    val report = IcReaper.run(icRoot, "2.3.20", metrics)
+
+    assertFalse(
+      Files.exists(orphan),
+      "stale projectId without breadcrumb must still be removed even when cache subdirs sit alongside it",
+    )
+    assertTrue(Files.exists(classpathSnapshots), "cache subdir must survive alongside GC")
+    assertTrue(Files.exists(shrunkSnapshots), "cache subdir must survive alongside GC")
+    assertEquals(1, report.scanned, "only the projectId dir counts toward scanned")
+    assertEquals(1, report.removed)
+  }
+
+  @Test
+  fun `non-current version branch wipes cache subdirs along with the version dir`() {
+    val staleVersion = icRoot.resolve("2.3.19")
+    val staleClasspathSnapshots =
+      staleVersion.resolve(IcStateLayout.CLASSPATH_SNAPSHOTS_SUBDIR).createDirectories()
+    staleClasspathSnapshots.resolve("abcd.bin").writeText("stale per-jar")
+    val staleShrunkSnapshots =
+      staleVersion.resolve(IcStateLayout.SHRUNK_SNAPSHOTS_SUBDIR).createDirectories()
+    staleShrunkSnapshots.resolve("ef01.bin").writeText("stale shrunk")
+    val staleProject = staleVersion.resolve("aaaaaaaaaaaaaaaa").createDirectories()
+    staleProject.resolve("state.bin").writeText("stale project")
+
+    val report = IcReaper.run(icRoot, "2.3.20", metrics)
+
+    assertFalse(
+      Files.exists(staleVersion),
+      "stale version dir must be wiped wholesale, including cache subdirs",
+    )
+    assertFalse(Files.exists(staleClasspathSnapshots))
+    assertFalse(Files.exists(staleShrunkSnapshots))
+    assertFalse(Files.exists(staleProject))
+    assertEquals(3, report.scanned, "non-current branch counts every child including cache subdirs")
+    assertEquals(3, report.removed)
   }
 
   private class RecordingMetricsSink : IcMetricsSink {

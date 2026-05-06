@@ -1,0 +1,22 @@
+# Q2 extension activation
+Wed May  6 19:58:31 JST 2026
+RUNS=5
+
+## arm A: cold test (no pre-place)
+85905
+87769
+85464
+86187
+83166
+
+## arm B: cold test (with main shrunk pre-placed at test/bta/)
+78585
+78344
+78386
+78150
+78752
+
+median A (no pre-place): 85905 ms
+median B (pre-placed):   78386 ms
+delta: 7519 ms (8.7% reduction)
+VERDICT_Q2: GO (>= 5% improvement)

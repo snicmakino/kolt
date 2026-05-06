@@ -1,0 +1,7 @@
+# Q3 write semantics
+Wed May  6 20:16:12 JST 2026
+after first build: inode=1005330 sha=1e2956b1d7ea96e274fa28d79923a6aa8bfa1a21663b41af8f0d70e5bb3e1e55
+touching: /home/makino/projects/snicmakino/kolt/kolt-jvm-compiler-daemon/src/main/kotlin/kolt/daemon/Main.kt
+after second build (post-touch): inode=1005330 sha=1e2956b1d7ea96e274fa28d79923a6aa8bfa1a21663b41af8f0d70e5bb3e1e55
+VERDICT_Q3: IN_PLACE_WRITE (inode preserved across compiles)
+  → hardlink optimization is UNSAFE for cache file (cache contents would be modified by per-scope BTA)

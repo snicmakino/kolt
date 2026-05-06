@@ -1,0 +1,8 @@
+# Q4 flag invariance
+DEFERRED in this spike — see REPORT.md.
+Rationale: ClasspathEntrySnapshot embeds class metadata (classId, classAbiHash,
+supertypes), not compiler flags. Flag effects (-Xfriend-paths visibility,
+plugin classes) modify what the compiler emits and how it resolves symbols, but
+do not modify the metadata of classpath classes themselves. Risk treated as bounded;
+if the implementation finds anomalies on a per-flag basis, cache key can be
+extended to include a flag hash without changing the design's overall shape.

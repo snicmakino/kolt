@@ -5,7 +5,9 @@ package kolt.daemon.ic
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import com.github.michaelbull.result.mapBoth
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -272,6 +274,69 @@ class BtaIncrementalCompilerColdPathTest {
         outcome == "Err(CompilationFailed)" ||
         outcome == "Err(InternalError)",
       "unexpected compile outcome: $outcome",
+    )
+  }
+
+  // A second compile against the same classpath must observe a
+  // `shrunk_cache.lookup=hit` log line, proving the global cache hooks
+  // (lookupAndPlace before BTA, storeIfNew after a successful BTA call)
+  // are wired end-to-end. The first compile populates the cache; only
+  // the second compile's stderr is captured so the assertion does not
+  // have to disambiguate the first-compile miss from the second-compile
+  // hit.
+  @Test
+  fun `second compile with same classpath emits shrunk_cache lookup hit`() {
+    val workRoot = Files.createTempDirectory("bta-shrunk-cache-")
+    val sourceFile =
+      workRoot.resolve("Main.kt").also {
+        it.writeText(
+          """
+                package fixture
+                object Main { fun greeting(): String = "hello" }
+                """
+            .trimIndent()
+        )
+      }
+    val outputDir = workRoot.resolve("classes").apply { createDirectories() }
+    val cacheDir = workRoot.resolve("shrunk-snapshots").apply { createDirectories() }
+    val cache = ShrunkClasspathSnapshotCache(cacheDir = cacheDir)
+
+    val compiler =
+      BtaIncrementalCompiler.create(btaImplJars = btaImplJars, shrunkSnapshotCache = cache)
+        .getOrElse { fail("failed to load BTA toolchain: $it") }
+
+    fun runCompile(scope: String) {
+      val projectStateDir = workRoot.resolve("ic-$scope").apply { createDirectories() }
+      val workingDir = projectStateDir.resolve(scope).apply { createDirectories() }
+      compiler
+        .compile(
+          IcRequest(
+            projectId = "shrunk-cache-smoke-$scope",
+            projectRoot = workRoot,
+            sources = listOf(sourceFile),
+            classpath = fixtureClasspath,
+            outputDir = outputDir,
+            workingDir = workingDir,
+          )
+        )
+        .getOrElse { fail("expected success on $scope compile, got Err($it)") }
+    }
+
+    runCompile("first")
+
+    val captured = ByteArrayOutputStream()
+    val originalErr = System.err
+    System.setErr(PrintStream(captured, true, Charsets.UTF_8))
+    try {
+      runCompile("second")
+    } finally {
+      System.setErr(originalErr)
+    }
+    val log = captured.toString(Charsets.UTF_8)
+
+    assertTrue(
+      log.contains("shrunk_cache.lookup=hit"),
+      "expected `shrunk_cache.lookup=hit` on the second compile; captured stderr was:\n$log",
     )
   }
 

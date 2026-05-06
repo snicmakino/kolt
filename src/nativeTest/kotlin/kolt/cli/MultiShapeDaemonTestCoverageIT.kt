@@ -3,6 +3,7 @@
 package kolt.cli
 
 import com.github.michaelbull.result.getOrElse
+import kolt.infra.computeSha256
 import kolt.infra.eprintln
 import kolt.infra.executeCommand
 import kolt.infra.fileExists
@@ -14,6 +15,7 @@ import kolt.infra.writeFileAsString
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlinx.cinterop.ByteVar
@@ -102,6 +104,7 @@ class MultiShapeDaemonTestCoverageIT {
 
     assertMainClassesSurvive(fixture, fixtureName, mainClassesBefore)
     assertIcSegmentsPopulated(fixture, fixtureName)
+    assertShrunkSnapshotsPopulated(fixtureName)
   }
 
   @Test
@@ -137,6 +140,149 @@ class MultiShapeDaemonTestCoverageIT {
 
     assertMainClassesSurvive(fixture, fixtureName, mainClassesBefore)
     assertIcSegmentsPopulated(fixture, fixtureName)
+    assertShrunkSnapshotsPopulated(fixtureName)
+  }
+
+  // Daemon restart must not wipe shared shrunk-snapshot or per-jar cache
+  // entries for an active project — IcReaper's current-version branch skips
+  // the cache subdirs (per IcStateLayout.CACHE_SUBDIRS_AT_VERSION_LEVEL).
+  // Inode + mtime + content equality across a restart proves the file was
+  // neither deleted-and-recreated nor partially rewritten.
+  @Test
+  fun cacheSurvivesDaemonRestart() {
+    if (!ensureGateOrSkip()) return
+    val fixture = scaffoldNoPluginFixture().also(createdDirs::add)
+    val fixtureName = "no-plugin-restart"
+
+    val firstBuildExit = runKoltCommand(fixture, "build", "b1")
+    assertEquals(
+      0,
+      firstBuildExit,
+      "first kolt build must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "b1.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "b1.stderr") ?: ""}",
+    )
+    val firstTestExit = runKoltCommand(fixture, "test", "t1")
+    assertEquals(
+      0,
+      firstTestExit,
+      "first kolt test must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "t1.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "t1.stderr") ?: ""}",
+    )
+
+    val perJarBefore = pickAnyCacheFile(perJarSnapshotsDir(), ".snapshot")
+    assertNotNull(
+      perJarBefore,
+      "expected at least one *.snapshot in ${perJarSnapshotsDir()} after first build",
+    )
+    val shrunkBefore = pickAnyCacheFile(shrunkSnapshotsDir(), ".bin")
+    assertNotNull(
+      shrunkBefore,
+      "expected at least one *.bin in ${shrunkSnapshotsDir()} after first build",
+    )
+    val perJarFingerprintBefore = fingerprint(perJarBefore)
+    val shrunkFingerprintBefore = fingerprint(shrunkBefore)
+
+    val stopExit = runKoltCommand(fixture, "daemon stop", "stop")
+    assertEquals(
+      0,
+      stopExit,
+      "kolt daemon stop must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "stop.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "stop.stderr") ?: ""}",
+    )
+
+    val secondBuildExit = runKoltCommand(fixture, "build", "b2")
+    assertEquals(
+      0,
+      secondBuildExit,
+      "second kolt build must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "b2.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "b2.stderr") ?: ""}",
+    )
+
+    assertTrue(
+      isRegularFile(perJarBefore),
+      "per-jar cache file disappeared across daemon restart: $perJarBefore",
+    )
+    assertTrue(
+      isRegularFile(shrunkBefore),
+      "shrunk-snapshot cache file disappeared across daemon restart: $shrunkBefore",
+    )
+    assertEquals(
+      perJarFingerprintBefore,
+      fingerprint(perJarBefore),
+      "per-jar cache file changed across daemon restart (inode/mtime/sha256): $perJarBefore",
+    )
+    assertEquals(
+      shrunkFingerprintBefore,
+      fingerprint(shrunkBefore),
+      "shrunk-snapshot cache file changed across daemon restart (inode/mtime/sha256): $shrunkBefore",
+    )
+  }
+
+  // A cache-hit compile must produce byte-identical .class files vs a
+  // cache-miss compile on the same sources — silent corruption guard for
+  // the shrunk-snapshot reuse path. Same fixture is used so source paths
+  // embedded in debug attributes (SourceFile, LineNumberTable) match
+  // between runs. Between runs, the project's per-scope BTA workingDir is
+  // wiped (along with build/) but the global shrunk-snapshots cache is
+  // preserved, so the second compile is a clean full BTA invocation that
+  // hits the global cache via classpath-key lookup.
+  @Test
+  fun compiledClassesAreByteIdenticalAcrossCacheHitAndMiss() {
+    if (!ensureGateOrSkip()) return
+    val fixture = scaffoldNoPluginFixture().also(createdDirs::add)
+    val fixtureName = "no-plugin-byte-identity"
+
+    wipeShrunkSnapshotsDir()
+    wipeProjectIcDir(fixture)
+
+    runFixtureBuildAndTest(fixture, fixtureName, prefix = "miss")
+    val missDigests = digestAllClassFiles(fixture)
+    assertTrue(
+      missDigests.isNotEmpty(),
+      "cache-miss build produced no .class files under $fixture/build/classes",
+    )
+
+    // Wipe both the local build dir and the daemon's per-project IC state so
+    // the next build forces a full BTA compile (not a no-op short-circuit),
+    // while the global shrunk-snapshot cache survives to deliver a hit on
+    // the classpath-key lookup.
+    removeDirectoryRecursive("$fixture/build").getOrElse {
+      fail("could not wipe $fixture/build between runs: ${it.path}")
+    }
+    wipeProjectIcDir(fixture)
+
+    runFixtureBuildAndTest(fixture, fixtureName, prefix = "hit")
+    val hitDigests = digestAllClassFiles(fixture)
+
+    assertEquals(
+      missDigests,
+      hitDigests,
+      "compiled .class set diverged between cache-miss and cache-hit runs " +
+        "for $fixtureName fixture; cache-hit may be silently corrupting output",
+    )
+  }
+
+  private fun runFixtureBuildAndTest(fixture: String, fixtureName: String, prefix: String) {
+    val buildExit = runKoltCommand(fixture, "build", "$prefix-b")
+    assertEquals(
+      0,
+      buildExit,
+      "$prefix kolt build must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "$prefix-b.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "$prefix-b.stderr") ?: ""}",
+    )
+    val testExit = runKoltCommand(fixture, "test", "$prefix-t")
+    assertEquals(
+      0,
+      testExit,
+      "$prefix kolt test must exit 0 for $fixtureName fixture; " +
+        "stdout=${readOptional(fixture, "$prefix-t.stdout") ?: ""} " +
+        "stderr=${readOptional(fixture, "$prefix-t.stderr") ?: ""}",
+    )
   }
 
   companion object {
@@ -336,6 +482,105 @@ private fun assertIcSegmentsPopulated(fixtureDir: String, fixtureName: String) {
     parentOf(parentOf(testBta)),
     "test/bta parent chain must climb to <projectId> dir for fixture $fixtureName",
   )
+}
+
+private fun shrunkSnapshotsDir(): String {
+  val home =
+    getenv("HOME")?.toKString() ?: error("HOME env var not set; cannot resolve daemon IC root")
+  return "$home/.kolt/daemon/ic/$FIXTURE_KOTLIN_VERSION/shrunk-snapshots"
+}
+
+private fun perJarSnapshotsDir(): String {
+  val home =
+    getenv("HOME")?.toKString() ?: error("HOME env var not set; cannot resolve daemon IC root")
+  return "$home/.kolt/daemon/ic/$FIXTURE_KOTLIN_VERSION/classpath-snapshots"
+}
+
+private fun assertShrunkSnapshotsPopulated(fixtureName: String) {
+  val dir = shrunkSnapshotsDir()
+  assertTrue(
+    fileExists(dir) && isDir(dir),
+    "shrunk-snapshots dir missing for fixture $fixtureName at $dir",
+  )
+  assertTrue(
+    listFilesWithSuffix(dir, ".bin").isNotEmpty(),
+    "shrunk-snapshots dir contains no *.bin files for fixture $fixtureName at $dir",
+  )
+}
+
+private fun wipeShrunkSnapshotsDir() {
+  val dir = shrunkSnapshotsDir()
+  if (fileExists(dir)) {
+    removeDirectoryRecursive(dir).getOrElse {
+      error("could not wipe shrunk-snapshots dir: ${it.path}")
+    }
+  }
+}
+
+private fun wipeProjectIcDir(fixtureDir: String) {
+  val home =
+    getenv("HOME")?.toKString() ?: error("HOME env var not set; cannot resolve daemon IC root")
+  val projectIcDir =
+    "$home/.kolt/daemon/ic/$FIXTURE_KOTLIN_VERSION/${expectedProjectId(fixtureDir)}"
+  if (fileExists(projectIcDir)) {
+    removeDirectoryRecursive(projectIcDir).getOrElse {
+      error("could not wipe project IC dir $projectIcDir: ${it.path}")
+    }
+  }
+}
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private fun listFilesWithSuffix(directory: String, suffix: String): List<String> {
+  if (!fileExists(directory)) return emptyList()
+  val dir = opendir(directory) ?: return emptyList()
+  val out = mutableListOf<String>()
+  try {
+    while (true) {
+      val entry = readdir(dir) ?: break
+      val name = entry.pointed.d_name.toKString()
+      if (name == "." || name == "..") continue
+      if (!name.endsWith(suffix)) continue
+      val path = "$directory/$name"
+      if (isRegularFile(path)) out.add(path)
+    }
+  } finally {
+    closedir(dir)
+  }
+  out.sort()
+  return out
+}
+
+private fun pickAnyCacheFile(directory: String, suffix: String): String? =
+  listFilesWithSuffix(directory, suffix).firstOrNull()
+
+// inode + mtime (sec) + sha256 captures every meaningful change a daemon
+// restart could introduce: deletion-and-recreation flips inode, in-place
+// rewrite at the same second flips sha256, mtime catches the gap between.
+private data class FileFingerprint(val inode: ULong, val mtimeSec: Long, val sha256: String)
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private fun fingerprint(path: String): FileFingerprint = memScoped {
+  val statBuf = alloc<stat>()
+  if (stat(path, statBuf.ptr) != 0) {
+    fail("stat($path) failed while computing fingerprint")
+  }
+  val ino = statBuf.st_ino.toULong()
+  val mtime = statBuf.st_mtim.tv_sec
+  val digest = computeSha256(path).getOrElse { fail("sha256 read failed for $path: ${it.path}") }
+  FileFingerprint(ino, mtime, digest)
+}
+
+private fun digestAllClassFiles(fixtureDir: String): Map<String, String> {
+  val classesRoot = "$fixtureDir/build/classes"
+  val absPaths = mutableSetOf<String>()
+  if (fileExists(classesRoot)) collectClassFiles(classesRoot, absPaths)
+  val rootPrefix = "$classesRoot/"
+  val out = mutableMapOf<String, String>()
+  for (abs in absPaths.sorted()) {
+    val rel = if (abs.startsWith(rootPrefix)) abs.substring(rootPrefix.length) else abs
+    out[rel] = computeSha256(abs).getOrElse { fail("sha256 read failed for $abs: ${it.path}") }
+  }
+  return out
 }
 
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
