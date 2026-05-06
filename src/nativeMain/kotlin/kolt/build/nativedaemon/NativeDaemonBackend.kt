@@ -16,6 +16,7 @@ import kolt.build.NativeCompilerBackend
 import kolt.build.daemon.isRetryableConnectError
 import kolt.build.daemon.monotonicMs
 import kolt.infra.ProcessError
+import kolt.infra.eprintln
 import kolt.infra.net.UnixSocket
 import kolt.infra.net.UnixSocketError
 import kolt.infra.spawnDetached
@@ -51,6 +52,7 @@ internal constructor(
   private val clockMs: () -> Long = ::monotonicMs,
   private val sleeper: (Int) -> Unit = defaultNativeDaemonSleeper,
   private val onSpawn: () -> Unit = {},
+  private val warnSink: (String) -> Unit = ::eprintln,
 ) : NativeCompilerBackend {
 
   constructor(
@@ -87,8 +89,20 @@ internal constructor(
       if (sendErr != null) return Err(mapFrameErrorToSendError(sendErr))
       val reply = it.receiveReply()
       val replyErr = reply.getError()
-      if (replyErr != null) return Err(mapFrameErrorToReceiveError(replyErr))
-      return mapReplyToOutcome(reply.get()!!)
+      val mapped: Result<NativeCompileOutcome, NativeCompileError> =
+        if (replyErr != null) Err(mapFrameErrorToReceiveError(replyErr))
+        else mapReplyToOutcome(reply.get()!!)
+
+      // Wire-mismatch auto-recycle (ADR 0024 §7): nudge the stale daemon to release
+      // its socket so the next invocation lands on a fresh one. Best-effort — a send
+      // failure is logged but does not change the returned error.
+      val errored = mapped.getError()
+      if (errored is NativeCompileError.BackendUnavailable.WireMismatch) {
+        it.sendRequest(Message.Shutdown).getError()?.let { shutdownErr ->
+          warnSink("warning: failed to send Shutdown to stale daemon: $shutdownErr")
+        }
+      }
+      return mapped
     }
   }
 
@@ -235,15 +249,17 @@ internal fun mapFrameErrorToSendError(err: FrameError): NativeCompileError =
 internal fun mapFrameErrorToReceiveError(err: FrameError): NativeCompileError =
   when (err) {
     is FrameError.Eof ->
-      NativeCompileError.BackendUnavailable.Other("native daemon closed connection before replying")
+      NativeCompileError.BackendUnavailable.WireMismatch(
+        "native daemon closed connection before replying"
+      )
     is FrameError.Truncated ->
-      NativeCompileError.BackendUnavailable.Other(
+      NativeCompileError.BackendUnavailable.WireMismatch(
         "truncated reply: wanted=${err.wantedBytes} got=${err.gotBytes}"
       )
     is FrameError.Malformed ->
-      NativeCompileError.BackendUnavailable.Other("malformed reply: ${err.reason}")
+      NativeCompileError.BackendUnavailable.WireMismatch("malformed reply: ${err.reason}")
     is FrameError.Transport ->
-      NativeCompileError.BackendUnavailable.Other("receive failed: ${describe(err.cause)}")
+      NativeCompileError.BackendUnavailable.WireMismatch("receive failed: ${describe(err.cause)}")
   }
 
 internal fun mapReplyToOutcome(reply: Message): Result<NativeCompileOutcome, NativeCompileError> =
@@ -263,7 +279,7 @@ internal fun mapReplyToOutcome(reply: Message): Result<NativeCompileOutcome, Nat
     is Message.Pong,
     is Message.Shutdown ->
       Err(
-        NativeCompileError.BackendUnavailable.Other(
+        NativeCompileError.BackendUnavailable.WireMismatch(
           "unexpected reply type: ${reply::class.simpleName}"
         )
       )

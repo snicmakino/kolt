@@ -30,7 +30,7 @@
   - _Boundary: kolt.build.daemon.DaemonCompilerBackend_
   - _Depends: 1.1_
 
-- [ ] 2.2 (P) Native compiler daemon backend で同様の検出と Shutdown 送信
+- [x] 2.2 (P) Native compiler daemon backend で同様の検出と Shutdown 送信
   - `kolt.build.nativedaemon.NativeDaemonBackend` で 2.1 と同形の改修を施す（wire 型は `kolt.nativedaemon.wire.Message.Shutdown`）
   - 観測可能な完了状態：native 版 unit test で 2.1 と同 4 項目が green
   - _Requirements: 1.4, 2.1, 2.2, 2.3_
