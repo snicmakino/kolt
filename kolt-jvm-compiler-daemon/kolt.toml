@@ -1,5 +1,5 @@
 name = "kolt-jvm-compiler-daemon"
-version = "0.18.0"
+version = "0.18.1"
 kind = "app"
 
 [kotlin]
