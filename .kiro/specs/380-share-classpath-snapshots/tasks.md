@@ -86,7 +86,7 @@
 
 - [ ] 5. End-to-end coverage and performance measurement
 
-- [ ] 5.1 (P) Extend MultiShapeDaemonTestCoverageIT with cache existence and survival assertions
+- [x] 5.1 (P) Extend MultiShapeDaemonTestCoverageIT with cache existence and survival assertions
   - Add `coldPathPopulatesShrunkSnapshotsDir` to both shapes (no-plugin and serialization-plugin): after `kolt build && kolt test`, `<v>/shrunk-snapshots/` contains at least one `.bin` file
   - Add `cacheSurvivesDaemonRestart`: build → `kolt daemon stop` → second build → assert that the first build's per-jar cache file (`<v>/classpath-snapshots/*.snapshot`) and shrunk cache file (`<v>/shrunk-snapshots/*.bin`) have unchanged inode, mtime, and content — covers B-1 reaper-bug regression for both new and existing per-jar caches
   - Add `compiledClassesAreByteIdentical_acrossCacheHitAndMiss`: clear cache, build main+test, snapshot all `build/classes/**/*.class` SHA-256 → run again with cache populated → snapshot again → assert byte-identical (silent corruption guard)
