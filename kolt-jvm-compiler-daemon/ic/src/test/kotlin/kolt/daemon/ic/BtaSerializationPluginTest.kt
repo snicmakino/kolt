@@ -123,7 +123,7 @@ class BtaSerializationPluginTest {
     )
   }
 
-  // #162 single-batch invariant guard. When both PluginTranslator and
+  // Single-batch invariant guard. When both PluginTranslator and
   // LanguageVersionTranslator return non-empty lists, BtaIncrementalCompiler
   // must pass their concatenation to `applyArgumentStrings` in a *single*
   // call — two sequential calls would reset the earlier batch's args back
@@ -154,38 +154,18 @@ class BtaSerializationPluginTest {
     val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
     val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
+    // version=2.1.0 with compiler=2.3.20 makes LanguageVersionTranslator emit
+    // `-language-version 2.1 -api-version 2.1`; PluginTranslator emits
+    // `-Xplugin=<serialization jar>`. The batch invariant is that both sets
+    // survive into the compile.
     val compiler =
       BtaIncrementalCompiler.create(
           btaImplJars = btaImplJars,
           pluginJars = mapOf("serialization" to serializationPluginJars),
+          kotlinLanguageVersion = "2.1.0",
+          kotlinCompilerVersion = "2.3.20",
         )
         .getOrElse { fail("failed to load BTA toolchain: $it") }
-
-    // version=2.1.0 with compiler=2.3.20 makes LanguageVersionTranslator
-    // emit `-language-version 2.1.0 -api-version 2.1.0`; plugin translator
-    // emits `-Xplugin=<serialization jar>`. The batch invariant is that
-    // both sets survive into the compile.
-    workRoot
-      .resolve("kolt.toml")
-      .writeText(
-        """
-            name = "demo"
-            version = "0.1.0"
-
-            [kotlin]
-            version = "2.1.0"
-            compiler = "2.3.20"
-
-            [kotlin.plugins]
-            serialization = true
-
-            [build]
-            target = "jvm"
-            main = "fixture.Payload"
-            sources = ["."]
-            """
-          .trimIndent()
-      )
 
     compiler
       .compile(

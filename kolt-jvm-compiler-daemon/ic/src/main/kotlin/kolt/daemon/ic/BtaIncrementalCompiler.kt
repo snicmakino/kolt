@@ -58,6 +58,9 @@ private constructor(
   // Pre-resolved per ADR 0019 §9; daemon hands `--plugin-jars` through
   // unchanged.
   private val pluginJars: Map<String, List<Path>>,
+  // Wire-supplied per ADR 0019 §9; daemon hands raw values through unchanged.
+  private val kotlinLanguageVersion: String?,
+  private val kotlinCompilerVersion: String?,
   // ADR 0019 §7 observability: adapter-level counters are recorded here.
   // Defaults to no-op so tests that only care about the Result<,> shape
   // stay terse; Main wires `StderrIcMetricsSink` in production so
@@ -172,11 +175,12 @@ private constructor(
     // with `'moduleName' is null!` at `IncrementalJvmCompilerRunnerBase.makeServices`.
     // The structured `set(...)` calls therefore come AFTER the
     // passthrough so their values survive into the final compile.
-    // #162: language/api-version args must ride the same applyArgumentStrings
+    // Language/api-version args must ride the same applyArgumentStrings
     // batch as plugin args — the reset-to-default behavior documented above
     // would wipe whichever translator fed an earlier call.
     val translatedPluginArgs = PluginTranslator.translate(pluginJars)
-    val translatedLanguageArgs = LanguageVersionTranslator.translate(request.projectRoot)
+    val translatedLanguageArgs =
+      LanguageVersionTranslator.translate(kotlinLanguageVersion, kotlinCompilerVersion)
     val freeArgs = translatedPluginArgs + translatedLanguageArgs
     if (freeArgs.isNotEmpty()) {
       builder.compilerArguments.applyArgumentStrings(freeArgs)
@@ -435,6 +439,8 @@ private constructor(
     fun create(
       btaImplJars: List<Path>,
       pluginJars: Map<String, List<Path>> = emptyMap(),
+      kotlinLanguageVersion: String? = null,
+      kotlinCompilerVersion: String? = null,
       metrics: IcMetricsSink = NoopIcMetricsSink,
       // ADR 0019 §Negative follow-up (#127): shared directory for cached
       // ClasspathEntrySnapshot files. When null, a temp directory is used
@@ -465,6 +471,8 @@ private constructor(
           BtaIncrementalCompiler(
             toolchain = toolchain,
             pluginJars = pluginJars,
+            kotlinLanguageVersion = kotlinLanguageVersion,
+            kotlinCompilerVersion = kotlinCompilerVersion,
             metrics = metrics,
             classpathSnapshotCache = ClasspathSnapshotCache(toolchain, snapshotsDir, metrics),
             shrunkSnapshotCache = effectiveShrunkCache,

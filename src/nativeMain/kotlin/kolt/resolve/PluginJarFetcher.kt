@@ -164,8 +164,8 @@ fun fetchPluginJar(
  * Batch variant used by the compile path callers. Iterates enabled aliases in declaration order and
  * fetches each plugin jar; aborts on the first error so a missing jar does not silently produce a
  * half-plugged plugin set. Returns a LinkedHashMap to preserve iteration order for the
- * `pluginsFingerprint` helper in BuildCommands, which sorts internally but benefits from a stable
- * input for diffing.
+ * `daemonInputsFingerprint` helper in BuildCommands, which sorts internally but benefits from a
+ * stable input for diffing.
  */
 fun fetchEnabledPluginJars(
   plugins: Map<String, Boolean>,

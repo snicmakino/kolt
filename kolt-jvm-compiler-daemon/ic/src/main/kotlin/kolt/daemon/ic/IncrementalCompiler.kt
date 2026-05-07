@@ -19,7 +19,7 @@ interface IncrementalCompiler {
 
 data class IcRequest(
   val projectId: String,
-  // Source for `LanguageVersionTranslator` reading `[kotlin]` per ADR 0019 §9.
+  // Identifies the project source tree for the IcReaper breadcrumb (§5).
   val projectRoot: Path,
   val sources: List<Path>,
   val classpath: List<Path>,

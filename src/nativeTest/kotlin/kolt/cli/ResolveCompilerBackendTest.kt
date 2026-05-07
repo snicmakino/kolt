@@ -56,7 +56,7 @@ class ResolveCompilerBackendTest {
           error("must not resolve preconditions when useDaemon=false")
         },
         daemonDirCreator = { error("must not create daemon dir when useDaemon=false") },
-        daemonBackendFactory = { _, _ ->
+        daemonBackendFactory = { _, _, _, _ ->
           error("must not construct daemon backend when useDaemon=false")
         },
         warningSink = { warnings.add(it) },
@@ -91,7 +91,7 @@ class ResolveCompilerBackendTest {
           )
         },
         daemonDirCreator = { error("must not create daemon dir after precondition failure") },
-        daemonBackendFactory = { _, _ ->
+        daemonBackendFactory = { _, _, _, _ ->
           error("must not construct daemon backend after precondition failure")
         },
         warningSink = { warnings.add(it) },
@@ -124,7 +124,7 @@ class ResolveCompilerBackendTest {
           Ok(okSetup)
         },
         daemonDirCreator = { Ok(Unit) },
-        daemonBackendFactory = { _, _ -> daemonSentinel },
+        daemonBackendFactory = { _, _, _, _ -> daemonSentinel },
         warningSink = { error("happy path must not warn") },
       )
 
@@ -144,7 +144,7 @@ class ResolveCompilerBackendTest {
         absProjectPath = absProject,
         preconditionResolver = { _, _, _, _ -> Err(DaemonPreconditionError.DaemonJarMissing) },
         daemonDirCreator = { error("must not create daemon dir after precondition failure") },
-        daemonBackendFactory = { _, _ ->
+        daemonBackendFactory = { _, _, _, _ ->
           error("must not construct daemon backend after precondition failure")
         },
         warningSink = { warnings.add(it) },
@@ -178,7 +178,7 @@ class ResolveCompilerBackendTest {
           )
         },
         daemonDirCreator = { error("must not create daemon dir after precondition failure") },
-        daemonBackendFactory = { _, _ ->
+        daemonBackendFactory = { _, _, _, _ ->
           error("must not construct daemon backend after precondition failure")
         },
         warningSink = { warnings.add(it) },
@@ -213,7 +213,7 @@ class ResolveCompilerBackendTest {
         absProjectPath = absProject,
         preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
         daemonDirCreator = { Err(MkdirFailed(okSetup.daemonDir)) },
-        daemonBackendFactory = { _, _ ->
+        daemonBackendFactory = { _, _, _, _ ->
           error("must not construct daemon backend after mkdir failure")
         },
         warningSink = { warnings.add(it) },
@@ -241,7 +241,7 @@ class ResolveCompilerBackendTest {
         pluginJars = pluginJars,
         preconditionResolver = { _, _, _, _ -> Ok(okSetup) },
         daemonDirCreator = { Ok(Unit) },
-        daemonBackendFactory = { _, jars ->
+        daemonBackendFactory = { _, jars, _, _ ->
           capturedPluginJars = jars
           daemonSentinel
         },
@@ -273,7 +273,7 @@ class ResolveCompilerBackendTest {
           assertEquals(okSetup.daemonDir, dir)
           Ok(Unit)
         },
-        daemonBackendFactory = { setup, _ ->
+        daemonBackendFactory = { setup, _, _, _ ->
           createdFrom = setup
           daemonSentinel
         },
@@ -288,40 +288,65 @@ class ResolveCompilerBackendTest {
   }
 
   @Test
-  fun pluginsFingerprintIsStableForSamePluginMap() {
-    val a = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")))
-    val b = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")))
+  fun daemonInputsFingerprintIsStableForSameInputs() {
+    val a =
+      daemonInputsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")), "2.1.0", "2.3.20")
+    val b =
+      daemonInputsFingerprint(mapOf("serialization" to listOf("/k/lib/ser.jar")), "2.1.0", "2.3.20")
     assertEquals(a, b)
   }
 
   @Test
-  fun pluginsFingerprintIsOrderInsensitiveOnAliases() {
-    val a = pluginsFingerprint(linkedMapOf("a" to listOf("/x"), "b" to listOf("/y")))
-    val b = pluginsFingerprint(linkedMapOf("b" to listOf("/y"), "a" to listOf("/x")))
+  fun daemonInputsFingerprintIsOrderInsensitiveOnAliases() {
+    val a =
+      daemonInputsFingerprint(linkedMapOf("a" to listOf("/x"), "b" to listOf("/y")), null, null)
+    val b =
+      daemonInputsFingerprint(linkedMapOf("b" to listOf("/y"), "a" to listOf("/x")), null, null)
     assertEquals(a, b)
   }
 
   @Test
-  fun pluginsFingerprintChangesWhenAClasspathChanges() {
-    val a = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.0.jar")))
-    val b = pluginsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.1.jar")))
-    assertTrue(a != b, "version bump should change fingerprint, both=$a")
+  fun daemonInputsFingerprintChangesWhenAClasspathChanges() {
+    val a =
+      daemonInputsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.0.jar")), null, null)
+    val b =
+      daemonInputsFingerprint(mapOf("serialization" to listOf("/k/lib/ser-2.1.jar")), null, null)
+    assertTrue(a != b, "plugin classpath change should change fingerprint, both=$a")
   }
 
   @Test
-  fun pluginsFingerprintEmptyMapHasFixedMarker() {
-    assertEquals("noplugins", pluginsFingerprint(emptyMap()))
+  fun daemonInputsFingerprintChangesWhenLanguageVersionChanges() {
+    val a = daemonInputsFingerprint(emptyMap(), "2.0.0", "2.3.20")
+    val b = daemonInputsFingerprint(emptyMap(), "2.1.0", "2.3.20")
+    assertTrue(a != b, "language version change must spawn a new daemon, both=$a")
   }
 
   @Test
-  fun applyPluginsFingerprintInsertsBeforeExtension() {
+  fun daemonInputsFingerprintChangesWhenCompilerVersionChanges() {
+    val a = daemonInputsFingerprint(emptyMap(), "2.1.0", "2.3.10")
+    val b = daemonInputsFingerprint(emptyMap(), "2.1.0", "2.3.20")
+    assertTrue(a != b, "compiler version change must spawn a new daemon, both=$a")
+  }
+
+  @Test
+  fun daemonInputsFingerprintDistinguishesNullFromEmpty() {
+    // Defensive: an empty-string version field must not collide with the
+    // null (unset) case. Both serialise into the canonical string but the
+    // hash should differ once either grows a value.
+    val nullPair = daemonInputsFingerprint(emptyMap(), null, null)
+    val withLang = daemonInputsFingerprint(emptyMap(), "2.1.0", null)
+    assertTrue(nullPair != withLang, "presence of language version must perturb the fingerprint")
+  }
+
+  @Test
+  fun applyDaemonInputsFingerprintInsertsBeforeExtension() {
     assertEquals(
       "/fake/daemon/dir/jvm-compiler-daemon-abcd1234.sock",
-      applyPluginsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.sock", "abcd1234"),
+      applyDaemonInputsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.sock", "abcd1234"),
     )
     assertEquals(
       "/fake/daemon/dir/jvm-compiler-daemon-abcd1234.log",
-      applyPluginsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.log", "abcd1234"),
+      applyDaemonInputsFingerprintToFile("/fake/daemon/dir/jvm-compiler-daemon.log", "abcd1234"),
     )
   }
 

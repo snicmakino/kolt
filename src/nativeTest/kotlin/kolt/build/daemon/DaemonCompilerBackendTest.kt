@@ -68,6 +68,8 @@ private fun newBackend(
   spawner: DaemonSpawner = { _, _ -> Ok(Unit) },
   clock: FakeClock = FakeClock(),
   pluginJars: Map<String, List<String>> = emptyMap(),
+  kotlinLanguageVersion: String? = null,
+  kotlinCompilerVersion: String? = null,
   warnSink: (String) -> Unit = {},
 ): DaemonCompilerBackend =
   DaemonCompilerBackend(
@@ -78,6 +80,8 @@ private fun newBackend(
     socketPath = "/tmp/kolt-daemon-test.sock",
     logPath = "/tmp/kolt-daemon-test.log",
     pluginJars = pluginJars,
+    kotlinLanguageVersion = kotlinLanguageVersion,
+    kotlinCompilerVersion = kotlinCompilerVersion,
     connector = connector,
     spawner = spawner,
     clockMs = clock.clock,
@@ -352,8 +356,8 @@ class DaemonCompilerBackendConnectAndSpawnTest {
     assertEquals("serialization=/kt/lib/ser1.jar:/kt/lib/ser2.jar", argv[flagIdx + 1])
   }
 
-  // #65: multiple aliases joined with ';'. Iteration order matters —
-  // a non-LinkedHashMap would break pluginsFingerprint stability.
+  // Multiple aliases joined with ';'. Iteration order matters — a
+  // non-LinkedHashMap would break daemonInputsFingerprint stability.
   @Test
   fun spawnArgvSerialisesMultiplePluginsSemicolonSeparated() {
     var captured: List<String>? = null
@@ -383,6 +387,70 @@ class DaemonCompilerBackendConnectAndSpawnTest {
     val flagIdx = argv.indexOf("--plugin-jars")
     assertTrue(flagIdx >= 0, "spawnArgv must include --plugin-jars, got: $argv")
     assertEquals("serialization=/p/ser.jar;allopen=/p/open.jar", argv[flagIdx + 1])
+  }
+
+  @Test
+  fun spawnArgvOmitsKotlinVersionFlagsWhenBothNull() {
+    var captured: List<String>? = null
+    var attempt = 0
+    val connector: DaemonConnector = { path ->
+      attempt++
+      if (attempt == 1) {
+        Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+      } else {
+        Ok(FakeConnection())
+      }
+    }
+    val backend =
+      newBackend(
+        connector = connector,
+        spawner = { argv, _ ->
+          captured = argv
+          Ok(Unit)
+        },
+      )
+
+    backend.compile(sampleRequest())
+
+    val argv = assertNotNull(captured)
+    assertFalse(
+      argv.contains("--kotlin-language-version") || argv.contains("--kotlin-compiler-version"),
+      "spawnArgv must omit kotlin version flags when both are null, got: $argv",
+    )
+  }
+
+  @Test
+  fun spawnArgvEmitsKotlinVersionFlagsWhenSet() {
+    var captured: List<String>? = null
+    var attempt = 0
+    val connector: DaemonConnector = { path ->
+      attempt++
+      if (attempt == 1) {
+        Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+      } else {
+        Ok(FakeConnection())
+      }
+    }
+    val backend =
+      newBackend(
+        connector = connector,
+        spawner = { argv, _ ->
+          captured = argv
+          Ok(Unit)
+        },
+        kotlinLanguageVersion = "2.1.0",
+        kotlinCompilerVersion = "2.3.20",
+      )
+
+    backend.compile(sampleRequest())
+
+    val argv = assertNotNull(captured)
+    val langIdx = argv.indexOf("--kotlin-language-version")
+    val ccIdx = argv.indexOf("--kotlin-compiler-version")
+    assertTrue(langIdx >= 0, "spawnArgv must include --kotlin-language-version, got: $argv")
+    assertTrue(ccIdx >= 0, "spawnArgv must include --kotlin-compiler-version, got: $argv")
+    assertEquals("2.1.0", argv[langIdx + 1])
+    assertEquals("2.3.20", argv[ccIdx + 1])
   }
 
   @Test

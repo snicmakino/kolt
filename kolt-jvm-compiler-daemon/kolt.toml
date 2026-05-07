@@ -20,7 +20,6 @@ test_sources = ["src/test/kotlin", "ic/src/test/kotlin"]
 "org.jetbrains.kotlin:kotlin-build-tools-api" = "2.3.20"
 "org.jetbrains.kotlinx:kotlinx-serialization-json" = "1.7.3"
 "com.michael-bull.kotlin-result:kotlin-result" = "2.3.1"
-"com.akuleshov7:ktoml-core" = "0.7.1"
 
 [test-dependencies]
 "org.junit.jupiter:junit-jupiter" = "5.11.3"
