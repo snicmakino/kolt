@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.18.0
+  KOLT_BOOTSTRAP_TAG: v0.18.1
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
