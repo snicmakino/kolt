@@ -127,7 +127,7 @@
 
 ## 6. CLI integration: dispatch と kolt update 拡張
 
-- [ ] 6.1 `ToolCommands.doTool` で `kolt tool run <alias> [-- args...]` を dispatch
+- [x] 6.1 `ToolCommands.doTool` で `kolt tool run <alias> [-- args...]` を dispatch
   - 第 2 引数が `run` 以外 (もしくは欠落) なら usage 表示 + `EXIT_CONFIG_ERROR` (R7.3 — `tool` の sub-action は v1 では `run` のみ)
   - alias を `KoltConfig.tools` で lookup、 不在なら `UnknownAlias` を返し、 既知 alias 一覧を stderr に提示 (R2.3)
   - alias 後の引数は verbatim 透過、 `--` 区切りは optional (`kolt tool run ktlint -F` も `kolt tool run ktlint -- -F` も等価) — 既存 `doTest` の pattern と整合 (R2.1)
