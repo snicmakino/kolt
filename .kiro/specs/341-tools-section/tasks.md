@@ -104,7 +104,7 @@
 
 ## 5. Launch: MANIFEST 読 と ToolLauncher
 
-- [ ] 5.1 (P) libarchive で jar (zip) MANIFEST.MF を読む utility を追加
+- [x] 5.1 (P) libarchive で jar (zip) MANIFEST.MF を読む utility を追加
   - `kolt.usertool` 内 internal 関数 `readMainClassFromJar(jarPath: String): Result<String, ToolLaunchError>` を実装
   - libarchive の `archive_read_open_filename` + entry iterate で `META-INF/MANIFEST.MF` を locate、 entry data を読み出す
   - `Main-Class:` 行を抽出 (RFC の line-folding は v1 では非対応で十分、 spec 準拠で改行直後 SP/HT 開始は continuation として concatenate)
