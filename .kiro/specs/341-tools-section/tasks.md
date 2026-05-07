@@ -170,7 +170,7 @@
   - _Requirements: 7.4_
   - _Boundary: DriftGuards (新規 sweep 追加)_
 
-- [ ] 7.3 ADR 0028 §3 を改訂し、 本 spec の凍結面追加を pin
+- [x] 7.3 ADR 0028 §3 を改訂し、 本 spec の凍結面追加を pin
   - §3 に新セクションを追加: `[tools]` toml schema additive 規則、 `tools_bundles` lockfile field additive 規則、 `kolt tool run` CLI surface 凍結、 `~/.kolt/tools/bundles/<alias>/<version>/` cache layout 凍結、 `EXIT_TOOL_ERROR=7` 凍結、 `kolt update` の scope 拡張 ([dependencies]+[tools] 両対応) を 1 セクションに集約
   - 既存 §3 の `~/.kolt/toolchains/{jdk|kotlinc|konanc}/` 凍結に並べる形で配置
   - ADR Summary の bullet 1 行も追加
