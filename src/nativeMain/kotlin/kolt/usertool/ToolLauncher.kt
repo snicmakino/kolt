@@ -3,6 +3,14 @@ package kolt.usertool
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getError
+import com.github.michaelbull.result.getOrElse
+import com.github.michaelbull.result.mapError
+import kolt.build.daemon.ensureBootstrapJavaBin
+import kolt.config.KoltPaths
+import kolt.infra.ProcessError
+import kolt.infra.eprintln
+import kolt.infra.executeCommand
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
@@ -180,3 +188,71 @@ internal fun extractMainClass(manifest: String): String? {
 @OptIn(ExperimentalForeignApi::class)
 private fun errString(handle: CPointer<cnames.structs.archive>): String =
   archive_error_string(handle)?.toKString() ?: "unknown libarchive error"
+
+/**
+ * Launch the runnable jar represented by [jarHandle] under the bootstrap JDK.
+ *
+ * Failure modes mapped to [ToolLaunchError] (cause-distinguishable, R5.4):
+ * - MANIFEST.MF cannot be read or `Main-Class:` is absent → `MainClassMissing` / `NotRunnableJar`.
+ *   The alias placeholder set by [readMainClassFromJar] is overwritten with the real alias here.
+ * - Bootstrap JDK install / probe fails → `JdkUnavailable`. The cause string captures the install
+ *   target so users can re-run install or diagnose disk / network issues.
+ * - The child process exits or is signalled. Successful exits (including non-zero) propagate as
+ *   `Result.Ok(exitCode)` so kolt's wrapper transparently passes through the tool's value (R2.2).
+ *   `executeCommand` returns `Err(NonZeroExit(code))` on non-zero — that is unwrapped here into
+ *   `Ok(code)`. Fork / wait / signal failures are surfaced as `JdkUnavailable` with the underlying
+ *   `ProcessError` in the cause: the design's three EXIT_TOOL_ERROR variants are `NotRunnableJar` /
+ *   `MainClassMissing` / `JdkUnavailable`, and process-spawn failures fit the "broken host
+ *   environment" axis rather than a tool-jar defect — keeping the variant count at three in line
+ *   with `ToolErrorTest`.
+ *
+ * `KOLT_VERBOSE=1` (in the [env] map) emits a single stderr line `tool=<alias> jdk=<javaBin>
+ * jar=<jarPath>` immediately before launch (R6.3). It is the only kolt-side stderr written on the
+ * launch path; tool stderr is inherited from the child.
+ */
+internal fun launch(
+  alias: String,
+  jarHandle: ToolJarHandle,
+  args: List<String>,
+  paths: KoltPaths,
+  env: Map<String, String>,
+  resolveJavaBin: (KoltPaths) -> Result<String, String> = ::ensureBootstrapJavaBinDefault,
+  exec: (List<String>, Map<String, String>) -> Result<Int, ProcessError> = ::executeCommand,
+  log: (String) -> Unit = ::eprintln,
+): Result<Int, ToolLaunchError> {
+  readMainClassFromJar(jarHandle.jarPath).getOrElse { err ->
+    return Err(rebrandWithAlias(err, alias))
+  }
+
+  val javaBin =
+    resolveJavaBin(paths).getOrElse { cause ->
+      return Err(ToolLaunchError.JdkUnavailable(cause = cause))
+    }
+
+  if (env["KOLT_VERBOSE"] == "1") {
+    log("tool=$alias jdk=$javaBin jar=${jarHandle.jarPath}")
+  }
+
+  val command = listOf(javaBin, "-jar", jarHandle.jarPath) + args
+  val result = exec(command, env)
+  val err = result.getError() ?: return Ok(result.getOrElse { error("unreachable") })
+  return when (err) {
+    is ProcessError.NonZeroExit -> Ok(err.exitCode)
+    else ->
+      // Fork / wait / signal failures: render the underlying ProcessError into the JDK
+      // cause so the user sees a non-empty diagnostic. See KDoc above for rationale.
+      Err(ToolLaunchError.JdkUnavailable(cause = "process launch failed: $err"))
+  }
+}
+
+private fun rebrandWithAlias(err: ToolLaunchError, alias: String): ToolLaunchError =
+  when (err) {
+    is ToolLaunchError.NotRunnableJar -> err.copy(alias = alias)
+    is ToolLaunchError.MainClassMissing -> err.copy(alias = alias)
+    is ToolLaunchError.JdkUnavailable -> err
+  }
+
+internal fun ensureBootstrapJavaBinDefault(paths: KoltPaths): Result<String, String> =
+  ensureBootstrapJavaBin(paths).mapError {
+    "bootstrap JDK install failed at ${it.jdkInstallDir}: ${it.cause.message}"
+  }

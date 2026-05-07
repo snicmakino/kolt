@@ -115,7 +115,7 @@
   - _Boundary: ToolLauncher (jar manifest read sub)_
   - _Depends: 3.1_
 
-- [ ] 5.2 `ToolLauncher.launch` で MANIFEST 検証 + bootstrap JDK + executeCommand を組む
+- [x] 5.2 `ToolLauncher.launch` で MANIFEST 検証 + bootstrap JDK + executeCommand を組む
   - `readMainClassFromJar(jarHandle.jarPath)` を呼び、 失敗は `ToolLaunchError` (NotRunnableJar / MainClassMissing) を上に伝播
   - `BootstrapJdk.ensureBootstrapJavaBin(paths)` を呼び、 失敗は `JdkUnavailable` に lift (R6.2)
   - `executeCommand(listOf(javaBin, "-jar", jarPath) + args, env)` で起動、 exit code をそのまま `Result.Ok(Int)` で return (R2.1, R2.2)

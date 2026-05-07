@@ -1,14 +1,21 @@
 package kolt.usertool
 
+import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import kolt.config.KoltPaths
+import kolt.infra.ProcessError
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
+import kolt.resolve.Coordinate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
@@ -146,7 +153,217 @@ class ToolLauncherTest {
     assertEquals("com.example.Main", joined)
   }
 
+  // ----- launch -----
+
+  @Test
+  fun launchPropagatesZeroExitCode() {
+    val tempDir = createTempDir("kolt_launch_zero_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val capturedCommands = mutableListOf<List<String>>()
+      val result =
+        launch(
+          alias = "stub",
+          jarHandle = handleFor(jarPath),
+          args = listOf("--foo", "bar"),
+          paths = KoltPaths(home = "/home/u"),
+          env = emptyMap(),
+          resolveJavaBin = { Ok("/fake/jdk/java") },
+          exec = { cmd, _ ->
+            capturedCommands.add(cmd)
+            Ok(0)
+          },
+        )
+      assertEquals(0, result.get())
+      assertEquals(
+        listOf(listOf("/fake/jdk/java", "-jar", jarPath, "--foo", "bar")),
+        capturedCommands,
+      )
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchPropagatesNonZeroExitCodeAsOk() {
+    val tempDir = createTempDir("kolt_launch_42_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val result =
+        launch(
+          alias = "stub",
+          jarHandle = handleFor(jarPath),
+          args = emptyList(),
+          paths = KoltPaths(home = "/home/u"),
+          env = emptyMap(),
+          resolveJavaBin = { Ok("/fake/jdk/java") },
+          exec = { _, _ -> Err(ProcessError.NonZeroExit(42)) },
+        )
+      assertEquals(42, result.get())
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchEmitsVerboseLineWhenKoltVerboseSet() {
+    val tempDir = createTempDir("kolt_launch_verbose_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val logged = mutableListOf<String>()
+      launch(
+        alias = "ktlint",
+        jarHandle = handleFor(jarPath),
+        args = emptyList(),
+        paths = KoltPaths(home = "/home/u"),
+        env = mapOf("KOLT_VERBOSE" to "1"),
+        resolveJavaBin = { Ok("/jdk25/bin/java") },
+        exec = { _, _ -> Ok(0) },
+        log = { logged.add(it) },
+      )
+      assertEquals(1, logged.size, "expected single verbose line, got $logged")
+      assertEquals("tool=ktlint jdk=/jdk25/bin/java jar=$jarPath", logged.single())
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchSuppressesVerboseLineWhenKoltVerboseUnset() {
+    val tempDir = createTempDir("kolt_launch_quiet_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val logged = mutableListOf<String>()
+      launch(
+        alias = "x",
+        jarHandle = handleFor(jarPath),
+        args = emptyList(),
+        paths = KoltPaths(home = "/home/u"),
+        env = emptyMap(),
+        resolveJavaBin = { Ok("/jdk/java") },
+        exec = { _, _ -> Ok(0) },
+        log = { logged.add(it) },
+      )
+      assertTrue(logged.isEmpty(), "verbose log unexpectedly emitted: $logged")
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchReturnsJdkUnavailableWhenResolveFails() {
+    val tempDir = createTempDir("kolt_launch_nojdk_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val result =
+        launch(
+          alias = "stub",
+          jarHandle = handleFor(jarPath),
+          args = emptyList(),
+          paths = KoltPaths(home = "/home/u"),
+          env = emptyMap(),
+          resolveJavaBin = { Err("install failed: disk full") },
+          exec = { _, _ -> error("exec must not be called when JDK is unavailable") },
+        )
+      val err = assertIs<ToolLaunchError.JdkUnavailable>(result.getError())
+      assertEquals("install failed: disk full", err.cause)
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchLiftsManifestMissingErrorWithAlias() {
+    val tempDir = createTempDir("kolt_launch_nomain_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Manifest-Version: 1.0\n"))
+      var execCalled = false
+      val result =
+        launch(
+          alias = "ktlint",
+          jarHandle = handleFor(jarPath),
+          args = emptyList(),
+          paths = KoltPaths(home = "/home/u"),
+          env = emptyMap(),
+          resolveJavaBin = { Ok("/jdk/java") },
+          exec = { _, _ ->
+            execCalled = true
+            Ok(0)
+          },
+        )
+      val err = assertIs<ToolLaunchError.MainClassMissing>(result.getError())
+      assertEquals("ktlint", err.alias)
+      assertFalse(execCalled, "exec must not run when MANIFEST has no Main-Class")
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchLiftsNotRunnableJarErrorWithAlias() {
+    val tempDir = createTempDir("kolt_launch_text_")
+    try {
+      val jarPath = "$tempDir/fake.jar"
+      writeFileAsString(jarPath, "not a zip\n")
+      val result =
+        launch(
+          alias = "detekt",
+          jarHandle = handleFor(jarPath),
+          args = emptyList(),
+          paths = KoltPaths(home = "/home/u"),
+          env = emptyMap(),
+          resolveJavaBin = { Ok("/jdk/java") },
+          exec = { _, _ -> Ok(0) },
+        )
+      val err = assertIs<ToolLaunchError.NotRunnableJar>(result.getError())
+      assertEquals("detekt", err.alias)
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
+  @Test
+  fun launchPassesEnvVerbatimToExec() {
+    val tempDir = createTempDir("kolt_launch_env_")
+    try {
+      val jarPath = "$tempDir/app.jar"
+      writeZip(jarPath, mapOf("META-INF/MANIFEST.MF" to "Main-Class: a.B\n"))
+      val expectedEnv = mapOf("FOO" to "bar", "KOLT_VERBOSE" to "1")
+      val seenEnvs = mutableListOf<Map<String, String>>()
+      launch(
+        alias = "x",
+        jarHandle = handleFor(jarPath),
+        args = emptyList(),
+        paths = KoltPaths(home = "/home/u"),
+        env = expectedEnv,
+        resolveJavaBin = { Ok("/jdk/java") },
+        exec = { _, env ->
+          seenEnvs.add(env)
+          Ok(0)
+        },
+        log = { /* swallow verbose */ },
+      )
+      assertEquals(listOf(expectedEnv), seenEnvs)
+    } finally {
+      removeDirectoryRecursive(tempDir)
+    }
+  }
+
   // ----- helpers -----
+
+  private fun handleFor(jarPath: String): ToolJarHandle =
+    ToolJarHandle(
+      jarPath = jarPath,
+      resolvedCoords = Coordinate("g", "a", "1.0"),
+      classifier = null,
+      lockfileChanged = false,
+    )
 
   @OptIn(ExperimentalForeignApi::class)
   private fun writeZip(path: String, entries: Map<String, String>) {
