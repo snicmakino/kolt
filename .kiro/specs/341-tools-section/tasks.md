@@ -177,3 +177,7 @@
   - 観測完了条件: ADR 改訂が docs/adr/0028 に commit され、 本 spec の Migration Strategy セクションが ADR の該当項に対応している
   - _Requirements: 5.4_
   - _Boundary: docs/adr/0028-v1-release-policy.md_
+
+## Implementation Notes
+
+- 各 task の commit 前に `./scripts/fmt.sh` (もしくは `kolt fmt`) を必ず実行する。 pre-commit hook が tree 全体に対して `fmt.sh --check` を走らせるため、 staged files 外でも未 format があると commit が reject される。 implementer subagent も READY_FOR_REVIEW 前に fmt を回しておくと、 parent の commit 段階での fmt-fail retry が減る。
