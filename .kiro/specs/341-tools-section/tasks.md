@@ -14,7 +14,7 @@
   - _Requirements: 4.1, 4.4_
   - _Boundary: Lockfile_
 
-- [ ] 1.2 (P) KoltPaths に tool cache 専用 path helper を追加
+- [x] 1.2 (P) KoltPaths に tool cache 専用 path helper を追加
   - `toolsBundleDir(alias: String, version: String): String` で `~/.kolt/tools/bundles/<alias>/<version>/` を計算
   - `toolsBundleJarPath(alias: String, version: String, fileName: String): String` で配下の jar path
   - 既存 `~/.kolt/tools/<filename>` (kolt-internal flat layout) と path 衝突しないこと unit test で確認

@@ -190,4 +190,62 @@ class KoltPathsTest {
     val b = paths.daemonSocketPath("hash", "2.3.20")
     kotlin.test.assertNotEquals(a, b)
   }
+
+  @Test
+  fun toolsBundleDirSegmentedByAliasAndVersion() {
+    val paths = KoltPaths("/home/user")
+    assertEquals(
+      "/home/user/.kolt/tools/bundles/ktlint/1.3.1",
+      paths.toolsBundleDir("ktlint", "1.3.1"),
+    )
+  }
+
+  @Test
+  fun toolsBundleDirDifferentHome() {
+    val paths = KoltPaths("/root")
+    assertEquals(
+      "/root/.kolt/tools/bundles/detekt/1.23.6",
+      paths.toolsBundleDir("detekt", "1.23.6"),
+    )
+  }
+
+  @Test
+  fun toolsBundleDirDifferentVersionsProduceDifferentDirectories() {
+    val paths = KoltPaths("/home/user")
+    val a = paths.toolsBundleDir("ktlint", "1.3.0")
+    val b = paths.toolsBundleDir("ktlint", "1.3.1")
+    kotlin.test.assertNotEquals(a, b)
+  }
+
+  @Test
+  fun toolsBundleJarPathBuildsUnderToolsBundleDir() {
+    val paths = KoltPaths("/home/user")
+    assertEquals(
+      "/home/user/.kolt/tools/bundles/ktlint/1.3.1/ktlint-cli-1.3.1-all.jar",
+      paths.toolsBundleJarPath("ktlint", "1.3.1", "ktlint-cli-1.3.1-all.jar"),
+    )
+  }
+
+  @Test
+  fun toolsBundleJarPathSharesToolsBundleDir() {
+    val paths = KoltPaths("/home/user")
+    val dir = paths.toolsBundleDir("detekt", "1.23.6")
+    assertEquals(
+      "$dir/detekt-cli-1.23.6.jar",
+      paths.toolsBundleJarPath("detekt", "1.23.6", "detekt-cli-1.23.6.jar"),
+    )
+  }
+
+  @Test
+  fun toolsBundleDirDoesNotCollideWithFlatToolsLayout() {
+    // Existing kolt-internal flat layout: ~/.kolt/tools/<filename> (e.g.
+    // ktfmt-0.54-jar-with-dependencies.jar).
+    // tools_bundles/<alias>/<version>/ must live under a separate subdir so that a user-declared
+    // alias matching an internal tool name (e.g. "ktfmt") cannot collide with the flat artifact.
+    val paths = KoltPaths("/home/user")
+    val bundleDir = paths.toolsBundleDir("ktfmt", "0.54")
+    val flatArtifact = "${paths.toolsDir}/ktfmt-0.54-jar-with-dependencies.jar"
+    kotlin.test.assertNotEquals(bundleDir, flatArtifact)
+    kotlin.test.assertTrue(bundleDir.startsWith("${paths.toolsDir}/bundles/"))
+  }
 }

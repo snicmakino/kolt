@@ -46,6 +46,13 @@ internal data class KoltPaths(val home: String) {
   fun konancBin(version: String): String = "${konancPath(version)}/bin/konanc"
 
   fun cinteropBin(version: String): String = "${konancPath(version)}/bin/cinterop"
+
+  // Per-alias bundle layout for `[tools]` runnable jars (separate from the flat
+  // `$toolsDir/<filename>` layout used by kolt-internal ktfmt / junit-console).
+  fun toolsBundleDir(alias: String, version: String): String = "$toolsDir/bundles/$alias/$version"
+
+  fun toolsBundleJarPath(alias: String, version: String, fileName: String): String =
+    "${toolsBundleDir(alias, version)}/$fileName"
 }
 
 internal fun resolveKoltPaths(): Result<KoltPaths, String> =
