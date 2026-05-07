@@ -381,7 +381,7 @@ private fun copyDirRecursive(src: String, dest: String): Result<Unit, CopyFailed
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun copyFile(src: String, dest: String): Result<Unit, CopyFailed> {
+internal fun copyFile(src: String, dest: String): Result<Unit, CopyFailed> {
   val srcFp = fopen(src, "rb") ?: return Err(CopyFailed(src))
   try {
     val destFp = fopen(dest, "wb") ?: return Err(CopyFailed(dest))

@@ -8,9 +8,14 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.resolve.compareVersions
+import kolt.usertool.RawToolEntry
+import kolt.usertool.ToolEntry
+import kolt.usertool.ToolSectionParseError
+import kolt.usertool.parseToolSection
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Transient
 
 const val MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2"
 
@@ -106,6 +111,13 @@ data class KoltConfig(
   // identical to [dependencies] (`"group:artifact" = "version"`), so the value
   // type stays a plain Map<String, String> rather than a wrapper data class.
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  // [tools.<alias>] declares per-project runnable jar tools (ktlint / detekt / ...).
+  // Validated by ToolSectionParse, isolated from [dependencies] / [classpaths].
+  // ktoml never decodes into KoltConfig directly (RawKoltConfig owns the wire
+  // shape via RawToolEntry), so this field is @Transient to avoid forcing
+  // ToolEntry / Coordinate to be @Serializable across kolt.usertool / kolt.resolve.
+  // See design.md §Components / ToolSection.
+  @Transient val tools: Map<String, ToolEntry> = emptyMap(),
   @SerialName("test") val testSection: TestSection = TestSection(),
   @SerialName("run") val runSection: RunSection = RunSection(),
 )
@@ -153,6 +165,7 @@ private data class RawKoltConfig(
   val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
   val cinterop: List<CinteropConfig> = emptyList(),
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  val tools: Map<String, RawToolEntry>? = null,
   val test: RawTestSection? = null,
   val run: RawRunSection? = null,
 )
@@ -353,6 +366,21 @@ private fun validateSysPropsProjectDirs(
   return Ok(Unit)
 }
 
+// Render a ToolSectionParseError for the existing ConfigError.ParseFailed
+// envelope. The detailed `ToolError` sealed (task 3.1) will replace this with
+// a structured `tool '<alias>': parse error: ...` prefix; for now we keep the
+// message inline so kolt.toml load failures stay loud and self-explanatory.
+private fun formatToolSectionParseError(err: ToolSectionParseError): String =
+  when (err) {
+    is ToolSectionParseError.ForbiddenField ->
+      "[tools.${err.alias}]: field '${err.field}' is not allowed in [tools] entries"
+    is ToolSectionParseError.InvalidAlias -> "[tools.${err.alias}]: ${err.reason}"
+    is ToolSectionParseError.MalformedCoords ->
+      "[tools.${err.alias}]: malformed coords '${err.coords}': ${err.reason}"
+    is ToolSectionParseError.DuplicateAlias -> "[tools.${err.alias}]: duplicate alias"
+    is ToolSectionParseError.MissingCoords -> "[tools.${err.alias}]: 'coords' is required"
+  }
+
 // ADR 0023 §3: scalar `[build] target = "X"` and `[build.targets.X]` are
 // mutually exclusive. Multi-target form is reserved — exactly one entry
 // is de-sugared into the scalar form, two or more are rejected.
@@ -457,6 +485,10 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
     validateSysPropsProjectDirs(testSysProps, runSysProps).getError()?.let {
       return Err(it)
     }
+    val cleanedTools =
+      parseToolSection(raw.tools).getOrElse {
+        return Err(ConfigError.ParseFailed(formatToolSectionParseError(it)))
+      }
     Ok(
       KoltConfig(
         name = raw.name,
@@ -480,6 +512,7 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
         repositories = cleanedRepos,
         cinterop = raw.cinterop,
         classpaths = cleanedClasspaths,
+        tools = cleanedTools,
         testSection = TestSection(testSysProps),
         runSection = RunSection(runSysProps),
       )

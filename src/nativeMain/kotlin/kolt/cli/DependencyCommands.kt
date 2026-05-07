@@ -12,6 +12,7 @@ import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
 import kolt.resolve.*
+import kolt.usertool.ToolEntry
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -216,7 +217,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
   val bundleSeedsAll =
     config.classpaths.values.fold(emptyMap<String, String>()) { acc, m -> acc + m }
   val allSeeds = mainSeeds + testSeeds + bundleSeedsAll
-  if (allSeeds.isEmpty()) {
+  if (allSeeds.isEmpty() && config.tools.isEmpty()) {
     println("no dependencies to update")
     return Ok(Unit)
   }
@@ -227,41 +228,107 @@ private fun doUpdateInner(): Result<Unit, Int> {
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  println("updating dependencies...")
   val resolverDeps = createResolverDeps()
-  val resolveResult =
-    resolve(
-        config,
-        null,
-        paths.cacheBase,
-        resolverDeps,
-        mainSeeds = mainSeeds,
-        testSeeds = testSeeds,
-      )
-      .getOrElse { error ->
+  val depsCount: Int
+  val bundleEntryCount: Int
+  val mainAndBundleLockfile: Lockfile
+  if (allSeeds.isEmpty()) {
+    // Only [tools] declared: skip the [dependencies] / [classpaths] resolve to keep the user's
+    // dependencies-only update path regression-free, and start from an empty lockfile shape so
+    // the tools_bundles overlay below is the sole change.
+    depsCount = 0
+    bundleEntryCount = 0
+    mainAndBundleLockfile = buildLockfileFromResolved(config, deps = emptyList())
+  } else {
+    println("updating dependencies...")
+    val resolveResult =
+      resolve(
+          config,
+          null,
+          paths.cacheBase,
+          resolverDeps,
+          mainSeeds = mainSeeds,
+          testSeeds = testSeeds,
+        )
+        .getOrElse { error ->
+          eprintln(formatResolveError(error))
+          return Err(EXIT_DEPENDENCY_ERROR)
+        }
+
+    // Bundles re-resolve with `existingLock = null` so `[classpaths.<name>]`
+    // follow the same update policy as main / test.
+    val bundleResolutions =
+      resolveAllBundles(config, existingLock = null, paths.cacheBase, resolverDeps).getOrElse {
+        error ->
         eprintln(formatResolveError(error))
         return Err(EXIT_DEPENDENCY_ERROR)
       }
+    val bundleDeps = bundleResolutions.mapValues { it.value.deps }
+    depsCount = resolveResult.deps.size
+    bundleEntryCount = bundleDeps.values.sumOf { it.size }
+    mainAndBundleLockfile = buildLockfileFromResolved(config, resolveResult.deps, bundleDeps)
+  }
 
-  // Bundles re-resolve with `existingLock = null` so `[classpaths.<name>]`
-  // follow the same update policy as main / test.
-  val bundleResolutions =
-    resolveAllBundles(config, existingLock = null, paths.cacheBase, resolverDeps).getOrElse { error
-      ->
-      eprintln(formatResolveError(error))
-      return Err(EXIT_DEPENDENCY_ERROR)
+  // Re-resolve [tools] independently of [dependencies] / [classpaths] (R4.1) using the
+  // transitive-skip path; merge into the same atomic lockfile write so [dependencies] readers
+  // never observe a half-written file.
+  val toolsBundles =
+    if (config.tools.isEmpty()) emptyMap()
+    else {
+      println("updating tools...")
+      buildToolsBundleLockMap(config.tools) { coord, classifier, _ ->
+          resolveSingleArtifact(
+            coord = coord,
+            classifier = classifier,
+            repos = config.repositories.values.toList(),
+            cacheBase = paths.cacheBase,
+            deps = resolverDeps,
+          )
+        }
+        .getOrElse { error ->
+          eprintln(formatResolveError(error))
+          return Err(EXIT_DEPENDENCY_ERROR)
+        }
     }
-  val bundleDeps = bundleResolutions.mapValues { it.value.deps }
 
-  val lockfile = buildLockfileFromResolved(config, resolveResult.deps, bundleDeps)
+  val lockfile = mainAndBundleLockfile.copy(toolsBundles = toolsBundles)
   val lockJson = serializeLockfile(lockfile)
   writeFileAsString(LOCK_FILE, lockJson).getOrElse { error ->
     eprintln("error: could not write ${error.path}")
     return Err(EXIT_DEPENDENCY_ERROR)
   }
-  val bundleEntryCount = bundleDeps.values.sumOf { it.size }
-  println("updated ${resolveResult.deps.size + bundleEntryCount} dependencies")
+  val toolsCount = toolsBundles.values.sumOf { it.size }
+  println("updated ${depsCount + bundleEntryCount + toolsCount} dependencies")
   return Ok(Unit)
+}
+
+/**
+ * Map each `[tools.<alias>]` entry through [resolve] (typically
+ * `BundleResolver.resolveSingleArtifact`) and gather the per-alias lockfile shape. Pure
+ * orchestration so unit tests can drive it with a stubbed resolver — mirrors the design contract
+ * that `kolt update` is the sole `[tools]` write path.
+ *
+ * The lambda signature matches `resolveSingleArtifact` (coord, classifier, deps), but the third
+ * argument is unused inside the helper and exists only so the production wiring can pass through
+ * any state the caller wants without changing the helper shape later.
+ */
+internal fun buildToolsBundleLockMap(
+  tools: Map<String, ToolEntry>,
+  resolve: (Coordinate, String?, ResolverDeps?) -> Result<SingleArtifact, ResolveError>,
+): Result<Map<String, Map<String, LockEntry>>, ResolveError> {
+  if (tools.isEmpty()) return Ok(emptyMap())
+  val out = LinkedHashMap<String, Map<String, LockEntry>>(tools.size)
+  for ((alias, entry) in tools) {
+    val artifact =
+      resolve(entry.coords, entry.classifier, null).getOrElse {
+        return Err(it)
+      }
+    val ga = "${entry.coords.group}:${entry.coords.artifact}"
+    val innerKey = if (entry.classifier == null) ga else "$ga:${entry.classifier}"
+    out[alias] =
+      mapOf(innerKey to LockEntry(version = entry.coords.version, sha256 = artifact.sha256))
+  }
+  return Ok(out)
 }
 
 internal data class DepsTreeSeeds(

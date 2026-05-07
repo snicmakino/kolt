@@ -234,4 +234,76 @@ class LockfileTest {
     assertTrue(serialized.contains("\"version\": 4"), "must emit schema version 4")
     assertTrue(serialized.contains("\"test\": true"), "must emit per-entry test flag when true")
   }
+
+  @Test
+  fun serializeRoundTripPreservesToolsBundles() {
+    val lockfile =
+      Lockfile(
+        version = 4,
+        kotlin = "2.1.0",
+        jvmTarget = "17",
+        dependencies = emptyMap(),
+        toolsBundles =
+          mapOf(
+            "ktlint" to
+              mapOf("com.pinterest.ktlint:ktlint-cli:all" to LockEntry("1.3.1", "ktlinthash")),
+            "detekt" to
+              mapOf("io.gitlab.arturbosch.detekt:detekt-cli" to LockEntry("1.23.6", "detekthash")),
+          ),
+      )
+    val serialized = serializeLockfile(lockfile)
+    val reparsed = assertNotNull(parseLockfile(serialized).get())
+    assertEquals(lockfile, reparsed)
+    assertTrue(serialized.contains("\"tools_bundles\""), "must emit tools_bundles field")
+
+    val detektIndex = serialized.indexOf("\"detekt\"")
+    val ktlintIndex = serialized.indexOf("\"ktlint\"")
+    assertTrue(
+      detektIndex in 0..<ktlintIndex,
+      "tool aliases should be sorted alphabetically (detekt before ktlint)",
+    )
+  }
+
+  @Test
+  fun parseLockfileWithoutToolsBundlesYieldsEmptyMap() {
+    val json =
+      """
+            {
+                "version": 4,
+                "kotlin": "2.1.0",
+                "jvm_target": "17",
+                "dependencies": {}
+            }
+        """
+        .trimIndent()
+    val lockfile = assertNotNull(parseLockfile(json).get())
+    assertEquals(emptyMap(), lockfile.toolsBundles)
+  }
+
+  @Test
+  fun parseLockfileWithToolsBundles() {
+    val json =
+      """
+            {
+                "version": 4,
+                "kotlin": "2.1.0",
+                "jvm_target": "17",
+                "dependencies": {},
+                "tools_bundles": {
+                    "ktlint": {
+                        "com.pinterest.ktlint:ktlint-cli:all": {
+                            "version": "1.3.1",
+                            "sha256": "ktlinthash"
+                        }
+                    }
+                }
+            }
+        """
+        .trimIndent()
+    val lockfile = assertNotNull(parseLockfile(json).get())
+    val bundle = assertNotNull(lockfile.toolsBundles["ktlint"])
+    val entry = assertNotNull(bundle["com.pinterest.ktlint:ktlint-cli:all"])
+    assertEquals("1.3.1", entry.version)
+    assertEquals("ktlinthash", entry.sha256)
+  }
 }

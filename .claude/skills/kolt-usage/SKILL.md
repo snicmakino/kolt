@@ -61,6 +61,7 @@ kolt fetch                  Resolve dependencies and download JARs
 kolt update                 Re-resolve dependencies and update kolt.lock
 kolt tree                   Show dependency tree
 kolt outdated               List dependencies with newer Maven Central versions
+kolt tool run <alias> ...   Run a [tools] alias (resolves jar, launches via java -jar)
 kolt fmt                    Format source files with ktfmt
 kolt fmt --check            Check formatting (CI mode)
 kolt clean                  Remove build artifacts

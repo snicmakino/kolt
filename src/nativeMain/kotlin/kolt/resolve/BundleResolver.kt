@@ -89,6 +89,79 @@ internal fun resolveBundle(
 // policy. Re-verifying every warm bundle jar would defeat the reuse-path
 // performance win for no extra safety the main `kolt fetch` call doesn't
 // already provide on the next resolveTransitive pass.
+/**
+ * Single-artifact variant of `resolveBundle` that skips both POM-derived transitive enumeration and
+ * Gradle-module-metadata redirects.
+ *
+ * Intended for `[tools]` runnable jars (R2.4 + design.md §Resolver / ToolResolution): the caller
+ * supplies a Maven coordinate and an optional classifier and gets back the cache-resident jar's
+ * path + SHA-256, with no traversal of dependency graphs. The function is purely additive — the
+ * `[classpaths]` `resolveBundle` path is untouched.
+ *
+ * Returned `groupArtifact` and `version` mirror the input `coord`. `classifier` is echoed back so
+ * lockfile keying can include it.
+ */
+fun resolveSingleArtifact(
+  coord: Coordinate,
+  classifier: String?,
+  repos: List<String>,
+  cacheBase: String,
+  deps: ResolverDeps,
+): Result<SingleArtifact, ResolveError> {
+  val groupArtifact = "${coord.group}:${coord.artifact}"
+  val relativePath = buildRelativeJarPath(coord, classifier)
+  val cachePath = "$cacheBase/$relativePath"
+
+  if (!deps.fileExists(cachePath)) {
+    val parentDir = cachePath.substringBeforeLast('/')
+    deps.ensureDirectoryRecursive(parentDir).getOrElse {
+      return Err(ResolveError.DirectoryCreateFailed(parentDir))
+    }
+    downloadFromRepositories(
+        repos,
+        cachePath,
+        { repo -> "$repo/$relativePath" },
+        deps::downloadFile,
+      )
+      .getOrElse { failure ->
+        return Err(ResolveError.DownloadFailed(groupArtifact, failure))
+      }
+  }
+
+  val sha =
+    deps.computeSha256(cachePath).getOrElse { error ->
+      return Err(ResolveError.HashComputeFailed(groupArtifact, error))
+    }
+
+  return Ok(
+    SingleArtifact(
+      groupArtifact = groupArtifact,
+      version = coord.version,
+      classifier = classifier,
+      cachePath = cachePath,
+      sha256 = sha,
+    )
+  )
+}
+
+data class SingleArtifact(
+  val groupArtifact: String,
+  val version: String,
+  val classifier: String?,
+  val cachePath: String,
+  val sha256: String,
+)
+
+// Kept private to BundleResolver because the single-artifact path does not need to share Maven
+// path construction with the transitive resolver — `buildCachePath` there has no classifier
+// parameter, and exposing one there would invite accidental classifier-bearing transitive
+// resolves. See ADR 0028 §3 freeze on the `[classpaths]` resolution shape.
+private fun buildRelativeJarPath(coord: Coordinate, classifier: String?): String {
+  val groupPath = coord.group.replace('.', '/')
+  val suffix = if (classifier != null) "-$classifier" else ""
+  return "$groupPath/${coord.artifact}/${coord.version}/${coord.artifact}-${coord.version}$suffix.jar"
+}
+
 internal fun materialiseBundleJarsFromLock(
   resolution: BundleResolution,
   config: KoltConfig,

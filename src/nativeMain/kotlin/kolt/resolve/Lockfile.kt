@@ -38,6 +38,7 @@ data class Lockfile(
   val jvmTarget: String,
   val dependencies: Map<String, LockEntry>,
   val classpathBundles: Map<String, Map<String, LockEntry>> = emptyMap(),
+  val toolsBundles: Map<String, Map<String, LockEntry>> = emptyMap(),
 )
 
 // Result of loading kolt.lock at the start of a CLI command. Splits the
@@ -101,6 +102,8 @@ private data class LockfileJson(
   val dependencies: Map<String, LockEntryJson>,
   @SerialName("classpath_bundles")
   val classpathBundles: Map<String, Map<String, LockEntryJson>> = emptyMap(),
+  @SerialName("tools_bundles")
+  val toolsBundles: Map<String, Map<String, LockEntryJson>> = emptyMap(),
 )
 
 private val lockfileJson = Json {
@@ -135,6 +138,12 @@ fun parseLockfile(jsonString: String): Result<Lockfile, LockfileError> {
             LockEntry(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
           }
         },
+      toolsBundles =
+        parsed.toolsBundles.mapValues { (_, bundleEntries) ->
+          bundleEntries.mapValues { (_, v) ->
+            LockEntry(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
+          }
+        },
     )
   )
 }
@@ -157,6 +166,17 @@ fun serializeLockfile(lockfile: Lockfile): String {
               k to LockEntryJson(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
             }
       }
+  val sortedToolsBundles =
+    lockfile.toolsBundles.entries
+      .sortedBy { it.key }
+      .associate { (alias, entries) ->
+        alias to
+          entries.entries
+            .sortedBy { it.key }
+            .associate { (k, v) ->
+              k to LockEntryJson(v.version, v.sha256, v.transitive, v.test, v.redirectTarget)
+            }
+      }
   val json =
     LockfileJson(
       version = lockfile.version,
@@ -164,6 +184,7 @@ fun serializeLockfile(lockfile: Lockfile): String {
       jvmTarget = lockfile.jvmTarget,
       dependencies = sortedDeps,
       classpathBundles = sortedBundles,
+      toolsBundles = sortedToolsBundles,
     )
   return lockfileJson.encodeToString(LockfileJson.serializer(), json) + "\n"
 }

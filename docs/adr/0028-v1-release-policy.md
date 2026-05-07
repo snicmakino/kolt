@@ -22,6 +22,11 @@ date: 2026-04-24
 - Yank policy: shipped tags are immutable and their tarballs stay
   reachable; yank status is declared in a `YANKED` manifest that
   `install.sh` consults (§5).
+- The `[tools]` surface added in spec #341 — `[tools]` toml schema,
+  `tools_bundles` lockfile field, `kolt tool run` CLI subcommand,
+  `~/.kolt/tools/bundles/<alias>/<version>/` cache layout, and
+  `EXIT_TOOL_ERROR=7` — is v1-stable under §3, with `kolt update`
+  extended to refresh `[tools]` pins alongside `[dependencies]` (§3).
 
 ## Context and Problem Statement
 
@@ -120,6 +125,33 @@ informal decision that currently lives only in conversation.
   kolt version and rely on hits surviving patch and minor upgrades.
   The bootstrap JDK (ADR 0017 §1) shares this directory, so caching
   also warms the daemon's first run.
+- **`[tools]` surface (spec #341).** Six related surfaces ship together
+  and are jointly v1-stable:
+  - The `[tools]` `kolt.toml` section follows the additive rule: new
+    optional keys may land in any minor; the `coords` field and the
+    alias regex `^[a-z][a-z0-9_-]{0,63}$` will not change shape across
+    1.x without a major.
+  - The `tools_bundles` field in `kolt.lock` follows the additive
+    rule: presence is optional (absent = empty map); the
+    `Map<alias, Map<group:artifact[:classifier], LockEntry>>` shape
+    will not change across 1.x without a major.
+  - The `kolt tool run <alias> [-- args...]` CLI surface, including
+    the optional `--` separator after the alias and verbatim argv
+    passthrough, will not change semantics across 1.x without a
+    major. Adding new `kolt tool` sub-actions (`list`, `clear-cache`,
+    ...) is a minor.
+  - The `~/.kolt/tools/bundles/<alias>/<version>/` cache layout will
+    not move or rename across 1.x without a major. It is disjoint
+    from the kolt-internal flat `~/.kolt/tools/<filename>` layout
+    used for ktfmt / junit-console; the two are not interchangeable.
+  - `EXIT_TOOL_ERROR=7` (Main-Class missing / non-runnable jar /
+    JDK unavailable) will not change across 1.x without a major.
+    The other tool-related exit codes (`EXIT_CONFIG_ERROR=2`,
+    `EXIT_DEPENDENCY_ERROR=3`) follow the existing CLI-surface rule
+    above.
+  - `kolt update` re-resolves both `[dependencies]` and `[tools]` in
+    a single invocation. Shrinking that scope is a major; growing it
+    (e.g. adding a future `[plugins]` section) is a minor.
 - **Wire protocol.** The daemon protocol carries its own version
   (existing `protocolVersion` in the frame header, ADR 0016). A bump
   is allowed at a minor boundary if the native client negotiates down.

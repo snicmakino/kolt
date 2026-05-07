@@ -7,4 +7,5 @@ const val EXIT_DEPENDENCY_ERROR = 3
 const val EXIT_TEST_ERROR = 4
 const val EXIT_FORMAT_ERROR = 5
 const val EXIT_LOCK_TIMEOUT = 6
+const val EXIT_TOOL_ERROR = 7
 const val EXIT_COMMAND_NOT_FOUND = 127
