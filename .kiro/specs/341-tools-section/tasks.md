@@ -39,7 +39,7 @@
   - _Requirements: 1.2_
   - _Boundary: ToolSectionParse_
 
-- [ ] 2.2 `RawToolEntry` / `ToolEntry` / `KoltConfig.tools` field を追加
+- [x] 2.2 `RawToolEntry` / `ToolEntry` / `KoltConfig.tools` field を追加
   - `RawToolEntry(coords: String?, dependsOn: String?, args: List<String>?, main: String?)` で `@SerialName("depends-on")` 付きの 4 field を nullable 宣言
   - `ToolEntry(coords: Coordinate, classifier: String?)` を public validated 型として導入
   - `RawKoltConfig.tools: Map<String, RawToolEntry>?` と `KoltConfig.tools: Map<String, ToolEntry>` を additive 追加 (既存 field 順序を保つ)

@@ -8,9 +8,12 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.resolve.compareVersions
+import kolt.usertool.ToolEntry
+import kolt.usertool.parseCoordsString
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Transient
 
 const val MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2"
 
@@ -106,8 +109,28 @@ data class KoltConfig(
   // identical to [dependencies] (`"group:artifact" = "version"`), so the value
   // type stays a plain Map<String, String> rather than a wrapper data class.
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  // [tools.<alias>] declares per-project runnable jar tools (ktlint / detekt / ...).
+  // Validated by ToolSectionParse, isolated from [dependencies] / [classpaths].
+  // ktoml never decodes into KoltConfig directly (RawKoltConfig owns the wire
+  // shape via RawToolEntry), so this field is @Transient to avoid forcing
+  // ToolEntry / Coordinate to be @Serializable across kolt.usertool / kolt.resolve.
+  // See design.md §Components / ToolSection.
+  @Transient val tools: Map<String, ToolEntry> = emptyMap(),
   @SerialName("test") val testSection: TestSection = TestSection(),
   @SerialName("run") val runSection: RunSection = RunSection(),
+)
+
+// Raw shape for `[tools.<alias>]`. `coords` is the only allowlisted field;
+// `dependsOn` / `args` / `main` are declared nullable so ToolSectionParse can
+// reject orchestration fields explicitly (R7.1, R7.2). Other unknown keys are
+// silently dropped by ktoml's `ignoreUnknownNames=true` and may be tightened
+// later additively. See design.md §Components / ToolSectionParse.
+@Serializable
+internal data class RawToolEntry(
+  val coords: String? = null,
+  @SerialName("depends-on") val dependsOn: String? = null,
+  val args: List<String>? = null,
+  val main: String? = null,
 )
 
 private val toml = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = true))
@@ -153,6 +176,7 @@ private data class RawKoltConfig(
   val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
   val cinterop: List<CinteropConfig> = emptyList(),
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
+  val tools: Map<String, RawToolEntry>? = null,
   val test: RawTestSection? = null,
   val run: RawRunSection? = null,
 )
@@ -457,6 +481,23 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
     validateSysPropsProjectDirs(testSysProps, runSysProps).getError()?.let {
       return Err(it)
     }
+    // Lift [tools.<alias>] entries from RawToolEntry to ToolEntry. Task 2.2
+    // wires the field plumbing and happy-path coords parse only; full
+    // validation (alias regex, forbidden-field reject, error envelope) is
+    // owned by ToolSectionParse and integrated into the validation chain in
+    // task 2.4.
+    val cleanedTools = LinkedHashMap<String, ToolEntry>()
+    raw.tools?.forEach { (rawAlias, rawEntry) ->
+      val alias = rawAlias.removeSurrounding("\"")
+      val coordsString =
+        rawEntry.coords
+          ?: return Err(ConfigError.ParseFailed("[tools.$alias]: 'coords' is required"))
+      val (coordinate, classifier) =
+        parseCoordsString(coordsString).getOrElse {
+          return Err(ConfigError.ParseFailed("[tools.$alias]: $it"))
+        }
+      cleanedTools[alias] = ToolEntry(coordinate, classifier)
+    }
     Ok(
       KoltConfig(
         name = raw.name,
@@ -480,6 +521,7 @@ fun parseConfig(tomlString: String): Result<KoltConfig, ConfigError> {
         repositories = cleanedRepos,
         cinterop = raw.cinterop,
         classpaths = cleanedClasspaths,
+        tools = cleanedTools,
         testSection = TestSection(testSysProps),
         runSection = RunSection(runSysProps),
       )
