@@ -84,7 +84,7 @@
   - _Requirements: 2.4, 3.1_
   - _Boundary: BundleResolver_
 
-- [ ] 4.2 `ToolResolution.ensureTool` の happy-path (cache + first fetch + lockfile write-through) を実装
+- [x] 4.2 `ToolResolution.ensureTool` の happy-path (cache + first fetch + lockfile write-through) を実装
   - alias から `ToolEntry` を引き、 `paths.toolsBundleJarPath` 配下に jar が存在し lockfile pin の `version` / `sha256` と一致するなら network skip
   - lockfile に該当 alias の pin 不在 (初回) は `BundleResolver.resolveSingleArtifact` で fetch、 SHA-256 verify、 cache に格納、 lockfile に新 pin を書き戻す (R3.1, R4.1)
   - cache miss だが lockfile pin あり の場合、 pin の coords / SHA-256 に従って fetch・verify (R4.2)
