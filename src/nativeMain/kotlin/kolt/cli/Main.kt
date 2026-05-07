@@ -83,6 +83,7 @@ fun main(args: Array<String>) {
     "fetch" -> doFetch().getOrElse { exitProcess(it) }
     "update" -> doUpdate().getOrElse { exitProcess(it) }
     "tree" -> doTree().getOrElse { exitProcess(it) }
+    "outdated" -> doOutdated(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "toolchain" -> doToolchain(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "daemon" -> doDaemon(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "cache" -> doCache(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
@@ -165,6 +166,7 @@ private fun printUsage() {
   eprintln("  fetch      Resolve dependencies and download JARs")
   eprintln("  update     Re-resolve dependencies and update kolt.lock")
   eprintln("  tree       Show dependency tree")
+  eprintln("  outdated   Show dependencies with newer versions on Maven Central")
   eprintln("  toolchain  Manage toolchains (install, list, remove)")
   eprintln("  daemon     Manage compiler daemons (stop)")
   eprintln("  cache      Manage the global dependency cache (clean)")

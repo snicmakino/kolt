@@ -385,7 +385,7 @@ internal fun parseDependencyLockTimeoutMs(): Long {
 // Wrap a deps-system entry in the project-local advisory lock. Mirrors
 // `withProjectLock` in BuildCommands but routes IO failures to
 // EXIT_DEPENDENCY_ERROR (the deps tree of CLI exit codes — task 3.2).
-private inline fun <T> withDependencyLock(crossinline body: () -> Result<T, Int>): Result<T, Int> {
+internal inline fun <T> withDependencyLock(crossinline body: () -> Result<T, Int>): Result<T, Int> {
   ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
     eprintln("error: could not create directory ${error.path}")
     return Err(EXIT_DEPENDENCY_ERROR)

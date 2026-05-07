@@ -60,6 +60,7 @@ kolt remove <ga>            Remove a dependency (auto-searches both sections)
 kolt fetch                  Resolve dependencies and download JARs
 kolt update                 Re-resolve dependencies and update kolt.lock
 kolt tree                   Show dependency tree
+kolt outdated               List dependencies with newer Maven Central versions
 kolt fmt                    Format source files with ktfmt
 kolt fmt --check            Check formatting (CI mode)
 kolt clean                  Remove build artifacts
@@ -247,6 +248,17 @@ kolt add --test io.kotest:kotest-runner-junit5:5.8.0      # test dependency
 - `kolt.lock` records versions and SHA-256 hashes for reproducible builds
 - Global cache at `~/.kolt/cache/` (Maven-compatible layout, shared across projects)
 - `kolt update` to re-resolve and refresh hashes
+
+### Checking for newer versions
+
+```sh
+kolt outdated                       # show all outdated [dependencies] and [test-dependencies]
+kolt outdated --filter major        # only major upgrades
+kolt outdated --filter major,minor  # major or minor
+kolt outdated --json                # machine-readable
+```
+
+Output groups by section, shows current → latest, and tags major bumps. `[classpaths.*]` bundles are excluded — they pin to a contract and a stale entry is intentional. Per-dep fetch failures surface as `(error: ...)` rows; the overall exit code is non-zero only when at least one fetch failed.
 
 ## Testing
 
