@@ -1422,7 +1422,8 @@ internal fun resolveCompilerBackend(
   bundledKotlinVersion: String = BUNDLED_DAEMON_KOTLIN_VERSION,
   pluginJars: Map<String, List<String>> = emptyMap(),
   daemonDirCreator: (String) -> Result<Unit, MkdirFailed> = ::ensureDirectoryRecursive,
-  daemonBackendFactory: (DaemonSetup, Map<String, List<String>>) -> CompilerBackend =
+  daemonBackendFactory:
+    (DaemonSetup, Map<String, List<String>>, String?, String?) -> CompilerBackend =
     ::createDaemonBackend,
   warningSink: (String) -> Unit = ::eprintln,
   preconditionResolver:
@@ -1459,7 +1460,8 @@ internal fun resolveCompilerBackend(
   }
 
   return FallbackCompilerBackend(
-    primary = daemonBackendFactory(setup, pluginJars),
+    primary =
+      daemonBackendFactory(setup, pluginJars, config.kotlin.version, config.kotlin.compiler),
     fallback = subprocessBackend,
     onFallback = ::reportFallback,
   )
@@ -1521,12 +1523,17 @@ internal fun createNativeDaemonBackend(setup: NativeDaemonSetup): NativeCompiler
 internal fun createDaemonBackend(
   setup: DaemonSetup,
   pluginJars: Map<String, List<String>>,
+  kotlinLanguageVersion: String?,
+  kotlinCompilerVersion: String?,
 ): CompilerBackend {
-  // Plugin jars are baked into the daemon at spawn time. A fingerprint
-  // in the socket name forces a new daemon when the plugin set changes.
-  val fp = pluginsFingerprint(pluginJars)
-  val socketPath = applyPluginsFingerprintToFile(setup.socketPath, fp)
-  val logPath = applyPluginsFingerprintToFile(setup.logPath, fp)
+  // Plugin jars and the user's `[kotlin]` version pair are baked into the
+  // daemon at spawn time. A fingerprint in the socket name forces a new
+  // daemon when any of those inputs change so a stale daemon does not
+  // emit obsolete `-Xplugin=` / `-language-version` args for a refreshed
+  // request.
+  val fp = daemonInputsFingerprint(pluginJars, kotlinLanguageVersion, kotlinCompilerVersion)
+  val socketPath = applyDaemonInputsFingerprintToFile(setup.socketPath, fp)
+  val logPath = applyDaemonInputsFingerprintToFile(setup.logPath, fp)
   return DaemonCompilerBackend(
     javaBin = setup.javaBin,
     daemonLaunchArgs = setup.daemonLaunchArgs,
@@ -1535,21 +1542,30 @@ internal fun createDaemonBackend(
     socketPath = socketPath,
     logPath = logPath,
     pluginJars = pluginJars,
+    kotlinLanguageVersion = kotlinLanguageVersion,
+    kotlinCompilerVersion = kotlinCompilerVersion,
     onSpawn = { eprintln("starting compiler daemon...") },
   )
 }
 
-// Inner classpath order is significant (BTA plugin classpath order).
-internal fun pluginsFingerprint(pluginJars: Map<String, List<String>>): String {
-  if (pluginJars.isEmpty()) return "noplugins"
-  val canonical =
+// Inner classpath order is significant (BTA plugin classpath order). Alias
+// order is normalised to keep the fingerprint stable across map iteration
+// orders.
+internal fun daemonInputsFingerprint(
+  pluginJars: Map<String, List<String>>,
+  kotlinLanguageVersion: String?,
+  kotlinCompilerVersion: String?,
+): String {
+  val pluginsCanonical =
     pluginJars.entries
       .sortedBy { it.key }
       .joinToString(";") { (alias, cp) -> "$alias=${cp.joinToString(":")}" }
+  val canonical =
+    "plugins=$pluginsCanonical|lang=${kotlinLanguageVersion ?: ""}|cc=${kotlinCompilerVersion ?: ""}"
   return kolt.infra.sha256Hex(canonical.encodeToByteArray()).take(8)
 }
 
-internal fun applyPluginsFingerprintToFile(path: String, fingerprint: String): String {
+internal fun applyDaemonInputsFingerprintToFile(path: String, fingerprint: String): String {
   val slash = path.lastIndexOf('/')
   val dir = if (slash >= 0) path.substring(0, slash + 1) else ""
   val name = if (slash >= 0) path.substring(slash + 1) else path

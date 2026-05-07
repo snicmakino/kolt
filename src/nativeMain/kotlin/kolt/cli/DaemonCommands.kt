@@ -107,9 +107,9 @@ internal fun stopProjectDaemons(
 // JVM daemon socket = `jvm-compiler-daemon.sock` (unfingerprinted, possible on old disks)
 // or `jvm-compiler-daemon-<fingerprint>.sock` (#138). `native-compiler-daemon.sock` starts with
 // `native-` and is explicitly excluded. The fingerprint segment must be
-// non-empty — `jvm-compiler-daemon-.sock` is not something `applyPluginsFingerprintToFile`
-// can emit today, but the length check keeps the predicate strict against
-// a future refactor.
+// non-empty — `jvm-compiler-daemon-.sock` is not something
+// `applyDaemonInputsFingerprintToFile` can emit today, but the length check
+// keeps the predicate strict against a future refactor.
 internal fun isJvmDaemonSocket(name: String): Boolean =
   name == "jvm-compiler-daemon.sock" ||
     (name.startsWith("jvm-compiler-daemon-") &&

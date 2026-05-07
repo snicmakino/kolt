@@ -246,6 +246,39 @@ class MainCliArgsTest {
   }
 
   @Test
+  fun kotlinLanguageAndCompilerVersionDefaultToNull() {
+    val result =
+      parseArgs(
+        arrayOf("--socket", "/tmp/s", "--compiler-jars", "/a.jar", "--bta-impl-jars", "/b.jar")
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals(null, cli.kotlinLanguageVersion)
+    assertEquals(null, cli.kotlinCompilerVersion)
+  }
+
+  @Test
+  fun kotlinLanguageAndCompilerVersionParsedAsRawStrings() {
+    val result =
+      parseArgs(
+        arrayOf(
+          "--socket",
+          "/tmp/s",
+          "--compiler-jars",
+          "/a.jar",
+          "--bta-impl-jars",
+          "/b.jar",
+          "--kotlin-language-version",
+          "2.1.0",
+          "--kotlin-compiler-version",
+          "2.3.20",
+        )
+      )
+    val cli = assertNotNull(result.get())
+    assertEquals("2.1.0", cli.kotlinLanguageVersion)
+    assertEquals("2.3.20", cli.kotlinCompilerVersion)
+  }
+
+  @Test
   fun unknownFlagRejected() {
     val result =
       parseArgs(

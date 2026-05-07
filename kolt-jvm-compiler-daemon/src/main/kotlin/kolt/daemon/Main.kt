@@ -57,6 +57,10 @@ internal data class CliArgs(
   // the no-op path in that case. The daemon is the sole consumer;
   // resolving these jars is the native client's responsibility.
   val pluginJars: Map<String, List<Path>>,
+  // ADR 0019 §9: user-declared `[kotlin] version` / `compiler` from the
+  // native client. Either may be null when the user did not declare it.
+  val kotlinLanguageVersion: String?,
+  val kotlinCompilerVersion: String?,
 )
 
 internal sealed interface CliError {
@@ -111,6 +115,8 @@ fun main(args: Array<String>) {
     BtaIncrementalCompiler.create(
         btaImplJars = cli.btaImplJars.map { it.toPath() },
         pluginJars = cli.pluginJars,
+        kotlinLanguageVersion = cli.kotlinLanguageVersion,
+        kotlinCompilerVersion = cli.kotlinCompilerVersion,
         metrics = metrics,
         classpathSnapshotsDir =
           IcStateLayout.classpathSnapshotsDirFor(cli.icRoot, KOLT_DAEMON_KOTLIN_VERSION),
@@ -167,6 +173,8 @@ internal fun parseArgs(args: Array<String>): Result<CliArgs, CliError> {
   var btaImplJars: String? = null
   var icRoot: String? = null
   var pluginJarsRaw: String? = null
+  var kotlinLanguageVersion: String? = null
+  var kotlinCompilerVersion: String? = null
   var i = 0
   while (i < args.size) {
     when (args[i]) {
@@ -190,6 +198,14 @@ internal fun parseArgs(args: Array<String>): Result<CliArgs, CliError> {
         pluginJarsRaw = args.getOrNull(i + 1)
         i += 2
       }
+      "--kotlin-language-version" -> {
+        kotlinLanguageVersion = args.getOrNull(i + 1)
+        i += 2
+      }
+      "--kotlin-compiler-version" -> {
+        kotlinCompilerVersion = args.getOrNull(i + 1)
+        i += 2
+      }
       else -> return Err(CliError.UnknownFlag(args[i]))
     }
   }
@@ -209,7 +225,17 @@ internal fun parseArgs(args: Array<String>): Result<CliArgs, CliError> {
           return Err(it)
         },
       )
-  return Ok(CliArgs(Path.of(socketPath), cjars, bjars, icRootPath, pluginJars))
+  return Ok(
+    CliArgs(
+      socketPath = Path.of(socketPath),
+      compilerJars = cjars,
+      btaImplJars = bjars,
+      icRoot = icRootPath,
+      pluginJars = pluginJars,
+      kotlinLanguageVersion = kotlinLanguageVersion,
+      kotlinCompilerVersion = kotlinCompilerVersion,
+    )
+  )
 }
 
 // Parses `alias=cp[;alias=cp]` where each `cp` is a File.pathSeparator-joined

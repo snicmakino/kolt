@@ -3,10 +3,6 @@
   "kotlin": "2.3.20",
   "jvm_target": "25",
   "dependencies": {
-    "com.akuleshov7:ktoml-core": {
-      "version": "0.7.1",
-      "sha256": "c22cb661eefc75e30007a1b08d37c4e93a157f7f3a950a478251632c0af6050d"
-    },
     "com.michael-bull.kotlin-result:kotlin-result": {
       "version": "2.3.1",
       "sha256": "96289c225b06d20156a0695432afc104f187ab68c84e9b8bed7af573e5194c83"
@@ -36,14 +32,9 @@
       "sha256": "90c554e254623cc49de7ae4c7c932a86287795e45875c47e1937c29c297eff02",
       "test": true
     },
-    "org.jetbrains.kotlinx:kotlinx-datetime-jvm": {
-      "version": "0.7.1-0.6.x-compat",
-      "sha256": "cf9cdf7b3074044657a1a80bc1bb5280b58545a967ac7fe42b1aa3cf93305714",
-      "transitive": true
-    },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
-      "version": "1.9.0",
-      "sha256": "1f0afa172110e45a7231ef1b44ae8fd84c1ebaff96f3fc3ad68ef8c48120b59c",
+      "version": "1.7.3",
+      "sha256": "f0adde45864144475385cf4aa7e0b7feb27f61fcf9472665ed98cc971b06b1eb",
       "transitive": true
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json": {

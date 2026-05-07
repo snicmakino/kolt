@@ -41,6 +41,8 @@ internal constructor(
   private val socketPath: String,
   private val logPath: String? = null,
   private val pluginJars: Map<String, List<String>> = emptyMap(),
+  private val kotlinLanguageVersion: String? = null,
+  private val kotlinCompilerVersion: String? = null,
   private val connector: DaemonConnector = defaultDaemonConnector,
   private val spawner: DaemonSpawner = defaultDaemonSpawner,
   private val clockMs: () -> Long = ::monotonicMs,
@@ -57,6 +59,8 @@ internal constructor(
     socketPath: String,
     logPath: String? = null,
     pluginJars: Map<String, List<String>> = emptyMap(),
+    kotlinLanguageVersion: String? = null,
+    kotlinCompilerVersion: String? = null,
     onSpawn: () -> Unit = {},
   ) : this(
     javaBin = javaBin,
@@ -66,6 +70,8 @@ internal constructor(
     socketPath = socketPath,
     logPath = logPath,
     pluginJars = pluginJars,
+    kotlinLanguageVersion = kotlinLanguageVersion,
+    kotlinCompilerVersion = kotlinCompilerVersion,
     connector = defaultDaemonConnector,
     spawner = defaultDaemonSpawner,
     onSpawn = onSpawn,
@@ -154,6 +160,14 @@ internal constructor(
     if (pluginJars.isNotEmpty()) {
       add("--plugin-jars")
       add(pluginJars.entries.joinToString(";") { (alias, cp) -> "$alias=${cp.joinToString(":")}" })
+    }
+    if (kotlinLanguageVersion != null) {
+      add("--kotlin-language-version")
+      add(kotlinLanguageVersion)
+    }
+    if (kotlinCompilerVersion != null) {
+      add("--kotlin-compiler-version")
+      add(kotlinCompilerVersion)
     }
   }
 
