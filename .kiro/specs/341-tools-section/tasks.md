@@ -65,7 +65,7 @@
 
 ## 3. Error type: `ToolError` sealed の集約
 
-- [ ] 3.1 `ToolError` sealed top-level + `ToolSectionParseError` / `ToolResolutionError` / `ToolLaunchError` sealed sub-types を作成
+- [x] 3.1 `ToolError` sealed top-level + `ToolSectionParseError` / `ToolResolutionError` / `ToolLaunchError` sealed sub-types を作成
   - 各 sub-error は design.md の State Management 表に従い variant 毎の data class を持つ (`Parse`, `Resolve`, `Launch`, `UnknownAlias`)
   - `toExitCode(): Int` を `EXIT_CONFIG_ERROR=2` / `EXIT_DEPENDENCY_ERROR=3` / `EXIT_TOOL_ERROR=7` に振り分け
   - `formatStderr(): String` で variant ごとに `tool '<alias>': <variant>: <detail>` の prefix を固定 (R5.4 cause-distinguishable)
