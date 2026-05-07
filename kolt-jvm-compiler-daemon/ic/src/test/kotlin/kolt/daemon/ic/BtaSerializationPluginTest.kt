@@ -14,25 +14,14 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-// ADR 0019 Follow-ups + B-2c: resolves spike #104 O.Q. 6 residual risk.
-// Drives BtaIncrementalCompiler end-to-end through a **real** compiler
-// plugin (`kotlinx.serialization`) so the adapter's plugin jar delivery,
-// PluginTranslator wiring, and BTA's plugin loading have all been
-// exercised on the happy path before B-2 is declared done.
+// End-to-end test through the **real** kotlinx.serialization compiler plugin.
 //
-// The test asserts two structural facts:
-//   1. A `@Serializable` data class compiles without error.
-//   2. The kotlinx.serialization compiler plugin ran during the compile
-//      — evidenced by the generated `$Companion` / `$serializer` symbol
-//      inside the produced .class file, which the plugin synthesises
-//      and is never present in plain kotlinc output.
-//
-// The second assertion is the load-bearing one: without it, a regression
-// that silently skipped plugin attachment (e.g. the pluginJarResolver
-// returning empty, or PluginTranslator's alias map losing the
-// `serialization` entry) could still pass the compile because
-// `@Serializable` is a harmless annotation on its own. The serializer
-// symbol only exists if the plugin actually transformed the AST.
+// The load-bearing assertion is the generated `$serializer` nested class:
+// without it, a silently-skipped plugin attachment (empty `pluginJars`,
+// translator dropping the `serialization` entry, or BTA refusing the jar)
+// would still pass the compile because `@Serializable` is a harmless
+// annotation on its own. The serializer symbol only exists if the plugin
+// actually transformed the AST.
 class BtaSerializationPluginTest {
 
   private val btaImplJars: List<Path> = systemClasspath("kolt.ic.btaImplClasspath")
@@ -62,40 +51,12 @@ class BtaSerializationPluginTest {
     val projectStateDir = workRoot.resolve("ic").apply { createDirectories() }
     val workingDir = projectStateDir.resolve("main").apply { createDirectories() }
 
-    val resolverCalls = mutableListOf<String>()
     val compiler =
       BtaIncrementalCompiler.create(
           btaImplJars = btaImplJars,
-          pluginJarResolver = { alias ->
-            resolverCalls.add(alias)
-            if (alias == "serialization") serializationPluginJars else emptyList()
-          },
+          pluginJars = mapOf("serialization" to serializationPluginJars),
         )
         .getOrElse { fail("failed to load BTA toolchain: $it") }
-
-    // kolt.toml enables the serialization plugin so PluginTranslator
-    // picks it up on its normal reading path — the test is not
-    // bypassing the translator, it is going through it.
-    workRoot
-      .resolve("kolt.toml")
-      .writeText(
-        """
-            name = "demo"
-            version = "0.1.0"
-
-            [kotlin]
-            version = "2.3.20"
-
-            [kotlin.plugins]
-            serialization = true
-
-            [build]
-            target = "jvm"
-            main = "fixture.Payload"
-            sources = ["."]
-            """
-          .trimIndent()
-      )
 
     compiler
       .compile(
@@ -109,11 +70,6 @@ class BtaSerializationPluginTest {
         )
       )
       .getOrElse { fail("expected successful compile of @Serializable fixture, got: $it") }
-
-    assertTrue(
-      resolverCalls.contains("serialization"),
-      "PluginTranslator must have consulted the resolver for `serialization`, got: $resolverCalls",
-    )
 
     val classFiles = outputDir.walk().filter { it.extension == "class" }.toList()
     assertTrue(
@@ -201,9 +157,7 @@ class BtaSerializationPluginTest {
     val compiler =
       BtaIncrementalCompiler.create(
           btaImplJars = btaImplJars,
-          pluginJarResolver = { alias ->
-            if (alias == "serialization") serializationPluginJars else emptyList()
-          },
+          pluginJars = mapOf("serialization" to serializationPluginJars),
         )
         .getOrElse { fail("failed to load BTA toolchain: $it") }
 

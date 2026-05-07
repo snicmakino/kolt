@@ -55,13 +55,9 @@ import org.jetbrains.kotlin.buildtools.api.trackers.BuildMetricsCollector
 class BtaIncrementalCompiler
 private constructor(
   private val toolchain: KotlinToolchains,
-  // Maps a kolt.toml [kotlin.plugins] alias (e.g. "serialization") to the plugin jar
-  // classpath on disk. Injected at construction time so daemon startup owns
-  // the policy (walk a plugin-jars directory, read from --plugin-jars CLI,
-  // etc.) and :ic stays a pure translator. B-2a defaults this to an empty-
-  // result resolver — the translation path is still exercised end to end,
-  // and real plugin jar delivery is wired in daemon core later (B-2b/B-2c).
-  private val pluginJarResolver: (alias: String) -> List<Path>,
+  // Pre-resolved per ADR 0019 §9; daemon hands `--plugin-jars` through
+  // unchanged.
+  private val pluginJars: Map<String, List<Path>>,
   // ADR 0019 §7 observability: adapter-level counters are recorded here.
   // Defaults to no-op so tests that only care about the Result<,> shape
   // stay terse; Main wires `StderrIcMetricsSink` in production so
@@ -179,7 +175,7 @@ private constructor(
     // #162: language/api-version args must ride the same applyArgumentStrings
     // batch as plugin args — the reset-to-default behavior documented above
     // would wipe whichever translator fed an earlier call.
-    val translatedPluginArgs = PluginTranslator.translate(request.projectRoot, pluginJarResolver)
+    val translatedPluginArgs = PluginTranslator.translate(pluginJars)
     val translatedLanguageArgs = LanguageVersionTranslator.translate(request.projectRoot)
     val freeArgs = translatedPluginArgs + translatedLanguageArgs
     if (freeArgs.isNotEmpty()) {
@@ -438,13 +434,7 @@ private constructor(
     // Result returned to daemon core rather than throwing.
     fun create(
       btaImplJars: List<Path>,
-      // Defaults to an empty-result resolver: every plugin alias maps to
-      // an empty classpath, which collapses to no `-Xplugin=` freeArg
-      // emitted. Production daemon startup overrides this with a
-      // resolver that looks up the `pluginJars` map passed through
-      // `--plugin-jars`; tests that do not exercise plugin delivery
-      // rely on this default.
-      pluginJarResolver: (alias: String) -> List<Path> = { _ -> emptyList() },
+      pluginJars: Map<String, List<Path>> = emptyMap(),
       metrics: IcMetricsSink = NoopIcMetricsSink,
       // ADR 0019 §Negative follow-up (#127): shared directory for cached
       // ClasspathEntrySnapshot files. When null, a temp directory is used
@@ -474,7 +464,7 @@ private constructor(
         Ok(
           BtaIncrementalCompiler(
             toolchain = toolchain,
-            pluginJarResolver = pluginJarResolver,
+            pluginJars = pluginJars,
             metrics = metrics,
             classpathSnapshotCache = ClasspathSnapshotCache(toolchain, snapshotsDir, metrics),
             shrunkSnapshotCache = effectiveShrunkCache,

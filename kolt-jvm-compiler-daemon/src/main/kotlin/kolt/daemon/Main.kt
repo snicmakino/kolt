@@ -98,12 +98,6 @@ fun main(args: Array<String>) {
   // "observability via metrics" rule from forking into two sinks.
   val metrics = StderrIcMetricsSink()
 
-  // ADR 0019 §9: translate the CLI-supplied alias→classpath map into the
-  // resolver signature BtaIncrementalCompiler expects. Unknown aliases
-  // return `emptyList()` so PluginTranslator can surface a plugin-not-
-  // found error at compile time rather than failing daemon startup.
-  val pluginJarResolver: (String) -> List<Path> = { alias -> cli.pluginJars[alias] ?: emptyList() }
-
   // Shared across daemon lifetimes via `<icRoot>/<kotlinVersion>/shrunk-snapshots/`.
   // The directory is created lazily inside `storeIfNew`, so daemon startup
   // does not depend on writable disk for the cache itself.
@@ -116,7 +110,7 @@ fun main(args: Array<String>) {
   val adapter =
     BtaIncrementalCompiler.create(
         btaImplJars = cli.btaImplJars.map { it.toPath() },
-        pluginJarResolver = pluginJarResolver,
+        pluginJars = cli.pluginJars,
         metrics = metrics,
         classpathSnapshotsDir =
           IcStateLayout.classpathSnapshotsDirFor(cli.icRoot, KOLT_DAEMON_KOTLIN_VERSION),

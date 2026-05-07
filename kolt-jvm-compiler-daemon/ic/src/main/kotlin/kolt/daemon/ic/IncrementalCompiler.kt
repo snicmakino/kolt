@@ -10,22 +10,16 @@ import java.nio.file.Path
 // Import of a BTA type anywhere outside the ic subproject is an ADR 0019 violation
 // and is enforced by human review per issue #112 acceptance criterion 2.
 //
-// IcRequest deliberately does not carry compilerArguments / pluginClasspaths /
-// pluginOptions — those are translated inside the adapter from kolt.toml [kotlin.plugins]
-// (ADR 0019 §9). Keeping the translation inside the adapter preserves the
-// "daemon core carries no BTA-shaped fields" invariant.
+// IcRequest carries no BTA-shaped fields per ADR 0019 §9; plugin jars
+// arrive via the daemon-level `--plugin-jars` map and translate inside
+// the adapter.
 interface IncrementalCompiler {
   fun compile(request: IcRequest): Result<IcResponse, IcError>
 }
 
 data class IcRequest(
   val projectId: String,
-  // The project root directory (containing `kolt.toml`). The adapter reads the
-  // TOML file directly to translate plugin settings per ADR 0019 §9; this is
-  // the only way the @ExperimentalBuildToolsApi shape of plugin arguments
-  // stays out of daemon core. ADR §3's original data class did not list
-  // projectRoot, but §9 implicitly requires it — this is a minor inter-
-  // section fix, not a scope widening.
+  // Source for `LanguageVersionTranslator` reading `[kotlin]` per ADR 0019 §9.
   val projectRoot: Path,
   val sources: List<Path>,
   val classpath: List<Path>,

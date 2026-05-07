@@ -243,9 +243,9 @@ class DaemonServer(
     // legacy `-Xplugin=...` plugin args into `extraArgs` for the
     // subprocess fallback path, which execs raw kotlinc and needs
     // them. The daemon path uses structured channels instead:
-    // - plugins flow through `--plugin-jars` → `pluginJarResolver` →
-    //   `PluginTranslator` → `COMPILER_PLUGINS` (BTA's structured
-    //   plugin list).
+    // - plugins flow through `--plugin-jars` → `pluginJars` →
+    //   `PluginTranslator` → `-Xplugin=<jar>` freeArgs forwarded into
+    //   BTA via `applyArgumentStrings` (ADR 0019 §9, post-#148).
     // - jvm target is hard-coded by the daemon's BTA setup.
     // Honouring `extraArgs` here would re-attach `-Xplugin=` as a
     // free-text compiler arg on top of the structured `CompilerPlugin`

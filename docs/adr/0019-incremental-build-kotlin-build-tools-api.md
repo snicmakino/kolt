@@ -64,6 +64,7 @@ interface IncrementalCompiler {
 
 data class IcRequest(
     val projectId: String,        // stable, caller-derived hash
+    val projectRoot: Path,        // source for `LanguageVersionTranslator` (§9)
     val sources: List<Path>,      // full source set
     val classpath: List<Path>,    // deps + stdlib, full
     val outputDir: Path,
@@ -131,11 +132,11 @@ Self-heal wipes `workingDir` before retrying so the next request does not read t
 
 ### §9 Plugin and compilerArguments plumbing: inside the adapter
 
-`IcRequest` does not carry `pluginClasspaths` or `compilerOptions`. The adapter reads `kolt.toml` `[kotlin.plugins]` from `projectRoot` directly and translates to `JvmCompilerArguments`. Plugin jars load into the same classloader hierarchy as `kotlin-build-tools-impl`.
+`IcRequest` does not carry `pluginClasspaths` or `compilerOptions`. The native client owns `kolt.toml` `[kotlin.plugins]`: it filters enabled aliases and resolves each to a jar path before launching the daemon, then ships the resulting `Map<alias, List<jarPath>>` over `--plugin-jars`. The adapter consumes that map directly via `PluginTranslator` and translates to `JvmCompilerArguments`. Plugin jars load into the same classloader hierarchy as `kotlin-build-tools-impl`.
 
 Plugin passthrough mechanism (post-#148): the adapter emits `-Xplugin=<jar>` tokens via `CommonToolArguments.applyArgumentStrings`, not the structured `CommonCompilerArguments.COMPILER_PLUGINS` key. The structured key was added only in BTA 2.3.20 and rejects assignment on 2.3.0 / 2.3.10 impls even with an empty list. `applyArgumentStrings` is the passthrough surface present across the full 2.3.x family. Call order is load-bearing: `applyArgumentStrings` must precede any structured `set(...)` call because it resets non-mentioned arguments to parser defaults. See `spike/bta-compat-138/REPORT.md` for the empirical record.
 
-Passing plugin settings through `IcRequest` (option b) would force daemon core to carry fields whose shape is dictated by BTA's `JvmCompilerArguments` — the adapter boundary leaking by a different door. The tradeoff is one extra `kolt.toml` parse on the JVM side, accepted as the lesser cost.
+Passing plugin settings through `IcRequest` (option b) would force daemon core to carry fields whose shape is dictated by BTA's `JvmCompilerArguments` — the adapter boundary leaking by a different door. The pre-resolved `Map<alias, List<jarPath>>` shape passed via `--plugin-jars` is wire-friendly (string keys, path lists) and never references BTA types, so the invariant holds without daemon core needing to understand `kolt.toml` semantics.
 
 ### §10 Rollout: default-on from day one
 
@@ -154,7 +155,7 @@ IC is the default compile path from the first B-2 release. No opt-in flag, no `k
 **Negative**
 - `@ExperimentalBuildToolsApi` is load-bearing. BTA surface can change on any minor compiler release. Mitigated by version pinning and the adapter integration test that exercises the cold-then-incremental cycle on every build.
 - `~/.kolt/daemon/ic/` accumulates state without a reaper (resolved: #125/PR #126 `cdf5da9` ships a reaper for non-current `<kotlinVersion>` segments and dangling projectId dirs).
-- The JVM adapter parses `kolt.toml` a second time to extract plugin settings (accepted duplication; avoidable if it gets out of hand).
+- The JVM adapter still parses `kolt.toml` once for `LanguageVersionTranslator`. Plugin settings stopped being parsed JVM-side once `--plugin-jars` carried pre-resolved jars (resolved: #159).
 - Classpath snapshot cost was ~310 ms per request before caching (resolved: #127 `ClasspathSnapshotCache` caches snapshots keyed by `(path, mtime, size)` in `<icRoot>/<kotlinVersion>/classpath-snapshots/`).
 
 ### Confirmation
