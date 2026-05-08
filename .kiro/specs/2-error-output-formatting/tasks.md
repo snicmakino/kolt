@@ -213,7 +213,7 @@
   - _Depends: 5.1, 7.1_
   - _Boundary: end-to-end_
 
-- [ ] 8.2 (P) 未知 subcommand / 未知 global flag の Did-you-mean E2E
+- [x] 8.2 (P) 未知 subcommand / 未知 global flag の Did-you-mean E2E
   - `kolt buidl` → exit code `EXIT_COMMAND_NOT_FOUND`、 stderr に `error: unknown command 'buidl'` と `note: Did you mean \`build\`?` (色 off で文字列比較)
   - `kolt --no-clor build` → 未知 flag error + `Did you mean \`--no-color\`?`
   - `kolt totally-unrelated-xxx` → suggestion なし (距離超過)
