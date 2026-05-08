@@ -40,7 +40,7 @@
   - _Requirements: 5.4_
   - _Boundary: kolt.infra.suggest.Levenshtein_
 
-- [ ] 2.2 `closestMatch(input, candidates, maxDistance)` を実装、 deterministic ordering を保証
+- [x] 2.2 `closestMatch(input, candidates, maxDistance)` を実装、 deterministic ordering を保証
   - `adaptiveThreshold(inputLength) = if (inputLength <= 4) 1 else 2` の default
   - candidates 走査は順序保存、 同点最小距離は最初に見つかったものを返す。 caller が sorted list を渡せば lex 順 deterministic
   - テスト: 距離 1 で hit、 閾値超過で `null`、 同点候補 2 つで先頭が選ばれる、 空 candidates で `null` の 4 ケース
