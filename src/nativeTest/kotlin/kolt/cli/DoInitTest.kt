@@ -5,6 +5,8 @@ import com.github.michaelbull.result.getOrElse
 import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.executeCommand
 import kolt.infra.fileExists
+import kolt.infra.output.AnsiCodes
+import kolt.infra.output.ColorPolicy
 import kolt.infra.readFileAsString
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
@@ -27,6 +29,20 @@ import platform.posix.getcwd
 import platform.posix.mkdtemp
 import platform.posix.setenv
 import platform.posix.unsetenv
+
+private class CapturingScaffoldIO(private val tty: Boolean, inputs: List<String> = emptyList()) :
+  ScaffoldIO {
+  private val iter = inputs.iterator()
+  val outputs = mutableListOf<String>()
+
+  override fun isStdinTty(): Boolean = tty
+
+  override fun readLine(): String? = if (iter.hasNext()) iter.next() else null
+
+  override fun println(msg: String) {
+    outputs += msg
+  }
+}
 
 @OptIn(ExperimentalForeignApi::class)
 class DoInitTest {
@@ -375,6 +391,47 @@ class DoInitTest {
     doInit(listOf("my-app")).getOrElse { error("doInit failed: exit=$it") }
 
     assertFalse(fileExists(".git"), "nested .git must not be created inside an existing worktree")
+  }
+
+  @Test
+  fun initPrintsNextStepBlockForAppWithoutCdLine() {
+    val io = CapturingScaffoldIO(tty = false)
+
+    doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(joined.contains("next steps:"), "missing next-step header: $joined")
+    assertFalse(joined.contains("cd "), "init must omit cd line (already in target dir): $joined")
+    assertTrue(joined.contains("kolt run"), "app must point to kolt run: $joined")
+    assertFalse(joined.contains("kolt build"), "app must not point to kolt build: $joined")
+  }
+
+  @Test
+  fun initPrintsNextStepBlockForLibPointingToKoltBuild() {
+    val io = CapturingScaffoldIO(tty = false)
+
+    doInit(listOf("mylib", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(joined.contains("next steps:"), "missing next-step header: $joined")
+    assertFalse(joined.contains("cd "), "init must omit cd line: $joined")
+    assertTrue(joined.contains("kolt build"), "lib must point to kolt build: $joined")
+    assertFalse(joined.contains("kolt run"), "lib must not point to kolt run: $joined")
+  }
+
+  @Test
+  fun initNextStepBlockColorsCommandWhenPolicyAllows() {
+    val io = CapturingScaffoldIO(tty = false)
+
+    doInit(listOf("myapp"), io, ColorPolicy.Always).getOrElse { error("doInit failed: exit=$it") }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(
+      joined.contains("${AnsiCodes.CYAN}kolt run${AnsiCodes.RESET}"),
+      "expected cyan-wrapped kolt run: $joined",
+    )
   }
 
   private fun createTempDir(prefix: String): String {

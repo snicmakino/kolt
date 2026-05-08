@@ -1,14 +1,23 @@
 package kolt.cli
 
 import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
+import kolt.config.ScaffoldKind
 import kolt.infra.ensureDirectory
 import kolt.infra.eprintln
 import kolt.infra.fileExists
+import kolt.infra.output.AnsiCodes
+import kolt.infra.output.ColorPolicy
+import kolt.infra.output.Stream
 import kolt.infra.output.eprintError
 
-internal fun doNew(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Result<Unit, Int> {
+internal fun doNew(
+  args: List<String>,
+  io: ScaffoldIO = SystemScaffoldIO,
+  policy: ColorPolicy = ColorPolicy.current(),
+): Result<Unit, Int> {
   val parsed =
     parseInitArgs(args).getOrElse { msg ->
       eprintError(msg)
@@ -35,7 +44,7 @@ internal fun doNew(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Resul
   }
 
   val resolved =
-    resolveInteractive(parsed, io).getOrElse { msg ->
+    resolveInteractive(parsed, io, policy).getOrElse { msg ->
       eprintError(msg)
       return Err(EXIT_CONFIG_ERROR)
     }
@@ -45,8 +54,39 @@ internal fun doNew(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Resul
     return Err(EXIT_BUILD_ERROR)
   }
 
-  return scaffoldProject(
-    projectName,
-    ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
-  )
+  scaffoldProject(
+      projectName,
+      ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
+    )
+    .getOrElse {
+      return Err(it)
+    }
+
+  printNextSteps(io, cdTarget = projectName, resolved.kind, policy)
+  return Ok(Unit)
+}
+
+// Routed through ScaffoldIO so tests can capture the block; SystemScaffoldIO
+// writes to real stdout. Cyan emphasis matches the note severity in the
+// stderr writer — same family signal in a different channel. `cdTarget` is
+// null for `kolt init` (already in target dir) and the project name for
+// `kolt new` (where the user must `cd` into the freshly-created subdir).
+internal fun printNextSteps(
+  io: ScaffoldIO,
+  cdTarget: String?,
+  kind: ScaffoldKind,
+  policy: ColorPolicy,
+) {
+  val cmd =
+    when (kind) {
+      ScaffoldKind.APP -> "kolt run"
+      ScaffoldKind.LIB -> "kolt build"
+    }
+  val color = policy.shouldColor(Stream.Stdout)
+  fun emph(s: String): String = if (color) "${AnsiCodes.CYAN}$s${AnsiCodes.RESET}" else s
+
+  io.println("")
+  io.println("next steps:")
+  if (cdTarget != null) io.println("  ${emph("cd $cdTarget")}")
+  io.println("  ${emph(cmd)}")
 }

@@ -1,10 +1,12 @@
 package kolt.cli
 
 import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.inferProjectName
 import kolt.infra.fileExists
+import kolt.infra.output.ColorPolicy
 import kolt.infra.output.eprintError
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -15,7 +17,11 @@ import platform.posix.PATH_MAX
 import platform.posix.getcwd
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun doInit(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Result<Unit, Int> {
+internal fun doInit(
+  args: List<String>,
+  io: ScaffoldIO = SystemScaffoldIO,
+  policy: ColorPolicy = ColorPolicy.current(),
+): Result<Unit, Int> {
   val parsed =
     parseInitArgs(args).getOrElse { msg ->
       eprintError(msg)
@@ -47,13 +53,16 @@ internal fun doInit(args: List<String>, io: ScaffoldIO = SystemScaffoldIO): Resu
   }
 
   val resolved =
-    resolveInteractive(parsed, io).getOrElse { msg ->
+    resolveInteractive(parsed, io, policy).getOrElse { msg ->
       eprintError(msg)
       return Err(EXIT_CONFIG_ERROR)
     }
 
-  return scaffoldProject(
-    ".",
-    ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
-  )
+  scaffoldProject(".", ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group))
+    .getOrElse {
+      return Err(it)
+    }
+
+  printNextSteps(io, cdTarget = null, resolved.kind, policy)
+  return Ok(Unit)
 }
