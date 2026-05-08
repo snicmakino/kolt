@@ -575,4 +575,22 @@ fun renderConfigError(e: ConfigError.ParseFailed): RenderedDiagnostic {
   return RenderedDiagnostic(Severity.Error, e.message, context, hint)
 }
 
+// Single-line composite for callers that emit a one-line notification
+// (watch-mode marker line) or carry the message through a String-typed
+// channel (kolt info JSON `parseError`). Equivalent semantically to
+// renderConfigError but flattened — preserves path/lineNo/keyPath/suggestion
+// rather than dropping them.
+fun renderConfigErrorAsLine(e: ConfigError.ParseFailed): String = buildString {
+  append(e.message)
+  val location =
+    when {
+      e.path != null && e.lineNo != null -> "${e.path}:${e.lineNo}"
+      e.path != null -> e.path
+      else -> null
+    }
+  if (location != null) append(" at ").append(location)
+  if (e.keyPath != null) append(" (key: ").append(e.keyPath).append(")")
+  if (e.suggestion != null) append(" -- Did you mean `").append(e.suggestion).append("`?")
+}
+
 internal fun KoltConfig.isLibrary(): Boolean = kind == "lib"

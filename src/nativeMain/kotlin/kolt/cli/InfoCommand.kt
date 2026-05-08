@@ -10,6 +10,7 @@ import kolt.config.KOLT_VERSION
 import kolt.config.KoltConfig
 import kolt.config.KoltPaths
 import kolt.config.parseConfig
+import kolt.config.renderConfigErrorAsLine
 import kolt.config.resolveKoltPaths
 import kolt.infra.absolutise
 import kolt.infra.currentWorkingDirectory
@@ -378,7 +379,7 @@ internal fun loadProjectForInfo(): ProjectLoad {
     parseConfig(toml, path = absoluteKoltTomlPath()).getOrElse { err ->
       val message =
         when (err) {
-          is ConfigError.ParseFailed -> err.message
+          is ConfigError.ParseFailed -> renderConfigErrorAsLine(err)
         }
       return ProjectLoad.ParseFailed(message)
     }

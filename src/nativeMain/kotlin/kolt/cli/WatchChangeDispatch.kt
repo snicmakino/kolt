@@ -7,6 +7,7 @@ import kolt.config.KoltConfig
 import kolt.config.SectionChange
 import kolt.config.classifyChange
 import kolt.config.planDispatch
+import kolt.config.renderConfigErrorAsLine
 
 /**
  * Outcome of classifying a kolt.toml change against the matrix. Watch loops translate this into
@@ -73,5 +74,5 @@ internal fun dispatchKoltTomlChange(
 
 private fun formatParseError(err: ConfigError): String =
   when (err) {
-    is ConfigError.ParseFailed -> err.message
+    is ConfigError.ParseFailed -> renderConfigErrorAsLine(err)
   }
