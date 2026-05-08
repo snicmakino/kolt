@@ -26,6 +26,7 @@ import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
 import kolt.infra.output.eprintDiagnostic
+import kolt.infra.output.maybeStripAnsi
 import kolt.resolve.buildClasspath
 import kolt.tool.*
 import kotlin.time.TimeSource
@@ -530,7 +531,7 @@ private fun doBuildInner(
   backend.compile(request).getOrElse { error ->
     if (error is CompileError.CompilationFailed) {
       val body = renderCompilationFailure(error)
-      if (body.isNotEmpty()) eprintln(body)
+      if (body.isNotEmpty()) eprintln(maybeStripAnsi(body))
     }
     eprintln(formatCompileError(error, "compilation"))
     return Err(EXIT_BUILD_ERROR)
@@ -778,7 +779,7 @@ private fun doNativeBuildInner(
 // backend-supplied stderr; other variants don't have diagnostic content.
 private fun reportNativeCompileError(error: NativeCompileError, context: String) {
   if (error is NativeCompileError.CompilationFailed && error.stderr.isNotEmpty()) {
-    eprintln(error.stderr.trimEnd('\n'))
+    eprintln(maybeStripAnsi(error.stderr.trimEnd('\n')))
   }
   eprintln(formatNativeCompileError(error, context))
 }
@@ -1175,7 +1176,7 @@ private fun doTestInner(
   testBackend.compile(testRequest).getOrElse { error ->
     if (error is CompileError.CompilationFailed) {
       val body = renderCompilationFailure(error)
-      if (body.isNotEmpty()) eprintln(body)
+      if (body.isNotEmpty()) eprintln(maybeStripAnsi(body))
     }
     eprintln(formatCompileError(error, "test compilation"))
     return Err(EXIT_BUILD_ERROR)

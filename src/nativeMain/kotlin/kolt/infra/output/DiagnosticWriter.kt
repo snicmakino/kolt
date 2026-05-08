@@ -86,3 +86,10 @@ object AnsiStripper {
 
   fun strip(s: String): String = CSI_REGEX.replace(s, "")
 }
+
+// Caller-side gate for forwarded subprocess stderr blobs (daemon / fallback
+// backends emit pre-rendered byte streams that may carry ANSI). Kept as a
+// pure helper so unit tests can drive both branches via an injected policy
+// without touching the global `ColorPolicy.current()`.
+fun maybeStripAnsi(body: String, policy: ColorPolicy = ColorPolicy.current()): String =
+  if (policy.shouldColor(Stream.Stderr)) body else AnsiStripper.strip(body)

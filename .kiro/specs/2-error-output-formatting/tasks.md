@@ -166,7 +166,7 @@
   - _Depends: 1.2_
   - _Boundary: kolt.build.NativeSubprocessBackend + kolt.build.nativedaemon spawn_
 
-- [ ] 6.3 daemon が string blob で返す stderr に対する ANSI strip wiring
+- [x] 6.3 daemon が string blob で返す stderr に対する ANSI strip wiring
   - `BuildCommands.kt:526` 周辺の `eprintln(body)` を `eprintln(if (!ColorPolicy.current().shouldColor(Stream.Stderr)) AnsiStripper.strip(body) else body)` に書き換え (forwarded body は kolt prefix を付けない pass-through 維持、 R6.1)
   - 同様の forward 経路が DependencyCommands / ToolCommands にあれば同 pattern を適用
   - テスト: `body = "error: \\x1B[31mfoo\\x1B[0m\\n"` を mock daemon が返す状況で、 `ColorPolicy.Never` 時は `eprintln` 引数が `"error: foo\\n"` (ANSI 削除済み)、 `ColorPolicy.Always` 時は元 byte 列のまま
