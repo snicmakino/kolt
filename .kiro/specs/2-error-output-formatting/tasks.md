@@ -88,7 +88,7 @@
   - _Depends: 2.2_
   - _Boundary: kolt.config (parseUnknownKey + KNOWN_TOP_LEVEL_SECTIONS)_
 
-- [ ] 4.3 `ConfigError.ParseFailed` shape を nullable default 付きで拡張 (compile-safe migration)
+- [x] 4.3 `ConfigError.ParseFailed` shape を nullable default 付きで拡張 (compile-safe migration)
   - field 追加: `path: String? = null`, `lineNo: Int? = null`, `keyPath: String? = null`, `suggestion: String? = null` を既存 `message: String` の後に **default 付き** で追加。 これにより `kolt.config.Config.kt` (~24 ヶ所)、 `kolt.config.Main.kt` (2 ヶ所)、 `kolt.cli.BuildCommands.kt:266` の既存全 ~28 構築箇所は no-op で再コンパイル成功する
   - 既存パターン `is ConfigError.ParseFailed -> ... err.message` を読む箇所 (`WatchChangeDispatch.kt:76`, `InfoCommand.kt:380`, `DependencyCommands.kt:42`, `BuildCommands.kt:251`) は `message` field アクセスのみなので無変更で動作することを確認
   - data class equality / copy / toString の test を更新、 nullable field を含む新 shape の round-trip pin

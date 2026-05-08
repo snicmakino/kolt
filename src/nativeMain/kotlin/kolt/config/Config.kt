@@ -43,7 +43,17 @@ fun konanTargetGradleName(target: String): String =
   target.replace(Regex("([a-z])([A-Z])"), "$1_$2").lowercase()
 
 sealed class ConfigError {
-  data class ParseFailed(val message: String) : ConfigError()
+  // Optional fields default to null so single-argument construction
+  // (`ParseFailed("...")`) stays valid; the ktoml-origin parse path that
+  // knows the file path and line number fills them so error rendering can
+  // include line / key / Did-you-mean context.
+  data class ParseFailed(
+    val message: String,
+    val path: String? = null,
+    val lineNo: Int? = null,
+    val keyPath: String? = null,
+    val suggestion: String? = null,
+  ) : ConfigError()
 }
 
 @Serializable
