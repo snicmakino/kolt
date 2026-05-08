@@ -26,6 +26,8 @@ import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
 import kolt.infra.output.eprintDiagnostic
+import kolt.infra.output.eprintError
+import kolt.infra.output.eprintWarning
 import kolt.infra.output.maybeStripAnsi
 import kolt.resolve.buildClasspath
 import kolt.tool.*
@@ -250,7 +252,7 @@ internal fun absoluteKoltTomlPath(): String =
 internal fun loadProjectConfig(): Result<KoltConfig, Int> {
   val tomlString =
     readFileAsString(KOLT_TOML).getOrElse { error ->
-      eprintln("error: could not read ${error.path}")
+      eprintError("could not read ${error.path}")
       return Err(EXIT_CONFIG_ERROR)
     }
   return parseConfig(tomlString, path = absoluteKoltTomlPath())
@@ -297,12 +299,12 @@ private fun doCheckInner(useDaemon: Boolean, profile: Profile): Result<Unit, Int
   }
   val paths =
     resolveKoltPaths().getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_BUILD_ERROR)
     }
   val managedKotlincBin =
     ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(EXIT_BUILD_ERROR)
     }
   val managedJdkBins =
@@ -318,14 +320,14 @@ private fun doCheckInner(useDaemon: Boolean, profile: Profile): Result<Unit, Int
       .mainClasspath
   val pArgs =
     resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(it.exitCode)
     }
   val cmd = checkCommand(config, classpath, pArgs, kotlincPath = managedKotlincBin)
 
   println("checking ${config.name}...")
   executeCommand(cmd, mapOf("JAVA_HOME" to managedJdkBins.home)).getOrElse { error ->
-    eprintln("error: " + formatProcessError(error, "check"))
+    eprintError(formatProcessError(error, "check"))
     return Err(EXIT_BUILD_ERROR)
   }
   val elapsed = startMark.elapsedNow()
@@ -337,7 +339,7 @@ internal fun doClean(): Result<Unit, Int> {
   val buildDirRemoved =
     if (fileExists(BUILD_DIR)) {
       removeDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-        eprintln("error: could not remove ${error.path}")
+        eprintError("could not remove ${error.path}")
         return Err(EXIT_BUILD_ERROR)
       }
       println("removed $BUILD_DIR/")
@@ -352,7 +354,7 @@ internal fun doClean(): Result<Unit, Int> {
   val cwd = currentWorkingDirectory()
   if (paths != null && cwd != null) {
     cleanDaemonIcStateForProject(paths, cwd).getOrElse { error ->
-      eprintln("warning: could not remove daemon IC state at ${error.path}")
+      eprintWarning("could not remove daemon IC state at ${error.path}")
     }
   }
 
@@ -406,7 +408,7 @@ private fun doBuildInner(
 
   val paths =
     resolveKoltPaths().getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_BUILD_ERROR)
     }
   val managedJdkBins =
@@ -459,7 +461,7 @@ private fun doBuildInner(
   if (fileExists(BUILD_STATE_FILE)) deleteFile(BUILD_STATE_FILE)
   val managedKotlincBin =
     ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(EXIT_BUILD_ERROR)
     }
   val resolutionOutcome =
@@ -471,20 +473,20 @@ private fun doBuildInner(
     buildClasspath(resolutionOutcome.allJars.map { it.cachePath }).ifEmpty { null }
   val pluginJarPathsByAlias =
     resolveEnabledPluginJarPaths(config, paths, EXIT_BUILD_ERROR).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(it.exitCode)
     }
   val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
   val pluginJarsForDaemon = pluginJarPathsByAlias.mapValues { (_, path) -> listOf(path) }
   ensureDirectoryRecursive(CLASSES_DIR).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
 
   val cwd =
     currentWorkingDirectory()
       ?: run {
-        eprintln("error: could not determine current working directory")
+        eprintError("could not determine current working directory")
         return Err(EXIT_BUILD_ERROR)
       }
 
@@ -514,7 +516,7 @@ private fun doBuildInner(
       // BTA requires individual .kt files, not directories (#117).
       sources =
         expandKotlinSources(config.build.sources.map { absolutise(it, cwd) }).getOrElse { err ->
-          eprintln("error: could not list Kotlin sources under ${err.path}")
+          eprintError("could not list Kotlin sources under ${err.path}")
           return Err(EXIT_BUILD_ERROR)
         },
       outputPath = absolutise(CLASSES_DIR, cwd),
@@ -540,18 +542,18 @@ private fun doBuildInner(
   val existingResourceDirs = filterExistingDirs(config.build.resources, "resource")
   for (resourceDir in existingResourceDirs) {
     copyDirectoryContents(resourceDir, CLASSES_DIR).getOrElse { error ->
-      eprintln("error: could not copy resources from ${error.path}")
+      eprintError("could not copy resources from ${error.path}")
       return Err(EXIT_BUILD_ERROR)
     }
   }
 
   val jarCmd = jarCommand(config, jarPath = managedJarBin, profile = profile)
   ensureDirectoryRecursive(jarCmd.outputPath.substringBeforeLast('/')).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
   executeCommand(jarCmd.args).getOrElse { error ->
-    eprintln("error: " + formatProcessError(error, "jar packaging"))
+    eprintError(formatProcessError(error, "jar packaging"))
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -563,9 +565,7 @@ private fun doBuildInner(
   // disk mirroring the existing jarCmd failure semantics).
   handleRuntimeClasspathManifest(config, resolutionOutcome.mainJars, profile).getOrElse { err ->
     val failure = err as ManifestWriteError.WriteFailed
-    eprintln(
-      "error: could not write runtime classpath manifest at ${failure.path}: ${failure.reason}"
-    )
+    eprintError("could not write runtime classpath manifest at ${failure.path}: ${failure.reason}")
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -577,7 +577,7 @@ private fun doBuildInner(
       testClasspath = testClasspath,
     )
   writeFileAsString(BUILD_STATE_FILE, serializeBuildState(newState)).getOrElse {
-    eprintln("warning: could not write build state file")
+    eprintWarning("could not write build state file")
   }
 
   val elapsed = startMark.elapsedNow()
@@ -603,12 +603,12 @@ private fun doNativeBuildInner(
 
   val paths =
     resolveKoltPaths().getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_BUILD_ERROR)
     }
   val managedKonancBin =
     ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(EXIT_BUILD_ERROR)
     }
 
@@ -663,12 +663,12 @@ private fun doNativeBuildInner(
 
   val nativePluginArgs =
     resolvePluginArgs(config, paths, EXIT_BUILD_ERROR).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(it.exitCode)
     }
 
   ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -687,7 +687,7 @@ private fun doNativeBuildInner(
   val cwd =
     currentWorkingDirectory()
       ?: run {
-        eprintln("error: could not determine current working directory")
+        eprintError("could not determine current working directory")
         return Err(EXIT_BUILD_ERROR)
       }
   val subprocessBackend =
@@ -714,7 +714,7 @@ private fun doNativeBuildInner(
       profile = profile,
     )
   ensureDirectoryRecursive(libraryCmd.outputPath.substringBeforeLast('/')).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
   println("compiling ${config.name} (native)...")
@@ -731,7 +731,7 @@ private fun doNativeBuildInner(
   // kind; stage 1 already produced the `.klib` artifact.
   if (stagePlan.linkMain != null) {
     ensureDirectoryRecursive(nativeIcCacheDir(profile)).getOrElse { error ->
-      eprintln("error: could not create directory ${error.path}")
+      eprintError("could not create directory ${error.path}")
       return Err(EXIT_BUILD_ERROR)
     }
 
@@ -752,7 +752,7 @@ private fun doNativeBuildInner(
   }
 
   if (!fileExists(artifactPath)) {
-    eprintln("error: $artifactPath not produced by konanc")
+    eprintError("$artifactPath not produced by konanc")
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -766,7 +766,7 @@ private fun doNativeBuildInner(
 
   val newState = currentState.copy(classesDirMtime = fileMtime(artifactPath))
   writeFileAsString(BUILD_STATE_FILE, serializeBuildState(newState)).getOrElse {
-    eprintln("warning: could not write build state file")
+    eprintWarning("could not write build state file")
   }
 
   val elapsed = startMark.elapsedNow()
@@ -849,12 +849,12 @@ private fun runCinterop(
       )
     println("generating cinterop klib for ${entry.name}...")
     executeCommand(cmd.args, cinteropEnv).getOrElse { error ->
-      eprintln("error: " + formatProcessError(error, "cinterop (${entry.name})"))
+      eprintError(formatProcessError(error, "cinterop (${entry.name})"))
       return Err(EXIT_BUILD_ERROR)
     }
     if (currentStamp != null) {
       writeFileAsString(stampPath, currentStamp).getOrElse { error ->
-        eprintln("warning: failed to write cinterop stamp ${error.path}")
+        eprintWarning("failed to write cinterop stamp ${error.path}")
       }
     }
     klibs.add(klibPath)
@@ -944,7 +944,7 @@ private fun doRunInner(
   if (config.build.target in NATIVE_TARGETS) {
     val kexePath = outputKexePath(config, profile)
     if (!fileExists(kexePath)) {
-      eprintln("error: $kexePath not found. Run 'kolt build' first.")
+      eprintError("$kexePath not found. Run 'kolt build' first.")
       return Err(EXIT_BUILD_ERROR)
     }
     val cmd = nativeRunCommand(config, appArgs, profile)
@@ -959,7 +959,7 @@ private fun doRunInner(
     return Ok(Unit)
   }
   if (!fileExists(CLASSES_DIR)) {
-    eprintln("error: $CLASSES_DIR not found. Run 'kolt build' first.")
+    eprintError("$CLASSES_DIR not found. Run 'kolt build' first.")
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -969,7 +969,7 @@ private fun doRunInner(
   val projectRoot =
     currentWorkingDirectory()
       ?: run {
-        eprintln("error: could not determine current working directory")
+        eprintError("could not determine current working directory")
         return Err(EXIT_BUILD_ERROR)
       }
   val args =
@@ -1039,7 +1039,7 @@ private fun doTestInner(
 
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
   if (existingTestSources.isEmpty()) {
-    eprintln("error: no test sources found in ${config.build.testSources}")
+    eprintError("no test sources found in ${config.build.testSources}")
     return Err(EXIT_TEST_ERROR)
   }
 
@@ -1082,23 +1082,23 @@ private fun doTestInner(
 
   val paths =
     resolveKoltPaths().getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_TEST_ERROR)
     }
   val consoleLauncherPath =
     ensureTool(paths, CONSOLE_LAUNCHER_SPEC).getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_TEST_ERROR)
     }
   val managedKotlincBin =
     ensureKotlincBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(EXIT_TEST_ERROR)
     }
 
   val pluginJarPathsByAlias =
     resolveEnabledPluginJarPaths(config, paths, EXIT_TEST_ERROR).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(it.exitCode)
     }
   val pArgs = pluginJarPathsByAlias.values.map { "-Xplugin=$it" }
@@ -1120,7 +1120,7 @@ private fun doTestInner(
   val cwd =
     currentWorkingDirectory()
       ?: run {
-        eprintln("error: could not determine current working directory")
+        eprintError("could not determine current working directory")
         return Err(EXIT_TEST_ERROR)
       }
 
@@ -1144,7 +1144,7 @@ private fun doTestInner(
   val absMainClassesDir = absolutise(CLASSES_DIR, cwd)
   val testSources =
     expandKotlinSources(existingTestSources.map { absolutise(it, cwd) }).getOrElse { err ->
-      eprintln("error: could not list Kotlin sources under ${err.path}")
+      eprintError("could not list Kotlin sources under ${err.path}")
       return Err(EXIT_TEST_ERROR)
     }
   val testRequestClasspath = buildList {
@@ -1192,7 +1192,7 @@ private fun doTestInner(
         if (fileExists(TEST_CLASSES_DIR)) newestMtimeAll(TEST_CLASSES_DIR) else null
     )
   writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
-    eprintln("warning: could not write test state file")
+    eprintWarning("could not write test state file")
   }
 
   val existingTestResourceDirs = filterExistingDirs(config.build.testResources, "test resource")
@@ -1222,7 +1222,7 @@ private fun doTestInner(
         val elapsed = testStartMark.elapsedNow()
         eprintln("tests failed in ${formatDuration(elapsed)}")
       }
-      else -> eprintln("error: failed to run tests")
+      else -> eprintError("failed to run tests")
     }
     return Err(EXIT_TEST_ERROR)
   }
@@ -1240,7 +1240,7 @@ private fun doNativeTest(
 ): Result<Unit, Int> {
   val existingTestSources = filterExistingDirs(config.build.testSources, "test source")
   if (existingTestSources.isEmpty()) {
-    eprintln("error: no test sources found in ${config.build.testSources}")
+    eprintError("no test sources found in ${config.build.testSources}")
     return Err(EXIT_TEST_ERROR)
   }
 
@@ -1278,12 +1278,12 @@ private fun doNativeTest(
 
   val paths =
     resolveKoltPaths().getOrElse {
-      eprintln("error: $it")
+      eprintError("$it")
       return Err(EXIT_TEST_ERROR)
     }
   val managedKonancBin =
     ensureKonancBin(config.kotlin.effectiveCompiler, paths).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(EXIT_TEST_ERROR)
     }
   val managedJdkBins =
@@ -1292,7 +1292,7 @@ private fun doNativeTest(
     }
   val nativePluginArgs =
     resolvePluginArgs(config, paths, EXIT_TEST_ERROR).getOrElse {
-      eprintln("error: ${it.message}")
+      eprintError("${it.message}")
       return Err(it.exitCode)
     }
 
@@ -1302,7 +1302,7 @@ private fun doNativeTest(
     }
 
   ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
 
@@ -1315,7 +1315,7 @@ private fun doNativeTest(
   val cwd =
     currentWorkingDirectory()
       ?: run {
-        eprintln("error: could not determine current working directory")
+        eprintError("could not determine current working directory")
         return Err(EXIT_BUILD_ERROR)
       }
   val subprocessBackend =
@@ -1342,7 +1342,7 @@ private fun doNativeTest(
       profile = profile,
     )
   ensureDirectoryRecursive(libraryCmd.outputPath.substringBeforeLast('/')).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
   println("compiling tests (native)...")
@@ -1367,13 +1367,13 @@ private fun doNativeTest(
   }
 
   if (!fileExists(linkCmd.outputPath)) {
-    eprintln("error: ${linkCmd.outputPath} not produced by konanc")
+    eprintError("${linkCmd.outputPath} not produced by konanc")
     return Err(EXIT_BUILD_ERROR)
   }
 
   val newState = currentState.copy(testArtifactMtime = fileMtime(linkCmd.outputPath))
   writeFileAsString(TEST_BUILD_STATE_FILE, serializeTestBuildState(newState)).getOrElse {
-    eprintln("warning: could not write test state file")
+    eprintWarning("could not write test state file")
   }
 
   val runCmd = nativeTestRunCommand(testConfig, testArgs, profile)
@@ -1390,7 +1390,7 @@ private fun doNativeTest(
         val elapsed = testStartMark.elapsedNow()
         eprintln("tests failed in ${formatDuration(elapsed)}")
       }
-      else -> eprintln("error: failed to run tests")
+      else -> eprintError("failed to run tests")
     }
     return Err(EXIT_TEST_ERROR)
   }
@@ -1410,7 +1410,7 @@ internal fun ensureJdkBinsFromConfig(
   val version = config.build.jdk ?: BOOTSTRAP_JDK_VERSION
   return ensureJdkBins(version, paths)
     .getOrElse { err ->
-      eprintln("error: ${err.message}")
+      eprintError("${err.message}")
       return Err(EXIT_BUILD_ERROR)
     }
     .let { Ok(it) }
@@ -1614,7 +1614,7 @@ private inline fun <T> withProjectLock(
   crossinline body: (LockHandle) -> Result<T, Int>
 ): Result<T, Int> {
   ensureDirectoryRecursive(BUILD_DIR).getOrElse { error ->
-    eprintln("error: could not create directory ${error.path}")
+    eprintError("could not create directory ${error.path}")
     return Err(EXIT_BUILD_ERROR)
   }
   val timeoutMs = parseLockTimeoutMs()
@@ -1629,16 +1629,14 @@ private fun mapLockErrorToExitCode(error: LockError, requestedTimeoutMs: Long): 
   when (error) {
     is LockError.TimedOut -> {
       val reportedMs = if (error.waitedMs > 0L) error.waitedMs else requestedTimeoutMs
-      eprintln(
-        "error: lock acquisition timed out after ${reportedMs}ms; " +
-          "another kolt build may be stuck"
+      eprintError(
+        "lock acquisition timed out after ${reportedMs}ms; another kolt build may be stuck"
       )
       EXIT_LOCK_TIMEOUT
     }
     is LockError.IoError -> {
-      eprintln(
-        "error: could not acquire build lock at $BUILD_DIR/.kolt-build.lock " +
-          "(errno=${error.errno}: ${error.message})"
+      eprintError(
+        "could not acquire build lock at $BUILD_DIR/.kolt-build.lock (errno=${error.errno}: ${error.message})"
       )
       EXIT_BUILD_ERROR
     }

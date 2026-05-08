@@ -176,7 +176,7 @@
   - _Boundary: cli forward point at BuildCommands daemon body forwarding_
 
 - [ ] 7. 残りの raw `eprintln("error/warning: ...")` 呼び出しの mass migration
-- [ ] 7.1 (P) `BuildCommands.kt` の resolve / tool / config 以外の raw eprintln 呼び出しを `eprintError` / `eprintWarning` に置換
+- [x] 7.1 (P) `BuildCommands.kt` の resolve / tool / config 以外の raw eprintln 呼び出しを `eprintError` / `eprintWarning` に置換
   - 対象: file IO error (`could not read`, `could not create directory`, `could not list Kotlin sources`, `could not copy resources` 等)、 generic `eprintln("error: ${it.message}")`、 `eprintln("warning: ...")` (clean / daemon IC state cleanup)
   - 各置換で headline はコロン以降のテキスト、 file path / cause 等は context list に分解できる場合は分解。 既存 1 行記述は headline のみで OK
   - 既存の build/check/run/test/clean 各経路で stderr 出力 byte が (色 off で) 旧文言と一致していることを既存 string-snapshot test で確認
