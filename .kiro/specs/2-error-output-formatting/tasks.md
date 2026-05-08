@@ -33,7 +33,7 @@
   - _Boundary: kolt.infra.output.DiagnosticWriter_
 
 - [ ] 2. Foundation: infra/suggest 層 (Levenshtein + closestMatch) — Major 1 と並行実行可、 sub-task が parallel-safe
-- [ ] 2.1 `levenshtein(a, b): Int` を実装
+- [x] 2.1 `levenshtein(a, b): Int` を実装
   - 標準 dynamic-programming edit distance (insert / delete / substitute コスト各 1)
   - テスト: distance 0 (`"foo" / "foo"`)、 1 (`"foo" / "fo"`)、 2 (`"foo" / "fox"`)、 完全相違 (`"" / "abc"` → 3) の 4 ケース
   - 観察可能な完了: `kolt test --filter LevenshteinTest` 4 ケース green
