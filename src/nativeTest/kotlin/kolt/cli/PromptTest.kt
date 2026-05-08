@@ -178,7 +178,12 @@ class PromptTest {
 
     doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
 
-    assertTrue(io.outputs.isEmpty(), "non-TTY must not print prompts: ${io.outputs}")
+    val joined = io.outputs.joinToString("\n")
+    assertFalse(joined.contains("Kinds:"), "non-TTY must not print kind prompt: $joined")
+    assertFalse(joined.contains("Targets:"), "non-TTY must not print target prompt: $joined")
+    assertFalse(joined.contains("> kind"), "non-TTY must not print kind arrow: $joined")
+    assertFalse(joined.contains("> target"), "non-TTY must not print target arrow: $joined")
+    assertFalse(joined.contains("> group"), "non-TTY must not print group arrow: $joined")
     assertTrue(fileExists("src/Main.kt"))
     val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
     assertFalse(toml.contains("kind = \"lib\""))

@@ -1,6 +1,7 @@
 package kolt.cli
 
 import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.inferProjectName
@@ -57,8 +58,11 @@ internal fun doInit(
       return Err(EXIT_CONFIG_ERROR)
     }
 
-  return scaffoldProject(
-    ".",
-    ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group),
-  )
+  scaffoldProject(".", ScaffoldOptions(projectName, resolved.kind, resolved.target, resolved.group))
+    .getOrElse {
+      return Err(it)
+    }
+
+  printNextSteps(io, cdTarget = null, resolved.kind, policy)
+  return Ok(Unit)
 }

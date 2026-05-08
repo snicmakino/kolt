@@ -62,16 +62,18 @@ internal fun doNew(
       return Err(it)
     }
 
-  printNextSteps(io, projectName, resolved.kind, policy)
+  printNextSteps(io, cdTarget = projectName, resolved.kind, policy)
   return Ok(Unit)
 }
 
 // Routed through ScaffoldIO so tests can capture the block; SystemScaffoldIO
 // writes to real stdout. Cyan emphasis matches the note severity in the
-// stderr writer — same family signal in a different channel.
-private fun printNextSteps(
+// stderr writer — same family signal in a different channel. `cdTarget` is
+// null for `kolt init` (already in target dir) and the project name for
+// `kolt new` (where the user must `cd` into the freshly-created subdir).
+internal fun printNextSteps(
   io: ScaffoldIO,
-  projectName: String,
+  cdTarget: String?,
   kind: ScaffoldKind,
   policy: ColorPolicy,
 ) {
@@ -85,6 +87,6 @@ private fun printNextSteps(
 
   io.println("")
   io.println("next steps:")
-  io.println("  ${emph("cd $projectName")}")
+  if (cdTarget != null) io.println("  ${emph("cd $cdTarget")}")
   io.println("  ${emph(cmd)}")
 }
