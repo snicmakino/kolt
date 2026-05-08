@@ -8,6 +8,9 @@ import kolt.config.DEFAULT_SCAFFOLD_TARGET
 import kolt.config.NATIVE_TARGETS
 import kolt.config.ScaffoldKind
 import kolt.config.isValidGroup
+import kolt.infra.output.AnsiCodes
+import kolt.infra.output.ColorPolicy
+import kolt.infra.output.Stream
 
 internal data class ResolvedScaffoldOptions(
   val kind: ScaffoldKind,
@@ -18,13 +21,14 @@ internal data class ResolvedScaffoldOptions(
 internal fun resolveInteractive(
   parsed: ParsedInitArgs,
   io: ScaffoldIO,
+  policy: ColorPolicy = ColorPolicy.current(),
 ): Result<ResolvedScaffoldOptions, String> {
   val tty = io.isStdinTty()
 
   val kind =
     parsed.kind
       ?: if (tty) {
-        promptKind(io).getOrElse {
+        promptKind(io, policy).getOrElse {
           return Err(it)
         }
       } else ScaffoldKind.APP
@@ -32,7 +36,7 @@ internal fun resolveInteractive(
   val target =
     parsed.target
       ?: if (tty) {
-        promptTarget(io).getOrElse {
+        promptTarget(io, policy).getOrElse {
           return Err(it)
         }
       } else DEFAULT_SCAFFOLD_TARGET
@@ -50,39 +54,43 @@ internal fun resolveInteractive(
 
 private val PROMPT_TARGETS = listOf(DEFAULT_SCAFFOLD_TARGET) + NATIVE_TARGETS.toList().sorted()
 
-private fun promptKind(io: ScaffoldIO): Result<ScaffoldKind, String> {
-  io.println("Project kind:")
-  io.println("  1) app (default)")
-  io.println("  2) lib")
+// Wrap value in ANSI when policy enables stdout color. Prompt output goes to
+// stdout (kotlin.io.println), so the stream key is Stdout — distinct from the
+// stderr-only diagnostic writer.
+private fun colored(value: String, color: String, policy: ColorPolicy): String =
+  if (policy.shouldColor(Stream.Stdout)) "$color$value${AnsiCodes.RESET}" else value
+
+private fun promptKind(io: ScaffoldIO, policy: ColorPolicy): Result<ScaffoldKind, String> {
+  val app = colored("app", AnsiCodes.CYAN, policy)
+  val lib = colored("lib", AnsiCodes.YELLOW, policy)
+  io.println("Kinds: $app (default) | $lib")
+  io.println("> kind [app]:")
   val raw = io.readLine()?.trim().orEmpty()
   return when (raw) {
     "",
-    "1",
     "app" -> Ok(ScaffoldKind.APP)
-    "2",
     "lib" -> Ok(ScaffoldKind.LIB)
-    else -> Err("invalid kind '$raw' (expected 1, 2, app, or lib)")
+    else -> Err("invalid kind '$raw' (expected app or lib)")
   }
 }
 
-private fun promptTarget(io: ScaffoldIO): Result<String, String> {
-  io.println("Target:")
-  PROMPT_TARGETS.forEachIndexed { idx, name ->
-    val suffix = if (name == DEFAULT_SCAFFOLD_TARGET) " (default)" else ""
-    io.println("  ${idx + 1}) $name$suffix")
-  }
+private fun promptTarget(io: ScaffoldIO, policy: ColorPolicy): Result<String, String> {
+  val labels =
+    PROMPT_TARGETS.joinToString(" | ") { name ->
+      val color = if (name == DEFAULT_SCAFFOLD_TARGET) AnsiCodes.CYAN else AnsiCodes.YELLOW
+      val coloredName = colored(name, color, policy)
+      if (name == DEFAULT_SCAFFOLD_TARGET) "$coloredName (default)" else coloredName
+    }
+  io.println("Targets: $labels")
+  io.println("> target [$DEFAULT_SCAFFOLD_TARGET]:")
   val raw = io.readLine()?.trim().orEmpty()
   if (raw.isEmpty()) return Ok(DEFAULT_SCAFFOLD_TARGET)
-  val byNumber = raw.toIntOrNull()?.let { PROMPT_TARGETS.getOrNull(it - 1) }
-  if (byNumber != null) return Ok(byNumber)
   if (raw in PROMPT_TARGETS) return Ok(raw)
-  return Err(
-    "invalid target '$raw' (expected 1..${PROMPT_TARGETS.size} or one of ${PROMPT_TARGETS.joinToString(", ")})"
-  )
+  return Err("invalid target '$raw' (expected one of ${PROMPT_TARGETS.joinToString(", ")})")
 }
 
 private fun promptGroup(io: ScaffoldIO): Result<String?, String> {
-  io.println("Group (e.g. com.example, blank for none):")
+  io.println("> group [none]:")
   val raw = io.readLine()?.trim().orEmpty()
   if (raw.isEmpty()) return Ok(null)
   if (!isValidGroup(raw)) {

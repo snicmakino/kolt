@@ -5,6 +5,8 @@ import com.github.michaelbull.result.getOrElse
 import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.executeCommand
 import kolt.infra.fileExists
+import kolt.infra.output.AnsiCodes
+import kolt.infra.output.ColorPolicy
 import kolt.infra.readFileAsString
 import kolt.infra.removeDirectoryRecursive
 import kolt.infra.writeFileAsString
@@ -27,6 +29,20 @@ import platform.posix.getcwd
 import platform.posix.mkdtemp
 import platform.posix.setenv
 import platform.posix.unsetenv
+
+private class RecordingScaffoldIO(private val tty: Boolean, inputs: List<String> = emptyList()) :
+  ScaffoldIO {
+  private val iter = inputs.iterator()
+  val outputs = mutableListOf<String>()
+
+  override fun isStdinTty(): Boolean = tty
+
+  override fun readLine(): String? = if (iter.hasNext()) iter.next() else null
+
+  override fun println(msg: String) {
+    outputs += msg
+  }
+}
 
 @OptIn(ExperimentalForeignApi::class)
 class DoNewTest {
@@ -142,6 +158,61 @@ class DoNewTest {
     assertFalse(
       fileExists("myapp/.git"),
       "nested .git must not be created inside an existing worktree",
+    )
+  }
+
+  @Test
+  fun newPrintsNextStepBlockForAppPointingToKoltRun() {
+    val io = RecordingScaffoldIO(tty = false)
+
+    doNew(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doNew failed: exit=$it") }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(joined.contains("next steps:"), "missing next-step header: $joined")
+    assertTrue(joined.contains("cd myapp"), "missing cd line: $joined")
+    assertTrue(joined.contains("kolt run"), "app must point to kolt run: $joined")
+    assertFalse(joined.contains("kolt build"), "app must not point to kolt build: $joined")
+  }
+
+  @Test
+  fun newPrintsNextStepBlockForLibPointingToKoltBuild() {
+    val io = RecordingScaffoldIO(tty = false)
+
+    doNew(listOf("mylib", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doNew failed: exit=$it")
+    }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(joined.contains("next steps:"), "missing next-step header: $joined")
+    assertTrue(joined.contains("cd mylib"), "missing cd line: $joined")
+    assertTrue(joined.contains("kolt build"), "lib must point to kolt build: $joined")
+    assertFalse(joined.contains("kolt run"), "lib must not point to kolt run: $joined")
+  }
+
+  @Test
+  fun newNextStepBlockHasNoAnsiWhenColorDisabled() {
+    val io = RecordingScaffoldIO(tty = false)
+
+    doNew(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doNew failed: exit=$it") }
+
+    val joined = io.outputs.joinToString("\n")
+    assertFalse(joined.contains("["), "color disabled must not emit ANSI: $joined")
+  }
+
+  @Test
+  fun newNextStepBlockColorsCommandsWhenPolicyAllows() {
+    val io = RecordingScaffoldIO(tty = false)
+
+    doNew(listOf("myapp"), io, ColorPolicy.Always).getOrElse { error("doNew failed: exit=$it") }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(
+      joined.contains("${AnsiCodes.CYAN}cd myapp${AnsiCodes.RESET}"),
+      "expected cyan-wrapped cd: $joined",
+    )
+    assertTrue(
+      joined.contains("${AnsiCodes.CYAN}kolt run${AnsiCodes.RESET}"),
+      "expected cyan-wrapped kolt run: $joined",
     )
   }
 
