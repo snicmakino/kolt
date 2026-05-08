@@ -52,7 +52,12 @@ internal fun resolveInteractive(
   return Ok(ResolvedScaffoldOptions(kind, target, group))
 }
 
+// JVM target appears first so its index 1 lines up with the default; native
+// targets follow in alphabetical order. Caller iterates indices for prompt
+// numbering AND for input parsing — same list, single source of truth.
 private val PROMPT_TARGETS = listOf(DEFAULT_SCAFFOLD_TARGET) + NATIVE_TARGETS.toList().sorted()
+
+private val PROMPT_KINDS = listOf(ScaffoldKind.APP, ScaffoldKind.LIB)
 
 // Wrap value in ANSI when policy enables stdout color. Prompt output goes to
 // stdout (kotlin.io.println), so the stream key is Stdout — distinct from the
@@ -61,36 +66,44 @@ private fun colored(value: String, color: String, policy: ColorPolicy): String =
   if (policy.shouldColor(Stream.Stdout)) "$color$value${AnsiCodes.RESET}" else value
 
 private fun promptKind(io: ScaffoldIO, policy: ColorPolicy): Result<ScaffoldKind, String> {
-  val app = colored("app", AnsiCodes.CYAN, policy)
-  val lib = colored("lib", AnsiCodes.YELLOW, policy)
-  io.println("Kinds: $app (default) | $lib")
-  io.println("> kind [app]:")
-  val raw = io.readLine()?.trim().orEmpty()
-  return when (raw) {
-    "",
-    "app" -> Ok(ScaffoldKind.APP)
-    "lib" -> Ok(ScaffoldKind.LIB)
-    else -> Err("invalid kind '$raw' (expected app or lib)")
+  io.println("Kinds:")
+  PROMPT_KINDS.forEachIndexed { idx, kind ->
+    val name = kind.tomlValue
+    val color = if (kind == ScaffoldKind.APP) AnsiCodes.CYAN else AnsiCodes.YELLOW
+    val coloredName = colored(name, color, policy)
+    val suffix = if (kind == ScaffoldKind.APP) " (default)" else ""
+    io.println("  ${idx + 1}) $coloredName$suffix")
   }
+  io.println(">")
+  val raw = io.readLine()?.trim().orEmpty()
+  if (raw.isEmpty()) return Ok(ScaffoldKind.APP)
+  val byNumber = raw.toIntOrNull()?.let { PROMPT_KINDS.getOrNull(it - 1) }
+  if (byNumber != null) return Ok(byNumber)
+  return Err("invalid kind '$raw' (expected 1..${PROMPT_KINDS.size})")
 }
 
 private fun promptTarget(io: ScaffoldIO, policy: ColorPolicy): Result<String, String> {
-  val labels =
-    PROMPT_TARGETS.joinToString(" | ") { name ->
-      val color = if (name == DEFAULT_SCAFFOLD_TARGET) AnsiCodes.CYAN else AnsiCodes.YELLOW
-      val coloredName = colored(name, color, policy)
-      if (name == DEFAULT_SCAFFOLD_TARGET) "$coloredName (default)" else coloredName
-    }
-  io.println("Targets: $labels")
-  io.println("> target [$DEFAULT_SCAFFOLD_TARGET]:")
+  io.println("Targets:")
+  PROMPT_TARGETS.forEachIndexed { idx, name ->
+    val color = if (name == DEFAULT_SCAFFOLD_TARGET) AnsiCodes.CYAN else AnsiCodes.YELLOW
+    val coloredName = colored(name, color, policy)
+    val suffix = if (name == DEFAULT_SCAFFOLD_TARGET) " (default)" else ""
+    io.println("  ${idx + 1}) $coloredName$suffix")
+  }
+  io.println(">")
   val raw = io.readLine()?.trim().orEmpty()
   if (raw.isEmpty()) return Ok(DEFAULT_SCAFFOLD_TARGET)
-  if (raw in PROMPT_TARGETS) return Ok(raw)
-  return Err("invalid target '$raw' (expected one of ${PROMPT_TARGETS.joinToString(", ")})")
+  val byNumber = raw.toIntOrNull()?.let { PROMPT_TARGETS.getOrNull(it - 1) }
+  if (byNumber != null) return Ok(byNumber)
+  return Err("invalid target '$raw' (expected 1..${PROMPT_TARGETS.size})")
 }
 
+// Group is free-form text by nature (e.g. com.example), so the input must
+// stay string-typed; the "blank for none" hint goes in the header rather
+// than the prompt line so the input arrow stays consistent with kind/target.
 private fun promptGroup(io: ScaffoldIO): Result<String?, String> {
-  io.println("> group [none]:")
+  io.println("Group (e.g. com.example, blank for none):")
+  io.println(">")
   val raw = io.readLine()?.trim().orEmpty()
   if (raw.isEmpty()) return Ok(null)
   if (!isValidGroup(raw)) {
