@@ -2,6 +2,7 @@ package kolt.build
 
 import com.github.michaelbull.result.getError
 import kolt.infra.ProcessError
+import kolt.infra.output.ColorPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -182,6 +183,58 @@ class NativeSubprocessBackendTest {
     } finally {
       if (previous != null) platform.posix.setenv("JAVA_HOME", previous, 1)
       else platform.posix.unsetenv("JAVA_HOME")
+    }
+  }
+
+  // When ColorPolicy disables stderr color, the child konanc must see
+  // NO_COLOR=1 in its env so the underlying compiler emits plain
+  // (non-ANSI) diagnostics. Mirrors the kotlinc-side contract.
+  @Test
+  fun compileInjectsNoColorEnvWhenColorPolicyDisablesStderr() {
+    val backend = NativeSubprocessBackend(konancBin = "sh", colorPolicy = { ColorPolicy.Never })
+    val error = backend.compile(listOf("-c", "[ \"\$NO_COLOR\" = \"1\" ]")).getError()
+    if (error != null) {
+      kotlin.test.fail("expected sh to see NO_COLOR=1, got error: $error")
+    }
+  }
+
+  // When ColorPolicy enables color, kolt must NOT inject NO_COLOR — the child
+  // should inherit parent env verbatim so konanc keeps emitting ANSI codes
+  // for fd-inherit pass-through.
+  @OptIn(ExperimentalForeignApi::class)
+  @Test
+  fun compileDoesNotInjectNoColorEnvWhenColorPolicyAllowsStderr() {
+    val previous = platform.posix.getenv("NO_COLOR")?.toKString()
+    platform.posix.unsetenv("NO_COLOR")
+    try {
+      val backend = NativeSubprocessBackend(konancBin = "sh", colorPolicy = { ColorPolicy.Always })
+      val error = backend.compile(listOf("-c", "[ -z \"\$NO_COLOR\" ]")).getError()
+      if (error != null) {
+        kotlin.test.fail("expected sh to see NO_COLOR unset, got error: $error")
+      }
+    } finally {
+      if (previous != null) platform.posix.setenv("NO_COLOR", previous, 1)
+    }
+  }
+
+  // JAVA_HOME injection must still work when NO_COLOR is also injected — both
+  // env entries land in the child without one displacing the other.
+  @Test
+  fun compileSetsBothJavaHomeAndNoColorWhenColorDisabledAndJavaHomeSupplied() {
+    val backend =
+      NativeSubprocessBackend(
+        konancBin = "sh",
+        javaHome = "/managed/jdk/home",
+        colorPolicy = { ColorPolicy.Never },
+      )
+    val error =
+      backend
+        .compile(
+          listOf("-c", "[ \"\$JAVA_HOME\" = \"/managed/jdk/home\" ] && [ \"\$NO_COLOR\" = \"1\" ]")
+        )
+        .getError()
+    if (error != null) {
+      kotlin.test.fail("expected sh to see both JAVA_HOME and NO_COLOR, got error: $error")
     }
   }
 }

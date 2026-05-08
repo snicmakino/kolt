@@ -9,10 +9,12 @@ import kolt.build.NativeCompileError
 import kolt.build.daemon.BOOTSTRAP_JDK_VERSION
 import kolt.infra.ProcessError
 import kolt.infra.net.UnixSocketError
+import kolt.infra.output.ColorPolicy
 import kolt.nativedaemon.wire.FrameError
 import kolt.nativedaemon.wire.Message
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -52,10 +54,11 @@ private class FakeClock(var nowMs: Long = 0) {
 
 private fun newBackend(
   connector: NativeDaemonConnector,
-  spawner: NativeDaemonSpawner = { _, _ -> Ok(Unit) },
+  spawner: NativeDaemonSpawner = { _, _, _ -> Ok(Unit) },
   clock: FakeClock = FakeClock(),
   onSpawn: () -> Unit = {},
   warnSink: (String) -> Unit = {},
+  colorPolicy: () -> ColorPolicy = { ColorPolicy.Never },
 ): NativeDaemonBackend =
   NativeDaemonBackend(
     javaBin = "/opt/jdk/bin/java",
@@ -71,6 +74,7 @@ private fun newBackend(
     sleeper = clock.sleeper,
     onSpawn = onSpawn,
     warnSink = warnSink,
+    colorPolicy = colorPolicy,
   )
 
 private val sampleArgs =
@@ -332,7 +336,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
     val backend =
       newBackend(
         connector = { Ok(fake) },
-        spawner = { _, _ ->
+        spawner = { _, _, _ ->
           spawnCount++
           Ok(Unit)
         },
@@ -396,7 +400,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
         connector = { _ ->
           Err(UnixSocketError.ConnectFailed(path = "/tmp/s", errno = 13, message = "EACCES"))
         },
-        spawner = { _, _ ->
+        spawner = { _, _, _ ->
           spawnCount++
           Ok(Unit)
         },
@@ -430,7 +434,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
         connector = { _ ->
           Err(UnixSocketError.ConnectFailed(path = "/tmp/s", errno = 2, message = "ENOENT"))
         },
-        spawner = { _, _ -> Err(ProcessError.ForkFailed) },
+        spawner = { _, _, _ -> Err(ProcessError.ForkFailed) },
       )
 
     val err = backend.compile(sampleArgs).getError()
@@ -470,7 +474,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
         connector = { _ ->
           Err(UnixSocketError.ConnectFailed(path = "/tmp/s", errno = 2, message = "ENOENT"))
         },
-        spawner = { argv, _ ->
+        spawner = { argv, _, _ ->
           capturedArgv = argv
           Err(ProcessError.ForkFailed)
         },
@@ -502,7 +506,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
         connector = { _ ->
           Err(UnixSocketError.ConnectFailed(path = "/tmp/s", errno = 2, message = "ENOENT"))
         },
-        spawner = { argv, _ ->
+        spawner = { argv, _, _ ->
           capturedArgv = argv
           Err(ProcessError.ForkFailed)
         },
@@ -585,7 +589,7 @@ class NativeDaemonBackendConnectAndSpawnTest {
         connector = { _ ->
           Err(UnixSocketError.ConnectFailed(path = "/tmp/s", errno = 2, message = "ENOENT"))
         },
-        spawner = { _, _ -> Ok(Unit) },
+        spawner = { _, _, _ -> Ok(Unit) },
         clockMs = clock.clock,
         sleeper = budgetOverflowSleeper,
       )
@@ -611,5 +615,68 @@ class NativeDaemonBackendConnectAndSpawnTest {
     backend.compile(sampleArgs)
 
     assertTrue(fake.closed, "connection must close on send error")
+  }
+}
+
+class NativeDaemonBackendNoColorEnvTest {
+
+  // When ColorPolicy disables stderr color, the native daemon spawn must
+  // carry NO_COLOR=1 so the JVM daemon (and the konanc subprocess it spawns)
+  // emits plain diagnostics. Mirrors DaemonCompilerBackendNoColorEnvTest.
+  @Test
+  fun spawnEnvIncludesNoColorWhenColorPolicyDisablesStderr() {
+    var capturedEnv: Map<String, String>? = null
+    var attempt = 0
+    val connector: NativeDaemonConnector = { path ->
+      attempt++
+      if (attempt == 1) {
+        Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+      } else {
+        Ok(FakeConnection())
+      }
+    }
+    val backend =
+      newBackend(
+        connector = connector,
+        spawner = { _, _, env ->
+          capturedEnv = env
+          Ok(Unit)
+        },
+        colorPolicy = { ColorPolicy.Never },
+      )
+    backend.compile(sampleArgs)
+    val env = assertNotNull(capturedEnv, "spawner must have been invoked after ENOENT")
+    assertEquals("1", env["NO_COLOR"], "expected NO_COLOR=1 in spawn env, got: $env")
+  }
+
+  // When color is enabled, kolt must not inject NO_COLOR — the daemon (and
+  // its konanc subprocess) inherits parent env verbatim.
+  @Test
+  fun spawnEnvOmitsNoColorWhenColorPolicyAllowsStderr() {
+    var capturedEnv: Map<String, String>? = null
+    var attempt = 0
+    val connector: NativeDaemonConnector = { path ->
+      attempt++
+      if (attempt == 1) {
+        Err(UnixSocketError.ConnectFailed(path, platform.posix.ENOENT, "No such file"))
+      } else {
+        Ok(FakeConnection())
+      }
+    }
+    val backend =
+      newBackend(
+        connector = connector,
+        spawner = { _, _, env ->
+          capturedEnv = env
+          Ok(Unit)
+        },
+        colorPolicy = { ColorPolicy.Always },
+      )
+    backend.compile(sampleArgs)
+    val env = assertNotNull(capturedEnv, "spawner must have been invoked after ENOENT")
+    assertFalse(
+      env.containsKey("NO_COLOR"),
+      "expected spawn env to omit NO_COLOR when color enabled, got: $env",
+    )
   }
 }

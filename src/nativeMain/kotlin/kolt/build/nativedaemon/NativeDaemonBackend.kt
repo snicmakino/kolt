@@ -19,6 +19,8 @@ import kolt.infra.ProcessError
 import kolt.infra.eprintln
 import kolt.infra.net.UnixSocket
 import kolt.infra.net.UnixSocketError
+import kolt.infra.output.ColorPolicy
+import kolt.infra.output.Stream
 import kolt.infra.spawnDetached
 import kolt.nativedaemon.wire.FrameCodec
 import kolt.nativedaemon.wire.FrameError
@@ -53,6 +55,10 @@ internal constructor(
   private val sleeper: (Int) -> Unit = defaultNativeDaemonSleeper,
   private val onSpawn: () -> Unit = {},
   private val warnSink: (String) -> Unit = ::eprintln,
+  // Seam: tests drive both color branches without mutating the global
+  // ColorPolicy. Production callers leave the default and the CLI's
+  // startup `ColorPolicy.install` governs behavior.
+  private val colorPolicy: () -> ColorPolicy = ColorPolicy::current,
 ) : NativeCompilerBackend {
 
   constructor(
@@ -115,7 +121,13 @@ internal constructor(
     } ?: return Ok(first.get()!!)
 
     onSpawn()
-    val spawnErr = spawner(spawnArgv(), logPath).getError()
+    val spawnEnv = buildMap {
+      // Propagate to the JVM native daemon and the konanc subprocess it
+      // spawns reflectively. With color enabled we inject nothing so the
+      // daemon inherits parent env verbatim.
+      if (!colorPolicy().shouldColor(Stream.Stderr)) put("NO_COLOR", "1")
+    }
+    val spawnErr = spawner(spawnArgv(), logPath, spawnEnv).getError()
     if (spawnErr != null) {
       return Err(
         NativeCompileError.BackendUnavailable.Other("native daemon spawn failed: $spawnErr")
@@ -202,7 +214,8 @@ internal class SocketNativeDaemonConnection(private val socket: UnixSocket) :
 internal typealias NativeDaemonConnector =
   (String) -> Result<NativeDaemonConnection, UnixSocketError>
 
-internal typealias NativeDaemonSpawner = (List<String>, String?) -> Result<Unit, ProcessError>
+internal typealias NativeDaemonSpawner =
+  (List<String>, String?, Map<String, String>) -> Result<Unit, ProcessError>
 
 internal val defaultNativeDaemonConnector: NativeDaemonConnector = { path ->
   val socketResult = UnixSocket.connect(path)
@@ -210,8 +223,8 @@ internal val defaultNativeDaemonConnector: NativeDaemonConnector = { path ->
   if (err != null) Err(err) else Ok(SocketNativeDaemonConnection(socketResult.get()!!))
 }
 
-internal val defaultNativeDaemonSpawner: NativeDaemonSpawner = { argv, logPath ->
-  spawnDetached(argv, logPath)
+internal val defaultNativeDaemonSpawner: NativeDaemonSpawner = { argv, logPath, extraEnv ->
+  spawnDetached(argv, logPath, extraEnv)
 }
 
 internal val defaultNativeDaemonSleeper: (Int) -> Unit = { ms -> usleep((ms * 1000).toUInt()) }

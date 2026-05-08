@@ -157,7 +157,7 @@
   - _Depends: 1.2_
   - _Boundary: kolt.build.SubprocessCompilerBackend + kolt.build.daemon spawn_
 
-- [ ] 6.2 (P) konanc subprocess (direct + Native daemon spawn) への `NO_COLOR` env injection
+- [x] 6.2 (P) konanc subprocess (direct + Native daemon spawn) への `NO_COLOR` env injection
   - `kolt.build.NativeSubprocessBackend` および `kolt.build.nativedaemon.*` の spawn 経路で同じ env injection
   - kotlin-result `Result<V, E>` chain を破らないように env 構築 helper を共通化 (kotlinc 経路と一貫させる)
   - テスト: env capture mock で `NO_COLOR=1` 注入確認 (kotlinc 経路と並列 fixture)
