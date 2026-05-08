@@ -3,6 +3,8 @@ package kolt.usertool
 import kolt.cli.EXIT_CONFIG_ERROR
 import kolt.cli.EXIT_DEPENDENCY_ERROR
 import kolt.cli.EXIT_TOOL_ERROR
+import kolt.infra.output.RenderedDiagnostic
+import kolt.infra.output.Severity
 import kolt.resolve.Coordinate
 
 /**
@@ -55,18 +57,18 @@ sealed class ToolLaunchError {
  * - `Launch.*` → `EXIT_TOOL_ERROR=7` (the only three variants that do so — pinned by
  *   `ToolErrorTest.exactlyThreeVariantsRouteThroughExitToolError`)
  *
- * `formatStderr()` emits the variant-specific prefix that R5.4 ("cause-distinguishable surface")
- * relies on: the prefix identifies the cause, the exit code identifies kolt-level category.
+ * `render()` emits the variant-specific headline that R5.4 ("cause-distinguishable surface") relies
+ * on: the headline identifies the cause, the exit code identifies kolt-level category.
  */
 sealed class ToolError {
   abstract fun toExitCode(): Int
 
-  abstract fun formatStderr(): String
+  abstract fun render(): RenderedDiagnostic
 
   data class Parse(val cause: ToolSectionParseError) : ToolError() {
     override fun toExitCode(): Int = EXIT_CONFIG_ERROR
 
-    override fun formatStderr(): String {
+    override fun render(): RenderedDiagnostic {
       val (alias, detail) =
         when (val c = cause) {
           is ToolSectionParseError.ForbiddenField ->
@@ -77,28 +79,34 @@ sealed class ToolError {
           is ToolSectionParseError.MissingCoords -> c.alias to "missing required field 'coords'"
           is ToolSectionParseError.DuplicateAlias -> c.alias to "duplicate alias"
         }
-      return "tool '$alias': parse error: $detail"
+      return RenderedDiagnostic(Severity.Error, "tool '$alias': parse error: $detail")
     }
   }
 
   data class Resolve(val cause: ToolResolutionError) : ToolError() {
     override fun toExitCode(): Int = EXIT_DEPENDENCY_ERROR
 
-    override fun formatStderr(): String =
+    override fun render(): RenderedDiagnostic =
       when (val c = cause) {
         is ToolResolutionError.ResolveFailed -> {
           val tail =
             if (c.attempts.isEmpty()) "no repository attempts recorded"
             else "tried ${c.attempts.joinToString(", ")}"
-          "tool '${c.alias}': resolve failed: $tail"
+          RenderedDiagnostic(Severity.Error, "tool '${c.alias}': resolve failed: $tail")
         }
         is ToolResolutionError.IntegrityMismatch ->
-          "tool '${c.alias}': integrity mismatch: expected ${c.expected} got ${c.actual}"
+          RenderedDiagnostic(
+            Severity.Error,
+            "tool '${c.alias}': integrity mismatch: expected ${c.expected} got ${c.actual}",
+          )
         is ToolResolutionError.LockfileMismatch -> {
           val pinned = formatCoordsWithClassifier(c.lockedCoords, c.lockedClassifier)
           val toml = formatCoordsWithClassifier(c.tomlCoords, c.tomlClassifier)
-          "tool '${c.alias}': lockfile pin '$pinned' differs from kolt.toml '$toml'. " +
-            "Run `kolt update` to refresh tool pins."
+          RenderedDiagnostic(
+            severity = Severity.Error,
+            headline = "tool '${c.alias}': lockfile pin '$pinned' differs from kolt.toml '$toml'",
+            hint = "Run `kolt update` to refresh tool pins.",
+          )
         }
       }
   }
@@ -106,23 +114,33 @@ sealed class ToolError {
   data class Launch(val cause: ToolLaunchError) : ToolError() {
     override fun toExitCode(): Int = EXIT_TOOL_ERROR
 
-    override fun formatStderr(): String =
+    override fun render(): RenderedDiagnostic =
       when (val c = cause) {
         is ToolLaunchError.NotRunnableJar ->
-          "tool '${c.alias}': not a runnable jar (${c.reason}) at ${c.jarPath}"
+          RenderedDiagnostic(
+            Severity.Error,
+            "tool '${c.alias}': not a runnable jar (${c.reason}) at ${c.jarPath}",
+          )
         is ToolLaunchError.MainClassMissing ->
-          "tool '${c.alias}': Main-Class missing in MANIFEST.MF of ${c.jarPath}"
-        is ToolLaunchError.JdkUnavailable -> "tool: JDK unavailable: ${c.cause}"
+          RenderedDiagnostic(
+            Severity.Error,
+            "tool '${c.alias}': Main-Class missing in MANIFEST.MF of ${c.jarPath}",
+          )
+        is ToolLaunchError.JdkUnavailable ->
+          RenderedDiagnostic(Severity.Error, "tool: JDK unavailable: ${c.cause}")
       }
   }
 
   data class UnknownAlias(val alias: String, val knownAliases: List<String>) : ToolError() {
     override fun toExitCode(): Int = EXIT_CONFIG_ERROR
 
-    override fun formatStderr(): String {
+    override fun render(): RenderedDiagnostic {
       val known =
         if (knownAliases.isEmpty()) "(none declared)" else knownAliases.sorted().joinToString(", ")
-      return "tool '$alias': not declared in [tools]. Known aliases: $known"
+      return RenderedDiagnostic(
+        Severity.Error,
+        "tool '$alias': not declared in [tools]. Known aliases: $known",
+      )
     }
   }
 }

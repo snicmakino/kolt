@@ -11,6 +11,7 @@ import kolt.infra.CopyFailed
 import kolt.infra.copyFile
 import kolt.infra.eprintln
 import kolt.infra.fileExists
+import kolt.infra.output.eprintDiagnostic
 import kolt.infra.readFileAsString
 import kolt.infra.writeFileAsString
 import kolt.resolve.LOCKFILE_VERSION
@@ -126,7 +127,7 @@ internal fun lookupToolEntry(alias: String, config: KoltConfig): Result<ToolEntr
   val entry = config.tools[alias]
   if (entry != null) return Ok(entry)
   val toolError = ToolError.UnknownAlias(alias = alias, knownAliases = config.tools.keys.toList())
-  eprintln(toolError.formatStderr())
+  eprintDiagnostic(toolError.render())
   return Err(toolError.toExitCode())
 }
 
@@ -178,7 +179,7 @@ internal fun runToolWithDeps(
 }
 
 private fun surfaceToolError(error: ToolError): Result<Int, Int> {
-  eprintln(error.formatStderr())
+  eprintDiagnostic(error.render())
   return Err(error.toExitCode())
 }
 

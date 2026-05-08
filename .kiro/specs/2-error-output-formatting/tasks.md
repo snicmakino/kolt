@@ -60,7 +60,7 @@
   - _Depends: 1.3_
   - _Boundary: kolt.resolve.formatResolveError + その cli consumer_
 
-- [ ] 3.2 (P) `ToolError.formatStderr` を `ToolError.render(): RenderedDiagnostic` に migrate、 全 cli caller を同時更新
+- [x] 3.2 (P) `ToolError.formatStderr` を `ToolError.render(): RenderedDiagnostic` に migrate、 全 cli caller を同時更新
   - sealed class `ToolError` の `abstract fun formatStderr(): String` を `abstract fun render(): RenderedDiagnostic` に置換、 全 variant を更新
   - `LockfileMismatch` の inline `"Run \`kolt update\` to refresh tool pins."` を `hint` slot へ移動 (R5.1 の severity 分離)
   - `ToolCommands.kt` の `eprintln(error.formatStderr())` を `eprintDiagnostic(error.render())` に書き換え

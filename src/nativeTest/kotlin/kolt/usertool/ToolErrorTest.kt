@@ -20,8 +20,8 @@ class ToolErrorTest {
       ToolError.Parse(ToolSectionParseError.InvalidAlias(alias = "Foo", reason = "uppercase"))
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
     assertTrue(
-      err.formatStderr().startsWith("tool 'Foo': parse error:"),
-      "got: ${err.formatStderr()}",
+      err.render().headline.startsWith("tool 'Foo': parse error:"),
+      "got: ${err.render().headline}",
     )
   }
 
@@ -30,8 +30,8 @@ class ToolErrorTest {
     val err =
       ToolError.Parse(ToolSectionParseError.ForbiddenField(alias = "ktlint", field = "depends-on"))
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': parse error:"))
-    assertTrue(err.formatStderr().contains("depends-on"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': parse error:"))
+    assertTrue(err.render().headline.contains("depends-on"))
   }
 
   @Test
@@ -41,21 +41,21 @@ class ToolErrorTest {
         ToolSectionParseError.MalformedCoords(alias = "ktlint", coords = "bogus", reason = "shape")
       )
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': parse error:"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': parse error:"))
   }
 
   @Test
   fun parseMissingCoordsMapsToConfigExitCodeAndPrefix() {
     val err = ToolError.Parse(ToolSectionParseError.MissingCoords(alias = "ktlint"))
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': parse error:"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': parse error:"))
   }
 
   @Test
   fun parseDuplicateAliasMapsToConfigExitCodeAndPrefix() {
     val err = ToolError.Parse(ToolSectionParseError.DuplicateAlias(alias = "ktlint"))
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': parse error:"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': parse error:"))
   }
 
   // Resolve variants — surface as EXIT_DEPENDENCY_ERROR (network/integrity/lock semantics).
@@ -72,7 +72,7 @@ class ToolErrorTest {
         )
       )
     assertEquals(EXIT_DEPENDENCY_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': resolve failed:"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': resolve failed:"))
   }
 
   @Test
@@ -87,12 +87,14 @@ class ToolErrorTest {
         )
       )
     assertEquals(EXIT_DEPENDENCY_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': integrity mismatch:"))
-    assertTrue(err.formatStderr().contains("abc"))
-    assertTrue(err.formatStderr().contains("def"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': integrity mismatch:"))
+    assertTrue(err.render().headline.contains("abc"))
+    assertTrue(err.render().headline.contains("def"))
   }
 
-  // LockfileMismatch's stderr message is design-mandated verbatim — pin it.
+  // LockfileMismatch's stderr message is design-mandated — the headline pins
+  // the differs-from text and the hint slot carries the recovery command so
+  // the writer can render them as `error: ...` then `note: ...`.
   @Test
   fun resolveLockfileMismatchUsesDesignMandatedMessage() {
     val err =
@@ -106,11 +108,12 @@ class ToolErrorTest {
         )
       )
     assertEquals(EXIT_DEPENDENCY_ERROR, err.toExitCode())
+    val diag = err.render()
     assertEquals(
-      "tool 'ktlint': lockfile pin 'g:a:1.0' differs from kolt.toml 'g:a:1.1'. " +
-        "Run `kolt update` to refresh tool pins.",
-      err.formatStderr(),
+      "tool 'ktlint': lockfile pin 'g:a:1.0' differs from kolt.toml 'g:a:1.1'",
+      diag.headline,
     )
+    assertEquals("Run `kolt update` to refresh tool pins.", diag.hint)
   }
 
   @Test
@@ -125,11 +128,12 @@ class ToolErrorTest {
           lockedClassifier = "all",
         )
       )
+    val diag = err.render()
     assertEquals(
-      "tool 'ktlint': lockfile pin 'g:a:1.0:all' differs from kolt.toml 'g:a:1.1:all'. " +
-        "Run `kolt update` to refresh tool pins.",
-      err.formatStderr(),
+      "tool 'ktlint': lockfile pin 'g:a:1.0:all' differs from kolt.toml 'g:a:1.1:all'",
+      diag.headline,
     )
+    assertEquals("Run `kolt update` to refresh tool pins.", diag.hint)
   }
 
   // Launch variants — the only three that route through EXIT_TOOL_ERROR=7.
@@ -145,7 +149,7 @@ class ToolErrorTest {
         )
       )
     assertEquals(EXIT_TOOL_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': not a runnable jar"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': not a runnable jar"))
   }
 
   @Test
@@ -153,14 +157,14 @@ class ToolErrorTest {
     val err =
       ToolError.Launch(ToolLaunchError.MainClassMissing(alias = "ktlint", jarPath = "/x/y.jar"))
     assertEquals(EXIT_TOOL_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool 'ktlint': Main-Class missing"))
+    assertTrue(err.render().headline.startsWith("tool 'ktlint': Main-Class missing"))
   }
 
   @Test
   fun launchJdkUnavailableMapsToToolExitCodeAndPrefix() {
     val err = ToolError.Launch(ToolLaunchError.JdkUnavailable(cause = "install failed"))
     assertEquals(EXIT_TOOL_ERROR, err.toExitCode())
-    assertTrue(err.formatStderr().startsWith("tool: JDK unavailable:"))
+    assertTrue(err.render().headline.startsWith("tool: JDK unavailable:"))
   }
 
   // UnknownAlias is config-shaped — exit 2 — and surfaces known aliases.
@@ -168,7 +172,7 @@ class ToolErrorTest {
   fun unknownAliasMapsToConfigExitCodeAndListsKnownAliases() {
     val err = ToolError.UnknownAlias(alias = "ktl", knownAliases = listOf("ktlint", "detekt"))
     assertEquals(EXIT_CONFIG_ERROR, err.toExitCode())
-    val msg = err.formatStderr()
+    val msg = err.render().headline
     assertTrue(msg.startsWith("tool 'ktl': not declared in [tools]."))
     assertTrue(msg.contains("ktlint"))
     assertTrue(msg.contains("detekt"))
