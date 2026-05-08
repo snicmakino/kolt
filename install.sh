@@ -17,9 +17,21 @@ KOLT_VERSION="${KOLT_VERSION:-}"
 KOLT_ALLOW_YANKED="${KOLT_ALLOW_YANKED:-0}"
 KOLT_TEST_BASE_URL="${KOLT_TEST_BASE_URL:-}"
 KOLT_TEST_YANKED_URL="${KOLT_TEST_YANKED_URL:-}"
+KOLT_TEST_RELEASES_URL="${KOLT_TEST_RELEASES_URL:-}"
 
 DEFAULT_YANKED_URL="https://raw.githubusercontent.com/snicmakino/kolt/main/YANKED"
 DEFAULT_RELEASES_API="https://api.github.com/repos/snicmakino/kolt/releases?per_page=100"
+
+# Progress output goes to stderr because fetch_yanked_and_validate /
+# select_version / download_and_verify return values via stdout ($()).
+progress_start() {
+    echo "fetching $1..." >&2
+}
+
+progress_done() {
+    ps_bytes=$(wc -c < "$1" | tr -d ' ')
+    echo "  done (${ps_bytes} bytes)" >&2
+}
 
 platform_detect() {
     os=$(uname -s)
@@ -47,11 +59,13 @@ fetch_yanked_and_validate() {
     url="${KOLT_TEST_YANKED_URL:-$DEFAULT_YANKED_URL}"
     tempfile=$(mktemp)
 
+    progress_start "YANKED manifest from $url"
     if ! curl -fsSL -o "$tempfile" "$url"; then
         rm -f "$tempfile"
         echo "fetch_yanked: failed to fetch $url" >&2
         exit 6
     fi
+    progress_done "$tempfile"
 
     if ! err=$(awk -F'\t' '
         {
@@ -91,12 +105,15 @@ select_version() {
         return
     fi
 
+    sv_url="${KOLT_TEST_RELEASES_URL:-$DEFAULT_RELEASES_API}"
     sv_response=$(mktemp)
-    if ! curl -fsSL -o "$sv_response" "$DEFAULT_RELEASES_API"; then
+    progress_start "release listing from $sv_url"
+    if ! curl -fsSL -o "$sv_response" "$sv_url"; then
         rm -f "$sv_response"
-        echo "select_version: failed to fetch $DEFAULT_RELEASES_API" >&2
+        echo "select_version: failed to fetch $sv_url" >&2
         exit 6
     fi
+    progress_done "$sv_response"
 
     sv_tags=$(grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' "$sv_response" \
         | sed -E 's/^"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)"$/\1/')
@@ -156,18 +173,22 @@ download_and_verify() {
     dv_tarball_path="${dv_tempdir}/${dv_tarball_name}"
     dv_sha256_path="${dv_tarball_path}.sha256"
 
+    progress_start "kolt v${dv_version} (${dv_platform}) tarball from $dv_tarball_url"
     if ! curl -fsSL -o "$dv_tarball_path" "$dv_tarball_url"; then
         rm -rf "$dv_tempdir"
         echo "download_and_verify: failed to fetch $dv_tarball_url" >&2
         echo "(version $dv_version may predate the installer rollout — see #230)" >&2
         exit 4
     fi
+    progress_done "$dv_tarball_path"
 
+    progress_start "kolt v${dv_version} (${dv_platform}) checksum from $dv_sha256_url"
     if ! curl -fsSL -o "$dv_sha256_path" "$dv_sha256_url"; then
         rm -rf "$dv_tempdir"
         echo "download_and_verify: failed to fetch $dv_sha256_url" >&2
         exit 4
     fi
+    progress_done "$dv_sha256_path"
 
     if ! (cd "$dv_tempdir" && sha256sum -c "${dv_tarball_name}.sha256" >/dev/null 2>&1); then
         dv_expected=$(awk '{print $1}' "$dv_sha256_path")
