@@ -115,7 +115,7 @@
   - _Boundary: kolt.config (test fixture)_
 
 - [ ] 5. CLI startup + dispatcher integration
-- [ ] 5.1 `parseKoltArgs` に `--no-color` flag、 `KoltArgs.useColor` field、 `Main.kt` startup で `ColorPolicy.install` を実装
+- [x] 5.1 `parseKoltArgs` に `--no-color` flag、 `KoltArgs.useColor` field、 `Main.kt` startup で `ColorPolicy.install` を実装
   - `internal const val NO_COLOR_FLAG = "--no-color"` を追加、 `KoltArgs` に `noColor: Boolean` field を追加
   - `parseKoltArgs` で `--no-color` を抽出、 `filteredArgs` から strip
   - `main` 入口直後で `ColorPolicy.install(ColorPolicy.fromEnv(noColorFlag = koltArgs.noColor))` を呼ぶ。 既存 dispatch 順序は不変
@@ -125,7 +125,7 @@
   - _Depends: 1.2_
   - _Boundary: kolt.cli.Main (parseKoltArgs + main startup)_
 
-- [ ] 5.2 未知サブコマンドへの Did-you-mean 提案を dispatcher に実装
+- [x] 5.2 未知サブコマンドへの Did-you-mean 提案を dispatcher に実装
   - `Main.kt` の `else -> eprintln("error: unknown command ...")` 節を `eprintError(headline, hint = closestMatch(unknown, KNOWN_SUBCOMMANDS_SORTED)?.let { "Did you mean \`$it\`?" })` に置換
   - `KNOWN_SUBCOMMANDS_SORTED` を dispatcher `when` の隣に sorted alphabetical list として hardcoded (drift guard コメントを残す)
   - `printUsage()` の出力は維持。 exit code は `EXIT_COMMAND_NOT_FOUND` のまま
@@ -135,7 +135,7 @@
   - _Depends: 1.3, 2.2, 5.1_
   - _Boundary: kolt.cli.Main (unknown subcommand path)_
 
-- [ ] 5.3 未知 global flag への Did-you-mean 提案を `parseKoltArgs` 経路に実装
+- [x] 5.3 未知 global flag への Did-you-mean 提案を `parseKoltArgs` 経路に実装
   - `KoltArgs` に `unknownFlags: List<String>` field を追加 (Result 返却ではなく値返却で統一、 既存 `parseKoltArgs` の signature と対称)
   - `parseKoltArgs` で kolt-level block (subcommand 名より前) に既知 flag set / `-D` / passthrough のいずれにも該当しない `--xxx` を検出して `unknownFlags` に積む
   - `KNOWN_KOLT_FLAGS = ["--no-color", "--no-daemon", "--release", "--watch"]` を sorted alphabetical list として hardcoded (drift guard コメント)

@@ -5,6 +5,9 @@ import com.github.michaelbull.result.getOrElse
 import kolt.build.Profile
 import kolt.config.versionString
 import kolt.infra.eprintln
+import kolt.infra.output.ColorPolicy
+import kolt.infra.output.eprintError
+import kolt.infra.suggest.closestMatch
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -14,6 +17,15 @@ fun main(args: Array<String>) {
   }
 
   val parsed = parseKoltArgs(args.toList())
+  // Resolve color policy once at startup from the kolt-level `--no-color`
+  // flag plus the NO_COLOR env var and per-stream isatty state.
+  ColorPolicy.install(ColorPolicy.fromEnv(noColorFlag = parsed.noColor))
+  if (parsed.unknownFlags.isNotEmpty()) {
+    val unknown = parsed.unknownFlags.first()
+    val hint = closestMatch(unknown, KNOWN_KOLT_FLAGS)?.let { "Did you mean `$it`?" }
+    eprintError("unknown flag '$unknown'", hint = hint)
+    exitProcess(EXIT_COMMAND_NOT_FOUND)
+  }
   val useDaemon = parsed.useDaemon
   val watch = parsed.watch
   val profile = parsed.profile
@@ -99,31 +111,77 @@ fun main(args: Array<String>) {
     "--version",
     "version" -> println(versionString())
     else -> {
-      eprintln("error: unknown command '${filteredArgs[0]}'")
+      val unknown = filteredArgs[0]
+      val hint = closestMatch(unknown, KNOWN_SUBCOMMANDS_SORTED)?.let { "Did you mean `$it`?" }
+      eprintError("unknown command '$unknown'", hint = hint)
       printUsage()
       exitProcess(EXIT_COMMAND_NOT_FOUND)
     }
   }
 }
 
+// Sorted alphabetically for deterministic Did-you-mean ordering.
+// Source of truth is the dispatcher `when` above; keep this list in sync
+// when subcommands are added or removed.
+internal val KNOWN_SUBCOMMANDS_SORTED: List<String> =
+  listOf(
+      "add",
+      "build",
+      "cache",
+      "check",
+      "clean",
+      "daemon",
+      "fetch",
+      "fmt",
+      "info",
+      "init",
+      "new",
+      "outdated",
+      "remove",
+      "run",
+      "test",
+      "tool",
+      "toolchain",
+      "tree",
+      "update",
+      "version",
+    )
+    .sorted()
+
 internal const val NO_DAEMON_FLAG = "--no-daemon"
 internal const val WATCH_FLAG = "--watch"
 internal const val RELEASE_FLAG = "--release"
+internal const val NO_COLOR_FLAG = "--no-color"
 internal const val SYS_PROP_PREFIX = "-D"
+
+// Sorted alphabetically for deterministic Did-you-mean. Adding a new
+// kolt-level flag requires updating both this list and parseKoltArgs.
+internal val KNOWN_KOLT_FLAGS: List<String> =
+  listOf(NO_COLOR_FLAG, NO_DAEMON_FLAG, RELEASE_FLAG, WATCH_FLAG).sorted()
+
+// `--version` is `--`-prefixed but semantically a subcommand alias (the
+// dispatcher routes it through the version branch). Treating it as a
+// kolt-level flag would either require special-casing in `unknownFlags`
+// detection or break `kolt --version`; carving it out here keeps both
+// the boundary computation and the catalog clean.
+private val KOLT_SUBCOMMAND_ALIASES: Set<String> = setOf("--version")
 
 internal data class KoltArgs(
   val useDaemon: Boolean,
   val watch: Boolean,
   val profile: Profile,
+  val noColor: Boolean,
   val cliSysProps: List<Pair<String, String>>,
   val filteredArgs: List<String>,
+  val unknownFlags: List<String>,
 )
 
 // Splits the kolt-level flags from the subcommand and from any `--`
 // passthrough segment. The kolt-level flags (--no-daemon, --watch,
-// --release, -D<k>=<v>) are extracted into typed fields and stripped from
-// `filteredArgs`; the passthrough block (after `--`) is appended verbatim
-// so `kolt run -- --foo` still passes `-- --foo` to the subcommand parser.
+// --release, --no-color, -D<k>=<v>) are extracted into typed fields and
+// stripped from `filteredArgs`; the passthrough block (after `--`) is
+// appended verbatim so `kolt run -- --foo` still passes `-- --foo` to the
+// subcommand parser.
 internal fun parseKoltArgs(argList: List<String>): KoltArgs {
   val passthroughStart = argList.indexOf("--")
   val koltLevel = if (passthroughStart >= 0) argList.subList(0, passthroughStart) else argList
@@ -132,12 +190,29 @@ internal fun parseKoltArgs(argList: List<String>): KoltArgs {
   val useDaemon = !koltLevel.contains(NO_DAEMON_FLAG)
   val watch = koltLevel.contains(WATCH_FLAG)
   val profile = if (koltLevel.contains(RELEASE_FLAG)) Profile.Release else Profile.Debug
+  val noColor = koltLevel.contains(NO_COLOR_FLAG)
   val cliSysProps = koltLevel.mapNotNull(::parseDFlag)
+  // The kolt-level flag block ends at the first non-`--` non-`-D` token,
+  // which is the subcommand name (e.g. `build`, `test`); a `--version`
+  // alias also closes the block. Tokens after this boundary belong to
+  // the subcommand and must not be misclassified as unknown kolt-level
+  // flags. Within the kolt-level block, any `--xxx` not in the known set
+  // is an unknown flag.
+  val subcommandIndex =
+    koltLevel.indexOfFirst { token ->
+      (!token.startsWith("--") && parseDFlag(token) == null) || token in KOLT_SUBCOMMAND_ALIASES
+    }
+  val koltLevelOnly = if (subcommandIndex >= 0) koltLevel.subList(0, subcommandIndex) else koltLevel
+  val unknownFlags = koltLevelOnly.filter { it.startsWith("--") && it !in KNOWN_KOLT_FLAGS }
   val filteredArgs =
     koltLevel.filter {
-      it != NO_DAEMON_FLAG && it != WATCH_FLAG && it != RELEASE_FLAG && parseDFlag(it) == null
+      it != NO_DAEMON_FLAG &&
+        it != WATCH_FLAG &&
+        it != RELEASE_FLAG &&
+        it != NO_COLOR_FLAG &&
+        parseDFlag(it) == null
     } + passthrough
-  return KoltArgs(useDaemon, watch, profile, cliSysProps, filteredArgs)
+  return KoltArgs(useDaemon, watch, profile, noColor, cliSysProps, filteredArgs, unknownFlags)
 }
 
 // Returns null when `arg` is not a valid `-D<key>=<value>` form. Bare `-D`,

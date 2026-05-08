@@ -153,4 +153,109 @@ class ParseKoltArgsTest {
     assertEquals(listOf("foo" to "bar", "baz" to "qux"), parsed.cliSysProps)
     assertEquals(listOf("test"), parsed.filteredArgs)
   }
+
+  @Test
+  fun absentNoColorFlagDefaultsToFalse() {
+    val parsed = parseKoltArgs(listOf("build"))
+    assertFalse(parsed.noColor)
+  }
+
+  @Test
+  fun presentNoColorFlagYieldsTrue() {
+    val parsed = parseKoltArgs(listOf("--no-color", "build"))
+    assertTrue(parsed.noColor)
+  }
+
+  @Test
+  fun noColorFlagIsStrippedFromFilteredArgs() {
+    val parsed = parseKoltArgs(listOf("--no-color", "build"))
+    assertEquals(listOf("build"), parsed.filteredArgs)
+  }
+
+  @Test
+  fun noColorCombinesWithOtherKoltLevelFlags() {
+    val parsed = parseKoltArgs(listOf("--no-daemon", "--no-color", "--release", "--watch", "test"))
+    assertTrue(parsed.noColor)
+    assertFalse(parsed.useDaemon)
+    assertTrue(parsed.watch)
+    assertEquals(Profile.Release, parsed.profile)
+    assertEquals(listOf("test"), parsed.filteredArgs)
+  }
+
+  @Test
+  fun noColorAfterDoubleDashIsTreatedAsPassthrough() {
+    val parsed = parseKoltArgs(listOf("run", "--", "--no-color"))
+    assertFalse(parsed.noColor)
+    assertEquals(listOf("run", "--", "--no-color"), parsed.filteredArgs)
+  }
+
+  @Test
+  fun noColorFlagPositionDoesNotMatter() {
+    val before = parseKoltArgs(listOf("--no-color", "build"))
+    val after = parseKoltArgs(listOf("build", "--no-color"))
+    assertEquals(before.noColor, after.noColor)
+    assertEquals(before.filteredArgs, after.filteredArgs)
+  }
+
+  @Test
+  fun knownKoltFlagsListIsAlphabetical() {
+    assertEquals(KNOWN_KOLT_FLAGS.sorted(), KNOWN_KOLT_FLAGS)
+  }
+
+  @Test
+  fun unknownGlobalFlagSurfacesInUnknownFlagsList() {
+    val parsed = parseKoltArgs(listOf("--no-clor", "build"))
+    assertEquals(listOf("--no-clor"), parsed.unknownFlags)
+  }
+
+  @Test
+  fun knownFlagsDoNotPopulateUnknownFlags() {
+    val parsed = parseKoltArgs(listOf("--no-daemon", "--no-color", "build"))
+    assertEquals(emptyList(), parsed.unknownFlags)
+  }
+
+  @Test
+  fun unknownFlagAfterDoubleDashIsNotSurfaced() {
+    val parsed = parseKoltArgs(listOf("run", "--", "--unknown-app-flag"))
+    assertEquals(emptyList(), parsed.unknownFlags)
+  }
+
+  @Test
+  fun subcommandLevelFlagAfterSubcommandIsNotSurfaced() {
+    // `init --lib`, `daemon stop --all`, `cache clean --tools` etc. —
+    // subcommand-level flags belong to the subcommand parser and must
+    // not be misclassified as unknown kolt-level flags.
+    val initLib = parseKoltArgs(listOf("init", "--lib"))
+    assertEquals(emptyList(), initLib.unknownFlags)
+    val daemonStop = parseKoltArgs(listOf("daemon", "stop", "--all"))
+    assertEquals(emptyList(), daemonStop.unknownFlags)
+    val cacheClean = parseKoltArgs(listOf("cache", "clean", "--tools"))
+    assertEquals(emptyList(), cacheClean.unknownFlags)
+    val outdatedFilter = parseKoltArgs(listOf("outdated", "--json", "--filter=major"))
+    assertEquals(emptyList(), outdatedFilter.unknownFlags)
+    val infoVerbose = parseKoltArgs(listOf("info", "--verbose", "--format=json"))
+    assertEquals(emptyList(), infoVerbose.unknownFlags)
+  }
+
+  @Test
+  fun versionAliasIsNotSurfacedAsUnknownFlag() {
+    // `--version` is a subcommand alias, dispatched as if it were
+    // `version`. parseKoltArgs must not treat it as an unknown flag.
+    val parsed = parseKoltArgs(listOf("--version"))
+    assertEquals(emptyList(), parsed.unknownFlags)
+  }
+
+  @Test
+  fun unknownKoltLevelFlagBeforeSubcommandIsSurfaced() {
+    val parsed = parseKoltArgs(listOf("--no-clor", "build"))
+    assertEquals(listOf("--no-clor"), parsed.unknownFlags)
+  }
+
+  @Test
+  fun unknownKoltLevelFlagBeforeSubcommandLevelFlagIsSurfacedAlone() {
+    // Genuine kolt-level typo before the subcommand AND a valid
+    // subcommand-level flag after it — only the kolt-level typo surfaces.
+    val parsed = parseKoltArgs(listOf("--xxx", "init", "--lib"))
+    assertEquals(listOf("--xxx"), parsed.unknownFlags)
+  }
 }
