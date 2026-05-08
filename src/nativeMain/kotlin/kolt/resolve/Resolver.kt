@@ -7,6 +7,8 @@ import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
 import kolt.infra.Sha256Error
+import kolt.infra.output.RenderedDiagnostic
+import kolt.infra.output.Severity
 
 // Per-repository attempt captured by `downloadFromRepositories`. The
 // resolver keeps the URL it tried alongside the underlying error so
@@ -62,42 +64,64 @@ sealed class ResolveError {
   ) : ResolveError()
 }
 
-fun formatResolveError(error: ResolveError): String =
+fun formatResolveError(error: ResolveError): RenderedDiagnostic =
   when (error) {
-    is ResolveError.InvalidDependency -> "error: invalid dependency '${error.input}'"
+    is ResolveError.InvalidDependency ->
+      RenderedDiagnostic(Severity.Error, "invalid dependency '${error.input}'")
     is ResolveError.Sha256Mismatch ->
-      buildString {
-        appendLine("error: sha256 mismatch for ${error.groupArtifact}")
-        appendLine("  expected: ${error.expected}")
-        append("  got:      ${error.actual}")
-      }
+      RenderedDiagnostic(
+        severity = Severity.Error,
+        headline = "sha256 mismatch for ${error.groupArtifact}",
+        context = listOf("expected: ${error.expected}", "got:      ${error.actual}"),
+      )
     is ResolveError.DownloadFailed ->
-      buildString {
-        append("error: failed to download ${error.groupArtifact}")
-        appendRepositoryDownloadFailure(error.failure)
-      }
+      RenderedDiagnostic(
+        severity = Severity.Error,
+        headline = "failed to download ${error.groupArtifact}",
+        context = repositoryDownloadFailureContext(error.failure),
+      )
     is ResolveError.MetadataDownloadFailed ->
-      buildString {
-        append("error: could not fetch metadata for ${error.groupArtifact}")
-        appendRepositoryDownloadFailure(error.failure)
-      }
-    is ResolveError.HashComputeFailed -> "error: failed to compute hash for ${error.groupArtifact}"
-    is ResolveError.DirectoryCreateFailed -> "error: could not create directory ${error.path}"
+      RenderedDiagnostic(
+        severity = Severity.Error,
+        headline = "could not fetch metadata for ${error.groupArtifact}",
+        context = repositoryDownloadFailureContext(error.failure),
+      )
+    is ResolveError.HashComputeFailed ->
+      RenderedDiagnostic(Severity.Error, "failed to compute hash for ${error.groupArtifact}")
+    is ResolveError.DirectoryCreateFailed ->
+      RenderedDiagnostic(Severity.Error, "could not create directory ${error.path}")
     is ResolveError.NoNativeVariant ->
-      "error: ${error.groupArtifact} has no Kotlin/Native variant for target '${error.nativeTarget}'"
+      RenderedDiagnostic(
+        Severity.Error,
+        "${error.groupArtifact} has no Kotlin/Native variant for target " +
+          "'${error.nativeTarget}'",
+      )
     is ResolveError.MetadataParseFailed ->
-      "error: failed to parse Gradle module metadata for ${error.groupArtifact}"
+      RenderedDiagnostic(
+        Severity.Error,
+        "failed to parse Gradle module metadata for ${error.groupArtifact}",
+      )
     is ResolveError.MetadataFetchFailed ->
-      "error: failed to read Gradle module metadata for ${error.groupArtifact}"
+      RenderedDiagnostic(
+        Severity.Error,
+        "failed to read Gradle module metadata for ${error.groupArtifact}",
+      )
     is ResolveError.StrictVersionConflict ->
-      if (error.otherIsStrict)
-        "error: conflicting strict versions on ${error.groupArtifact}: " +
-          "${error.strictVersion} and ${error.otherVersion}"
-      else
-        "error: strict version conflict on ${error.groupArtifact}: " +
-          "${error.strictVersion} required strictly, but ${error.otherVersion} also requested"
+      RenderedDiagnostic(
+        Severity.Error,
+        if (error.otherIsStrict)
+          "conflicting strict versions on ${error.groupArtifact}: " +
+            "${error.strictVersion} and ${error.otherVersion}"
+        else
+          "strict version conflict on ${error.groupArtifact}: " +
+            "${error.strictVersion} required strictly, but ${error.otherVersion} also requested",
+      )
     is ResolveError.RejectedVersionResolved ->
-      "error: resolved ${error.groupArtifact}:${error.version} is rejected by constraint '${error.rejectPattern}'"
+      RenderedDiagnostic(
+        Severity.Error,
+        "resolved ${error.groupArtifact}:${error.version} is rejected by " +
+          "constraint '${error.rejectPattern}'",
+      )
   }
 
 internal fun formatAttemptStatus(error: DownloadError): String =
@@ -111,16 +135,13 @@ internal fun formatAttemptStatus(error: DownloadError): String =
     is DownloadError.WriteFailed -> "local write failed (${error.path})"
   }
 
-private fun StringBuilder.appendRepositoryDownloadFailure(failure: RepositoryDownloadFailure) {
+private fun repositoryDownloadFailureContext(failure: RepositoryDownloadFailure): List<String> =
   when (failure) {
     is RepositoryDownloadFailure.NoRepositoriesConfigured ->
-      append("\n  no repositories configured (add a `[repositories]` entry to kolt.toml)")
+      listOf("no repositories configured (add a `[repositories]` entry to kolt.toml)")
     is RepositoryDownloadFailure.AllAttemptsFailed ->
-      for (attempt in failure.attempts) {
-        append("\n  ${attempt.url} -> ${formatAttemptStatus(attempt.error)}")
-      }
+      failure.attempts.map { "${it.url} -> ${formatAttemptStatus(it.error)}" }
   }
-}
 
 enum class Origin {
   MAIN,

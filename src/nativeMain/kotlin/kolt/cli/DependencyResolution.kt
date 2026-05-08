@@ -16,6 +16,7 @@ import kolt.build.generateWorkspaceJson
 import kolt.build.resolveUserJdkHome
 import kolt.config.*
 import kolt.infra.*
+import kolt.infra.output.eprintDiagnostic
 import kolt.resolve.*
 
 internal const val LOCK_FILE = "kolt.lock"
@@ -130,7 +131,7 @@ internal fun resolveDependencies(
         testSeeds = testSeeds,
       )
       .getOrElse { error ->
-        eprintln(formatResolveError(error))
+        eprintDiagnostic(formatResolveError(error))
         if (error is ResolveError.Sha256Mismatch) {
           eprintln("delete the cached jar and rebuild to re-download")
         }
@@ -139,7 +140,7 @@ internal fun resolveDependencies(
 
   val bundleResolutions =
     resolveAllBundles(config, existingLock, paths.cacheBase, resolverDeps).getOrElse { error ->
-      eprintln(formatResolveError(error))
+      eprintDiagnostic(formatResolveError(error))
       if (error is ResolveError.Sha256Mismatch) {
         eprintln("delete the cached jar and rebuild to re-download")
       }
@@ -352,7 +353,7 @@ internal fun resolveNativeDependencies(
   println("resolving native dependencies...")
   val result =
     resolve(config, existingLock = null, paths.cacheBase, createResolverDeps()).getOrElse { error ->
-      eprintln(formatResolveError(error))
+      eprintDiagnostic(formatResolveError(error))
       return Err(EXIT_DEPENDENCY_ERROR)
     }
   return Ok(result.deps.map { it.cachePath })

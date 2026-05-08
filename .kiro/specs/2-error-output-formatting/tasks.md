@@ -50,7 +50,7 @@
   - _Boundary: kolt.infra.suggest.ClosestMatch_
 
 - [ ] 3. Renderer ADT migration (existing renderer の signature 変更 + 全 caller 同時更新)
-- [ ] 3.1 (P) `formatResolveError` を `String` 返却から `RenderedDiagnostic` 返却に migrate、 全 cli caller を同時更新
+- [x] 3.1 (P) `formatResolveError` を `String` 返却から `RenderedDiagnostic` 返却に migrate、 全 cli caller を同時更新
   - 各 `ResolveError` variant の `error: ...` プレフィックスを削除し、 `headline` / `context: List<String>` / `hint` の 3 slot に分解
   - 例: `Sha256Mismatch` は headline = `"sha256 mismatch for {ga}"`、 context = `["expected: ...", "got:      ..."]`、 hint = null
   - 例: `DownloadFailed.AllAttemptsFailed` は context に各 attempt 行を `"  {url} -> {status}"` 形式で格納

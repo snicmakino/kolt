@@ -11,6 +11,7 @@ import kolt.concurrency.LockHandle
 import kolt.concurrency.ProjectLock
 import kolt.config.*
 import kolt.infra.*
+import kolt.infra.output.eprintDiagnostic
 import kolt.resolve.*
 import kolt.usertool.ToolEntry
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -163,7 +164,9 @@ private fun fetchLatestVersion(
       )
       .getError()
   if (failure != null) {
-    eprintln(formatResolveError(ResolveError.MetadataDownloadFailed("$group:$artifact", failure)))
+    eprintDiagnostic(
+      formatResolveError(ResolveError.MetadataDownloadFailed("$group:$artifact", failure))
+    )
     return Err(EXIT_DEPENDENCY_ERROR)
   }
 
@@ -251,7 +254,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
           testSeeds = testSeeds,
         )
         .getOrElse { error ->
-          eprintln(formatResolveError(error))
+          eprintDiagnostic(formatResolveError(error))
           return Err(EXIT_DEPENDENCY_ERROR)
         }
 
@@ -260,7 +263,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
     val bundleResolutions =
       resolveAllBundles(config, existingLock = null, paths.cacheBase, resolverDeps).getOrElse {
         error ->
-        eprintln(formatResolveError(error))
+        eprintDiagnostic(formatResolveError(error))
         return Err(EXIT_DEPENDENCY_ERROR)
       }
     val bundleDeps = bundleResolutions.mapValues { it.value.deps }
@@ -286,7 +289,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
           )
         }
         .getOrElse { error ->
-          eprintln(formatResolveError(error))
+          eprintDiagnostic(formatResolveError(error))
           return Err(EXIT_DEPENDENCY_ERROR)
         }
     }

@@ -830,7 +830,7 @@ class NativeResolverTest {
     val error = assertIs<ResolveError.StrictVersionConflict>(result.getError())
     assertEquals("com.example:shared", error.groupArtifact)
     assertTrue(error.otherIsStrict)
-    assertTrue(formatResolveError(error).contains("conflicting strict versions"))
+    assertTrue(formatResolveError(error).headline.contains("conflicting strict versions"))
   }
 
   @Test
