@@ -250,6 +250,7 @@ internal fun resolveAllBundles(
             bundleName,
             cacheBase,
             resolverDeps,
+            progress,
           )
           .getOrElse {
             return Err(it)
