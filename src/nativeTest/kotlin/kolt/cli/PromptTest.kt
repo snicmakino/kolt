@@ -93,29 +93,53 @@ class PromptTest {
 
   @Test
   fun ttyTargetPromptListsOptionsOnePerLineWithNumbers() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "", ""))
+    // --lib pins kind, so only target + group are prompted; this isolates
+    // the target prompt from the no-flag path (which task 2.1 routes through
+    // a different prompt) and keeps this assertion stable.
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("", ""))
 
-    doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
 
     val joined = io.outputs.joinToString("\n")
     assertTrue(joined.contains("  1) jvm (default)"), "missing numbered jvm line: $joined")
-    assertTrue(joined.contains("  2) linuxArm64"), "missing numbered linuxArm64 line: $joined")
-    assertTrue(joined.contains("  3) linuxX64"), "missing numbered linuxX64 line: $joined")
+    assertTrue(joined.contains("  2) linuxX64"), "missing numbered linuxX64 line: $joined")
+    assertTrue(joined.contains("  3) macosArm64"), "missing numbered macosArm64 line: $joined")
+    assertTrue(joined.contains("  4) mingwX64"), "missing numbered mingwX64 line: $joined")
+    assertTrue(joined.contains("  5) linuxArm64"), "missing numbered linuxArm64 line: $joined")
   }
 
   @Test
   fun ttyTargetPromptSeparatesJvmFromNativeWithMarker() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "", ""))
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("", ""))
 
-    doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
 
     val joined = io.outputs.joinToString("\n")
     val markerIdx = joined.indexOf("-- native --")
     val jvmIdx = joined.indexOf("1) jvm")
-    val firstNativeIdx = joined.indexOf("2) linuxArm64")
+    val firstNativeIdx = joined.indexOf("2) linuxX64")
     assertTrue(markerIdx >= 0, "native separator missing: $joined")
     assertTrue(markerIdx > jvmIdx, "separator must come after jvm line: $joined")
     assertTrue(markerIdx < firstNativeIdx, "separator must precede first native line: $joined")
+  }
+
+  @Test
+  fun ttyTargetPromptShowsDeprecatedSuffixOnMacosX64() {
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("", ""))
+
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
+
+    val joined = io.outputs.joinToString("\n")
+    assertTrue(
+      joined.contains("  6) macosX64 (deprecated)"),
+      "expected '6) macosX64 (deprecated)' line: $joined",
+    )
   }
 
   @Test
@@ -130,13 +154,20 @@ class PromptTest {
 
   @Test
   fun ttyTargetPromptAcceptsNumericInput() {
-    // Targets ordering: 1) jvm, 2) linuxArm64, 3) linuxX64, 4) macosArm64, 5) macosX64, 6) mingwX64
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "3", ""))
+    // Targets ordering: 1) jvm, 2) linuxX64, 3) macosArm64, 4) mingwX64,
+    // 5) linuxArm64, 6) macosX64 (deprecated). --lib pins kind so only the
+    // target + group prompts fire here.
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("3", ""))
 
-    doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
 
     val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
-    assertTrue(toml.contains("target = \"linuxX64\""), "numeric '3' must select linuxX64: $toml")
+    assertTrue(
+      toml.contains("target = \"macosArm64\""),
+      "numeric '3' must select macosArm64: $toml",
+    )
   }
 
   @Test
@@ -189,9 +220,11 @@ class PromptTest {
 
   @Test
   fun ttyTargetPromptDefaultIsJvm() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "", ""))
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("", ""))
 
-    doInit(listOf("myapp"), io, ColorPolicy.Never).getOrElse { error("doInit failed: exit=$it") }
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getOrElse {
+      error("doInit failed: exit=$it")
+    }
 
     val toml = readFileAsString("kolt.toml").getOrElse { error("read failed") }
     assertTrue(toml.contains("target = \"jvm\""), "blank target must default to jvm")
@@ -199,9 +232,9 @@ class PromptTest {
 
   @Test
   fun ttyTargetPromptRejectsNamedInput() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "linuxX64"))
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("linuxX64"))
 
-    val exit = doInit(listOf("myapp"), io, ColorPolicy.Never).getError()
+    val exit = doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getError()
 
     assertEquals(EXIT_CONFIG_ERROR, exit, "named input must be rejected; only numeric accepted")
   }
@@ -274,9 +307,9 @@ class PromptTest {
 
   @Test
   fun ttyTargetInvalidInputExitsNonZero() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "wasm"))
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("wasm"))
 
-    val exit = doInit(listOf("myapp"), io, ColorPolicy.Never).getError()
+    val exit = doInit(listOf("myapp", "--lib"), io, ColorPolicy.Never).getError()
 
     assertEquals(EXIT_CONFIG_ERROR, exit)
   }
@@ -344,9 +377,11 @@ class PromptTest {
 
   @Test
   fun ttyTargetPromptColorsJvmCyanAndNativeYellowWhenPolicyAllows() {
-    val io = FakeScaffoldIO(tty = true, inputs = listOf("", "", ""))
+    val io = FakeScaffoldIO(tty = true, inputs = listOf("", ""))
 
-    doInit(listOf("myapp"), io, ColorPolicy.Always).getOrElse { error("doInit failed: exit=$it") }
+    doInit(listOf("myapp", "--lib"), io, ColorPolicy.Always).getOrElse {
+      error("doInit failed: exit=$it")
+    }
 
     val joined = io.outputs.joinToString("\n")
     assertTrue(

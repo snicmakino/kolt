@@ -5,7 +5,6 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.DEFAULT_SCAFFOLD_TARGET
-import kolt.config.NATIVE_TARGETS
 import kolt.config.ScaffoldKind
 import kolt.config.isValidGroup
 import kolt.infra.output.AnsiCodes
@@ -52,10 +51,23 @@ internal fun resolveInteractive(
   return Ok(ResolvedScaffoldOptions(kind, target, group))
 }
 
+private data class TargetOption(val name: String, val deprecated: Boolean = false)
+
 // JVM target appears first so its index 1 lines up with the default; native
-// targets follow in alphabetical order. Caller iterates indices for prompt
-// numbering AND for input parsing — same list, single source of truth.
-private val PROMPT_TARGETS = listOf(DEFAULT_SCAFFOLD_TARGET) + NATIVE_TARGETS.toList().sorted()
+// targets follow in hand-curated share order (linuxX64 dominates server / WSL,
+// macosArm64 dominates Apple Silicon dev, mingwX64 covers Windows native,
+// linuxArm64 covers ARM server / Pi, macosX64 last because Intel Mac is
+// deprecated upstream). Caller iterates indices for prompt numbering AND for
+// input parsing — same list, single source of truth.
+private val PROMPT_TARGETS =
+  listOf(TargetOption(DEFAULT_SCAFFOLD_TARGET)) +
+    listOf(
+      TargetOption("linuxX64"),
+      TargetOption("macosArm64"),
+      TargetOption("mingwX64"),
+      TargetOption("linuxArm64"),
+      TargetOption("macosX64", deprecated = true),
+    )
 
 private val PROMPT_KINDS = listOf(ScaffoldKind.APP, ScaffoldKind.LIB)
 
@@ -85,21 +97,24 @@ private fun promptKind(io: ScaffoldIO, policy: ColorPolicy): Result<ScaffoldKind
 private fun promptTarget(io: ScaffoldIO, policy: ColorPolicy): Result<String, String> {
   io.println("Targets:")
   var nativeHeaderEmitted = false
-  PROMPT_TARGETS.forEachIndexed { idx, name ->
-    val isJvm = name == DEFAULT_SCAFFOLD_TARGET
+  PROMPT_TARGETS.forEachIndexed { idx, opt ->
+    val isJvm = opt.name == DEFAULT_SCAFFOLD_TARGET
     if (!isJvm && !nativeHeaderEmitted) {
       io.println("  -- native --")
       nativeHeaderEmitted = true
     }
     val color = if (isJvm) AnsiCodes.CYAN else AnsiCodes.YELLOW
-    val coloredName = colored(name, color, policy)
-    val suffix = if (isJvm) " (default)" else ""
+    val coloredName = colored(opt.name, color, policy)
+    val suffix = buildString {
+      if (isJvm) append(" (default)")
+      if (opt.deprecated) append(" (deprecated)")
+    }
     io.println("  ${idx + 1}) $coloredName$suffix")
   }
   io.println(">")
   val raw = io.readLine()?.trim().orEmpty()
   if (raw.isEmpty()) return Ok(DEFAULT_SCAFFOLD_TARGET)
-  val byNumber = raw.toIntOrNull()?.let { PROMPT_TARGETS.getOrNull(it - 1) }
+  val byNumber = raw.toIntOrNull()?.let { PROMPT_TARGETS.getOrNull(it - 1)?.name }
   if (byNumber != null) return Ok(byNumber)
   return Err("invalid target '$raw' (expected 1..${PROMPT_TARGETS.size})")
 }
