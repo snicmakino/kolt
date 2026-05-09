@@ -40,7 +40,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.4, 3.1, 3.2, 5.1, 5.2_
   - _Boundary: TransitiveResolver — materialize loop_
 
-- [ ] 2.2 (P) Native target resolver emits per-artifact and per-retry progress for klib fetches
+- [x] 2.2 (P) Native target resolver emits per-artifact and per-retry progress for klib fetches
   - Pre-count uncached klib nodes before the Native materialize loop.
   - Emit the artifact-start callback before each uncached-klib download and forward the retry callback to the klib download function.
   - Module metadata fetches remain silent: they keep the default no-op retry callback and emit no artifact-start.

@@ -63,6 +63,20 @@ fun resolveNative(
     }
 
   val resolvedDeps = mutableListOf<ResolvedDep>()
+
+  // Pre-count uncached klib nodes so the total `M` is known before any
+  // emission. Nodes whose redirect metadata is missing are excluded from
+  // `M` here; the main loop returns `MetadataParseFailed` for them before
+  // any emission happens.
+  val total =
+    nodes.count { node ->
+      val resolved = processed["${node.groupArtifact}:${node.version}"] ?: return@count false
+      val targetCoord =
+        Coordinate(resolved.redirect.group, resolved.redirect.module, resolved.redirect.version)
+      !deps.fileExists("$cacheBase/${buildKlibCachePath(targetCoord)}")
+    }
+  var index = 0
+
   for (node in nodes) {
     val resolved =
       processed["${node.groupArtifact}:${node.version}"]
@@ -77,11 +91,14 @@ fun resolveNative(
       deps.ensureDirectoryRecursive(parentDir).getOrElse {
         return Err(ResolveError.DirectoryCreateFailed(parentDir))
       }
+      index += 1
+      progress.onArtifactStart(index, total, node.groupArtifact, node.version)
       downloadFromRepositories(
           repos,
           klibCachePath,
           { buildKlibDownloadUrl(targetCoord, it) },
           deps::downloadFile,
+          onRetry = progress::onRetryAgainst,
         )
         .getOrElse { failure ->
           return Err(ResolveError.DownloadFailed(node.groupArtifact, failure))
