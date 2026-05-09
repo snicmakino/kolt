@@ -15,6 +15,7 @@ fun resolveTransitive(
   deps: ResolverDeps,
   mainSeeds: Map<String, String> = config.dependencies,
   testSeeds: Map<String, String> = emptyMap(),
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
   val repos = config.repositories.values.toList()
 
@@ -44,7 +45,7 @@ fun resolveTransitive(
         return Err(error)
       }
 
-  return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos)
+  return materialize(nodes, redirects, config, existingLock, cacheBase, deps, repos, progress)
 }
 
 // Best-effort sources fetch. Sources are editor UX — missing upstream
@@ -209,6 +210,7 @@ private fun materialize(
   cacheBase: String,
   deps: ResolverDeps,
   repos: List<String>,
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
   var lockChanged = false
   val resolvedDeps = mutableListOf<ResolvedDep>()

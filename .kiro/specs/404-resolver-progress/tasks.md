@@ -20,7 +20,7 @@
   - _Requirements: 2.1, 2.2, 2.3_
   - _Boundary: TransitiveResolver — downloadFromRepositories signature only_
 
-- [ ] 1.3 Thread the sink (defaulted to no-op) through every resolver entry point with no behavior change
+- [x] 1.3 Thread the sink (defaulted to no-op) through every resolver entry point with no behavior change
   - Add the sink as a defaulted parameter on the top-level resolve dispatcher, the JVM transitive path, the Native target path, the bundle declaration path, the single-artifact bundle path, and the bundle lock-reuse materialization path. Each function forwards the parameter through dispatch only.
   - Do not emit progress in this task and do not propagate the retry callback yet — the sole purpose is parameter wiring so subsequent tasks can land emission independently.
   - Observable completion: `kolt build` and `kolt test` succeed; every existing resolver test continues to pass unchanged because the no-op default preserves prior behavior.

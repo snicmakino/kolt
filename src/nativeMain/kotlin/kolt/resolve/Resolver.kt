@@ -201,8 +201,9 @@ fun resolve(
   deps: ResolverDeps,
   mainSeeds: Map<String, String> = config.dependencies,
   testSeeds: Map<String, String> = emptyMap(),
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> =
-  if (config.build.target in NATIVE_TARGETS) resolveNative(config, cacheBase, deps)
+  if (config.build.target in NATIVE_TARGETS) resolveNative(config, cacheBase, deps, progress)
   else
     resolveTransitive(
       config,
@@ -211,6 +212,7 @@ fun resolve(
       deps,
       mainSeeds = mainSeeds,
       testSeeds = testSeeds,
+      progress = progress,
     )
 
 fun buildLockfileFromResolved(

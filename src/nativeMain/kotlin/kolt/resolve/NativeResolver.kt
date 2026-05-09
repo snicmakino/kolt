@@ -39,6 +39,7 @@ fun resolveNative(
   config: KoltConfig,
   cacheBase: String,
   deps: ResolverDeps,
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
   val nativeTarget = konanTargetGradleName(config.build.target)
   val repos = config.repositories.values.toList()

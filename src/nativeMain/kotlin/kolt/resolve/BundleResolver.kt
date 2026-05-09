@@ -31,6 +31,7 @@ internal fun resolveBundle(
   existingLock: Lockfile?,
   cacheBase: String,
   deps: ResolverDeps,
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<BundleResolution, ResolveError> {
   // materialize() consults existingLock.dependencies for sha-mismatch and
   // lockChanged tracking. Project the bundle's own sub-map (not main/test's)
@@ -53,6 +54,7 @@ internal fun resolveBundle(
       deps = deps,
       mainSeeds = bundleSeeds,
       testSeeds = emptyMap(),
+      progress = progress,
     )
     .map { result ->
       val jars =
@@ -107,6 +109,7 @@ fun resolveSingleArtifact(
   repos: List<String>,
   cacheBase: String,
   deps: ResolverDeps,
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<SingleArtifact, ResolveError> {
   val groupArtifact = "${coord.group}:${coord.artifact}"
   val relativePath = buildRelativeJarPath(coord, classifier)
@@ -169,6 +172,7 @@ internal fun materialiseBundleJarsFromLock(
   bundleName: String,
   cacheBase: String,
   deps: ResolverDeps,
+  progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<Unit, ResolveError> {
   val locked = existingLock.classpathBundles[bundleName] ?: return Ok(Unit)
   val repos = config.repositories.values.toList()
