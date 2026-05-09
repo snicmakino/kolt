@@ -69,7 +69,7 @@
   - _Requirements: 4.1_
   - _Boundary: DependencyResolution (CLI) — StderrProgressSink_
 
-- [ ] 3.2 (P) Wire the production sink through the JVM and Native CLI entries and relocate their banners
+- [x] 3.2 (P) Wire the production sink through the JVM and Native CLI entries and relocate their banners
   - Construct the sink at the JVM dependency-resolution entry and pass it to both the main resolve call and the bundle-resolve call.
   - Construct the sink at the Native dependency-resolution entry and pass it to its resolve call so Native builds achieve parity with JVM.
   - Move the two existing pre-resolve banners (`resolving dependencies...`, `resolving native dependencies...`) from stdout to stderr.
