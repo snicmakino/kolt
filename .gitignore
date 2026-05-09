@@ -33,6 +33,7 @@ kls-classpath
 # Claude Code
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # Spike fixtures (regenerate via gen.sh)
 spike/**/fixtures/
