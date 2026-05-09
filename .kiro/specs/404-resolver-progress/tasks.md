@@ -77,7 +77,7 @@
   - _Requirements: 1.4, 4.1, 4.2, 4.3_
   - _Boundary: DependencyResolution (CLI)_
 
-- [ ] 3.3 (P) Wire the production sink through `kolt update`, relocate its banner, and add the metadata-probe line for `kolt add`
+- [x] 3.3 (P) Wire the production sink through `kolt update`, relocate its banner, and add the metadata-probe line for `kolt add`
   - Construct the sink at the update entry and pass it to the explicit resolve and bundle-resolve calls inside the update flow.
   - Move the `updating dependencies...` banner from stdout to stderr.
   - In the latest-version probe path used by `kolt add` without an explicit version, emit a single `fetching latest version of <group>:<artifact>...` line on stderr before the metadata-XML download. Do not introduce `[N/M]` framing — this is a single-artifact metadata fetch, not a fetch loop.

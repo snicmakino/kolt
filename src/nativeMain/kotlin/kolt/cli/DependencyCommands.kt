@@ -51,7 +51,6 @@ private fun doAddInner(args: List<String>): Result<Unit, Int> {
     if (addArgs.version != null) {
       addArgs.version
     } else {
-      println("fetching latest version for ${addArgs.group}:${addArgs.artifact}...")
       fetchLatestVersion(addArgs.group, addArgs.artifact, config.repositories.values.toList())
         .getOrElse {
           return Err(it)
@@ -157,6 +156,7 @@ private fun fetchLatestVersion(
     return Err(EXIT_DEPENDENCY_ERROR)
   }
 
+  eprintln("fetching latest version of $group:$artifact...")
   val failure =
     downloadFromRepositories(
         repos,
@@ -245,7 +245,8 @@ private fun doUpdateInner(): Result<Unit, Int> {
     bundleEntryCount = 0
     mainAndBundleLockfile = buildLockfileFromResolved(config, deps = emptyList())
   } else {
-    println("updating dependencies...")
+    eprintln("updating dependencies...")
+    val progress = newStderrProgressSink()
     val resolveResult =
       resolve(
           config,
@@ -254,6 +255,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
           resolverDeps,
           mainSeeds = mainSeeds,
           testSeeds = testSeeds,
+          progress = progress,
         )
         .getOrElse { error ->
           eprintDiagnostic(formatResolveError(error))
@@ -263,11 +265,17 @@ private fun doUpdateInner(): Result<Unit, Int> {
     // Bundles re-resolve with `existingLock = null` so `[classpaths.<name>]`
     // follow the same update policy as main / test.
     val bundleResolutions =
-      resolveAllBundles(config, existingLock = null, paths.cacheBase, resolverDeps).getOrElse {
-        error ->
-        eprintDiagnostic(formatResolveError(error))
-        return Err(EXIT_DEPENDENCY_ERROR)
-      }
+      resolveAllBundles(
+          config,
+          existingLock = null,
+          paths.cacheBase,
+          resolverDeps,
+          progress = progress,
+        )
+        .getOrElse { error ->
+          eprintDiagnostic(formatResolveError(error))
+          return Err(EXIT_DEPENDENCY_ERROR)
+        }
     val bundleDeps = bundleResolutions.mapValues { it.value.deps }
     depsCount = resolveResult.deps.size
     bundleEntryCount = bundleDeps.values.sumOf { it.size }
@@ -280,7 +288,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
   val toolsBundles =
     if (config.tools.isEmpty()) emptyMap()
     else {
-      println("updating tools...")
+      eprintln("updating tools...")
       buildToolsBundleLockMap(config.tools) { coord, classifier, _ ->
           resolveSingleArtifact(
             coord = coord,
