@@ -50,19 +50,26 @@ fun parsePom(xml: String): Result<PomInfo, PomParseError> {
     }
   }
 
-  val interpolationMap = buildInterpolationMap(properties, projectGroupId, projectVersion)
-
+  // Maven effective-model rule: a child POM that omits <groupId> / <version>
+  // inherits them from <parent>, and ${project.groupId} / ${project.version}
+  // bind to the *effective* values. The parent block itself can still
+  // reference <properties>-defined keys, so we interpolate it against a
+  // properties-only map before deriving effective coordinates for deps.
   val parent =
     root.child("parent")?.let { p ->
       val pg = p.childText("groupId") ?: return Err(PomParseError("Parent missing <groupId>"))
       val pa = p.childText("artifactId") ?: return Err(PomParseError("Parent missing <artifactId>"))
       val pv = p.childText("version") ?: return Err(PomParseError("Parent missing <version>"))
       PomParent(
-        interpolate(pg, interpolationMap),
-        interpolate(pa, interpolationMap),
-        interpolate(pv, interpolationMap),
+        interpolate(pg, properties),
+        interpolate(pa, properties),
+        interpolate(pv, properties),
       )
     }
+
+  val effectiveGroupId = projectGroupId ?: parent?.groupId
+  val effectiveVersion = projectVersion ?: parent?.version
+  val interpolationMap = buildInterpolationMap(properties, effectiveGroupId, effectiveVersion)
 
   val depMgmt =
     root
