@@ -45,7 +45,7 @@ covers the single-target Kotlin niche (server / CLI / lib). See
 
 ## Current Maturity
 
-Pre-1.0 (current: v0.19.1). Breaking changes are expected and explicitly permitted.
+Pre-1.0 (current: v0.19.2). Breaking changes are expected and explicitly permitted.
 kolt does not ship migration shims or legacy probes for its own earlier versions —
 v1.0 is the first stability anchor.
 
