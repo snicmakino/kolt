@@ -161,16 +161,22 @@ fun resolveNative(
         )
       }
       is NativeResolved.JvmOnly -> {
-        if (!node.direct) {
-          // ADR 0011 §4: structural skip generalises the kotlin-stdlib-common
-          // silent-skip policy; stdlib coordinates remain silent here, every
-          // other JvmOnly transitive surfaces a single stderr note so a build
-          // log records which artifact had no native variant.
-          if (!isKotlinStdlib(node.groupArtifact)) {
-            noteSink(
-              "note: ${node.groupArtifact}:${node.version} has no Gradle Module Metadata; skipping for native target"
-            )
-          }
+        // Direct JvmOnly deps (other than the kotlin-stdlib bundle filtered
+        // out in `resolveNative` above) cannot be silently skipped: the user
+        // declared the artifact in `[dependencies]`, so we surface a hard
+        // error and let the formatter print the dedicated NoNativeVariant
+        // message instead of emitting a transitive-skip note.
+        if (node.direct) {
+          return Err(ResolveError.NoNativeVariant(node.groupArtifact, nativeTarget))
+        }
+        // ADR 0011 §4: structural skip generalises the kotlin-stdlib-common
+        // silent-skip policy; stdlib coordinates remain silent here, every
+        // other JvmOnly transitive surfaces a single stderr note so a build
+        // log records which artifact had no native variant.
+        if (!isKotlinStdlib(node.groupArtifact)) {
+          noteSink(
+            "note: ${node.groupArtifact}:${node.version} has no Gradle Module Metadata; skipping for native target"
+          )
         }
       }
     }

@@ -52,7 +52,7 @@
   - 観測: transitive 上に `kotlin-stdlib-common` がある resolve で `resolvedDeps` に含まれず、 stderr に note 行が出ない (capture して空であること) こと。
   - _Requirements: 4.2_
 
-- [ ] 5.3 direct dep が JvmOnly に倒れた場合、 `ResolveError.NoNativeVariant(groupArtifact, nativeTarget)` を返して非ゼロ終了させる
+- [x] 5.3 direct dep が JvmOnly に倒れた場合、 `ResolveError.NoNativeVariant(groupArtifact, nativeTarget)` を返して非ゼロ終了させる
   - materialization loop の最初の分岐で `node.direct && resolved is JvmOnly` を判定。 stderr note は出さない (direct dep skip は既存挙動と整合)。
   - direct `kotlin-stdlib` / `kotlin-stdlib-common` の既存 silent skip 経路 (`directDeps = filterKeys { !isKotlinStdlib(it) }`, `NativeResolver.kt:54`) は触らない。
   - 観測: `[dependencies]` に `.module` 404 + `.pom` 200 の coordinate を直接書いた integration test で `Err(NoNativeVariant)` が返り、 既存の formatter (`Resolver.kt:93-98`) のメッセージが stderr に出ること。
