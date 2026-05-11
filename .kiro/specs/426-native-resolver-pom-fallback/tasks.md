@@ -18,7 +18,7 @@
   - _Requirements: 1.4_
 
 - [ ] 3. Core: `fetchNativeMetadata` の root `.module` 404 → `.pom` フォールバック
-- [ ] 3.1 root `.module` の fetch failure が `is404OnAllAttempts` を満たすとき、 同一 coordinate の `.pom` を取得して `Ok(NativeResolved.JvmOnly(coord))` を返す経路を追加する
+- [x] 3.1 root `.module` の fetch failure が `is404OnAllAttempts` を満たすとき、 同一 coordinate の `.pom` を取得して `Ok(NativeResolved.JvmOnly(coord))` を返す経路を追加する
   - `.pom` の URL / cache path は既存 `buildPomDownloadUrl` / `buildPomCachePath` を再利用。 `.pom` の中身は parse しない (存在確認のみ)。
   - mock `ResolverDeps` で `.module` 404 / `.pom` 200 のシナリオを再現する unit test を追加し、 戻り値が `NativeResolved.JvmOnly` であることを assert。
   - 観測: unit test が `Ok(JvmOnly(coord))` を assert し緑。 既存の Klib 経路テストすべて緑。

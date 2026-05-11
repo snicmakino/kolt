@@ -35,8 +35,10 @@ internal fun is404OnAllAttempts(error: ResolveError): Boolean {
   }
 }
 
-private sealed class NativeResolved {
+internal sealed class NativeResolved {
   data class Klib(val redirect: NativeRedirect, val artifact: NativeArtifact) : NativeResolved()
+
+  data class JvmOnly(val coordinate: Coordinate) : NativeResolved()
 }
 
 /**
@@ -95,6 +97,9 @@ fun resolveNative(
             Coordinate(resolved.redirect.group, resolved.redirect.module, resolved.redirect.version)
           !deps.fileExists("$cacheBase/${buildKlibCachePath(targetCoord)}")
         }
+        // JvmOnly nodes have no klib artifact; full pre-count/progress handling
+        // lands in task 5.x. Excluded from total here keeps M/N accurate.
+        is NativeResolved.JvmOnly -> false
       }
     }
   var index = 0
@@ -153,6 +158,11 @@ fun resolveNative(
           )
         )
       }
+      // Direct-vs-transitive routing (NoNativeVariant on direct, stderr note on
+      // transitive, silent for stdlib) lands in task 5.x. For now the branch is
+      // a no-op that keeps the when exhaustive without changing observable
+      // behavior on the existing Klib-only code paths.
+      is NativeResolved.JvmOnly -> Unit
     }
   }
 
@@ -187,6 +197,10 @@ private fun makeNativeChildLookup(
           if (isKotlinStdlib(depGA)) return@mapNotNull null
           Child(groupArtifact = depGA, version = d.version, strict = d.strict, rejects = d.rejects)
         }
+      // JvmOnly nodes have no Gradle Module Metadata, so no transitive children
+      // are descended; task 4.1 will reaffirm this contract with dedicated
+      // coverage.
+      is NativeResolved.JvmOnly -> emptyList()
     }
   Ok(children)
 }
@@ -233,6 +247,15 @@ fun createNativeLookup(
               dependencies =
                 it.artifact.dependencies.map { dep -> "${dep.group}:${dep.module}" to dep.version },
             )
+          // JvmOnly tree representation (root coord, empty deps) lands in
+          // task 6.1; this minimal mapping keeps the when exhaustive and
+          // surfaces the root coordinate as a leaf in the meantime.
+          is NativeResolved.JvmOnly ->
+            NativeNodeInfo(
+              displayGroupArtifact = "${it.coordinate.group}:${it.coordinate.artifact}",
+              displayVersion = it.coordinate.version,
+              dependencies = emptyList(),
+            )
         }
       }
     }
@@ -242,8 +265,14 @@ fun createNativeLookup(
 /**
  * Fetches and parses both the root `.module` (for the available-at redirect) and the
  * platform-specific `.module` (for the klib file + dependencies) for a single coordinate.
+ *
+ * When the root `.module` returns 404 from every repository, falls back to fetching the same
+ * coordinate's `.pom` for existence-only confirmation. If the `.pom` is available, the artifact is
+ * structurally JVM-only (no Gradle Module Metadata published) and is returned as
+ * `NativeResolved.JvmOnly`. The `.pom` body is not parsed; downstream materialization decides how
+ * to handle the variant.
  */
-private fun fetchNativeMetadata(
+internal fun fetchNativeMetadata(
   groupArtifact: String,
   version: String,
   nativeTarget: String,
@@ -265,8 +294,23 @@ private fun fetchNativeMetadata(
         repos = repos,
         deps = deps,
       )
-      .getOrElse {
-        return Err(it)
+      .getOrElse { moduleError ->
+        if (is404OnAllAttempts(moduleError)) {
+          val pomResult =
+            fetchAndRead(
+              coord = rootCoord,
+              relativePath = buildPomCachePath(rootCoord),
+              urlBuilder = { buildPomDownloadUrl(rootCoord, it) },
+              cacheBase = cacheBase,
+              repos = repos,
+              deps = deps,
+            )
+          if (pomResult.isErr) {
+            return Err(moduleError)
+          }
+          return Ok(NativeResolved.JvmOnly(rootCoord))
+        }
+        return Err(moduleError)
       }
 
   if (!isValidGradleModuleJson(rootJson)) {
