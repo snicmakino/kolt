@@ -5,7 +5,7 @@
 > `(P)` マーカーは付けない: すべての production 変更は `NativeResolver.kt` 1 ファイルに集中し、 各 sub-task のテストも同一テストクラス群を触るため、 並行実行で merge conflict / interleaving のメリットが無い。 単独実装者でシーケンシャルに進める。
 
 - [ ] 1. Foundation: `NativeResolved` を sealed class へ refactor
-- [ ] 1.1 既存の `data class NativeResolved(redirect, artifact)` を `private sealed class NativeResolved` に変換し、 既存内容を `Klib(redirect, artifact)` variant に移植する
+- [x] 1.1 既存の `data class NativeResolved(redirect, artifact)` を `private sealed class NativeResolved` に変換し、 既存内容を `Klib(redirect, artifact)` variant に移植する
   - 変換は behaviour-preserving。 新規 variant (`JvmOnly`) はこの task では追加しない。
   - すべての file-local 参照 (`processed: MutableMap<String, NativeResolved>`, `makeNativeChildLookup`, `resolveNative` の materialization loop, `createNativeLookup`) を `Klib` variant に対する分岐に書き換える。
   - 観測: 既存の `NativeResolverTest`, `ResolveNativeProgressTest`, `NativeResolverJvmOnlyFallbackTest` 以外のテスト群すべてが緑 (`kolt test`)、 既存挙動に変化なし。
@@ -100,3 +100,7 @@
   - 検証 2: mock の `downloadFile` 呼び出し履歴に target `.module` の URL は記録されるが、 target `.pom` の URL は記録されないこと (Layer 1 の fallback は root `.module` 限定 = boundary の確認)。
   - 観測: test が `Err(DownloadFailed)` を assert し緑、 target `.pom` への download 試行が 0 回。
   - _Requirements: 1.1, 1.4_
+
+## Implementation Notes
+
+- Pre-commit hook runs `kolt fmt --check`. Implementer must run `kolt fmt` before declaring READY_FOR_REVIEW or the parent's `git commit` will fail. Discovered on task 1.1.
