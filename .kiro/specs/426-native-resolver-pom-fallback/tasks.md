@@ -71,7 +71,7 @@
   - _Requirements: 1.2_
 
 - [ ] 7. Integration: 再現ケース regression test
-- [ ] 7.1 `NativeResolverJvmOnlyFallbackTest` を新規追加し、 報告された repro (transitive 上に `.module` 404 + `.pom` 200 の artifact が現れる) を決定的 fixture で再現する
+- [x] 7.1 `NativeResolverJvmOnlyFallbackTest` を新規追加し、 報告された repro (transitive 上に `.module` 404 + `.pom` 200 の artifact が現れる) を決定的 fixture で再現する
   - mock `ResolverDeps` を組み、 parent 相当の coordinate は `.module` 200 を返して native variant + transitive children を持ち、 transitive 子の 1 つは `.module` 404 + `.pom` 200 を返す構造を用意する。
   - 検証 1: resolve 全体が `Ok` を返す (abort しない)。
   - 検証 2: JvmOnly 子の coordinate が `resolvedDeps` に含まれない。
