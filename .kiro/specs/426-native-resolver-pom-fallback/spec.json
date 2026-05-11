@@ -1,0 +1,22 @@
+{
+  "feature_name": "426-native-resolver-pom-fallback",
+  "created_at": "2026-05-11T02:37:24Z",
+  "updated_at": "2026-05-11T03:35:00Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
