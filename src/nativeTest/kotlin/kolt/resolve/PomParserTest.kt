@@ -309,6 +309,37 @@ class PomParserTest {
   }
 
   @Test
+  fun parsePomInheritsOnlyMissingProjectCoordinatesFromParent() {
+    // Maven's effective-model rule fires field-by-field. A child can declare
+    // its own <version> while inheriting <groupId> from <parent>; only the
+    // missing coordinate falls back.
+    val xml =
+      """
+            <project>
+                <parent>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-parent</artifactId>
+                    <version>4.2.12.Final</version>
+                </parent>
+                <artifactId>netty-child</artifactId>
+                <version>4.3.0.Beta</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>${'$'}{project.groupId}</groupId>
+                        <artifactId>netty-common</artifactId>
+                        <version>${'$'}{project.version}</version>
+                    </dependency>
+                </dependencies>
+            </project>
+        """
+        .trimIndent()
+
+    val pom = assertNotNull(parsePom(xml).get())
+    assertEquals("io.netty", pom.dependencies[0].groupId)
+    assertEquals("4.3.0.Beta", pom.dependencies[0].version)
+  }
+
+  @Test
   fun parsePomWithExclusions() {
     val xml =
       """
