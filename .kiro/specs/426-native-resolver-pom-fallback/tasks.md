@@ -58,7 +58,7 @@
   - 観測: `[dependencies]` に `.module` 404 + `.pom` 200 の coordinate を直接書いた integration test で `Err(NoNativeVariant)` が返り、 既存の formatter (`Resolver.kt:93-98`) のメッセージが stderr に出ること。
   - _Requirements: 2.1, 2.2, 4.3_
 
-- [ ] 5.4 klib pre-count (`total`) および per-artifact progress (`onArtifactStart`) から JvmOnly node を除外する
+- [x] 5.4 klib pre-count (`total`) および per-artifact progress (`onArtifactStart`) から JvmOnly node を除外する
   - 既存の `total` 計算 (`NativeResolver.kt:71-77`) のフィルタ条件に variant チェックを追加。 主 loop の `index += 1` も Klib に限定。
   - 観測: transitive JvmOnly 1 個 + Klib 2 個の resolve で、 `RecordingResolverProgressSink` が `onArtifactStart` 通知を 2 回しか受けないこと。 `M/N` 表示が JvmOnly を膨らませないこと。
   - _Requirements: 1.2, 4.3_
