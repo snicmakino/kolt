@@ -93,7 +93,7 @@
   - 観測: スイート全体グリーン + 該当ファイル diff 空。
   - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 8.3 target `.module` (redirect 後) の 404 は Layer 1 の対象外であり、 既存通り `DownloadFailed` で fail することを golden test で固定する
+- [x] 8.3 target `.module` (redirect 後) の 404 は Layer 1 の対象外であり、 既存通り `DownloadFailed` で fail することを golden test で固定する
   - 目的: design.md の Out of Boundary "target `.module` (redirect 先) の 404 ハンドリング" を test で明示的に押さえ、 Layer 2 着手時に root と target の挙動差が意図的であることを差分として可視化する。
   - 構築: mock `ResolverDeps` で root `.module` 200 (linux_x64 variant が `available-at` redirect を宣言) → redirect 解析 OK → target `.module` 404 のシナリオ。 `.pom` (target coord) はテスト側で download されないことを recorder で確認 (fallback が発火していないこと)。
   - 検証 1: 戻り値が `Err(ResolveError.DownloadFailed)` であり、 attempts が target coordinate の URL を保持していること。
