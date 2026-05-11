@@ -29,7 +29,7 @@
   - 観測: `.module` 404 + `.pom` 404 の unit test で error が `.module` の attempts を保持していることを assert。 typo / 真の missing artifact を masking しない。
   - _Requirements: 1.3_
 
-- [ ] 3.3 root `.module` の failure が `is404OnAllAttempts` を満たさないとき (5xx / NetworkError / WriteFailed) は `.pom` fallback を発火させず、 既存の `DownloadFailed` 経路で error する
+- [x] 3.3 root `.module` の failure が `is404OnAllAttempts` を満たさないとき (5xx / NetworkError / WriteFailed) は `.pom` fallback を発火させず、 既存の `DownloadFailed` 経路で error する
   - mock `ResolverDeps` の `downloadFile` 呼び出し回数を recorder で記録し、 `.pom` URL に対する download 試行が無いことを assert。
   - 観測: 5xx / NetworkError シナリオで `.pom` fetch が 0 回、 戻り値が既存通り `Err(DownloadFailed(..., attempts containing 5xx/network))`。
   - _Requirements: 1.4_
