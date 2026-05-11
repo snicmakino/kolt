@@ -6,6 +6,7 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
 import kolt.config.konanTargetGradleName
+import kolt.infra.DownloadError
 
 // Kotlin/Native bundles the stdlib in the konanc distribution — it must be
 // skipped during dependency resolution even though Gradle module metadata
@@ -18,6 +19,21 @@ import kolt.config.konanTargetGradleName
 private fun isKotlinStdlib(groupArtifact: String): Boolean =
   groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib" ||
     groupArtifact == "org.jetbrains.kotlin:kotlin-stdlib-common"
+
+// Distinguishes "every repo replied 404" from any other download failure
+// (5xx, network, local write). Only the all-404 case can be interpreted as
+// "this artifact is structurally not published" and trigger the `.pom`
+// fallback; transient failures must surface as the existing DownloadFailed.
+internal fun is404OnAllAttempts(error: ResolveError): Boolean {
+  if (error !is ResolveError.DownloadFailed) return false
+  val failure = error.failure
+  if (failure !is RepositoryDownloadFailure.AllAttemptsFailed) return false
+  if (failure.attempts.isEmpty()) return false
+  return failure.attempts.all { attempt ->
+    val downloadError = attempt.error
+    downloadError is DownloadError.HttpFailed && downloadError.statusCode == 404
+  }
+}
 
 private sealed class NativeResolved {
   data class Klib(val redirect: NativeRedirect, val artifact: NativeArtifact) : NativeResolved()

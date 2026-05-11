@@ -12,7 +12,7 @@
   - _Requirements: 1.2, 2.2, 3.1_
 
 - [ ] 2. Core: 構造的 404 判定 helper を追加
-- [ ] 2.1 `is404OnAllAttempts` (file-local) を実装し、 `ResolveError.DownloadFailed` が「全 attempt が 404」状態かを判定する
+- [x] 2.1 `is404OnAllAttempts` (file-local) を実装し、 `ResolveError.DownloadFailed` が「全 attempt が 404」状態かを判定する
   - 真理表: (a) `AllAttemptsFailed` で全 `HttpFailed(statusCode=404)` → true、 (b) 1 つ以上の `HttpFailed(statusCode != 404)` 混入 → false、 (c) 1 つ以上の `NetworkError` / `WriteFailed` 混入 → false、 (d) `NoRepositoriesConfigured` → false、 (e) `attempts` が空 → false、 (f) `DownloadFailed` 以外の `ResolveError` → false。
   - 観測: helper の真理表 6 ケースすべてが unit test で緑。 既存テストすべて緑。
   - _Requirements: 1.4_
