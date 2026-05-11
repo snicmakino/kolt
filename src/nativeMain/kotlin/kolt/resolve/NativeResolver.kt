@@ -169,7 +169,7 @@ fun resolveNative(
   return Ok(ResolveResult(deps = resolvedDeps, lockChanged = false))
 }
 
-private fun makeNativeChildLookup(
+internal fun makeNativeChildLookup(
   processed: MutableMap<String, NativeResolved>,
   nativeTarget: String,
   cacheBase: String,
@@ -198,8 +198,7 @@ private fun makeNativeChildLookup(
           Child(groupArtifact = depGA, version = d.version, strict = d.strict, rejects = d.rejects)
         }
       // JvmOnly nodes have no Gradle Module Metadata, so no transitive children
-      // are descended; task 4.1 will reaffirm this contract with dedicated
-      // coverage.
+      // are descended.
       is NativeResolved.JvmOnly -> emptyList()
     }
   Ok(children)

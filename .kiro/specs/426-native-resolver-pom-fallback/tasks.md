@@ -35,7 +35,7 @@
   - _Requirements: 1.4_
 
 - [ ] 4. Core: childLookup の variant 分岐
-- [ ] 4.1 `makeNativeChildLookup` を `NativeResolved` の when 分岐に書き換え、 `Klib` は既存通り `artifact.dependencies` (minus stdlib*) を返し、 `JvmOnly` は `Ok(emptyList())` を返す
+- [x] 4.1 `makeNativeChildLookup` を `NativeResolved` の when 分岐に書き換え、 `Klib` は既存通り `artifact.dependencies` (minus stdlib*) を返し、 `JvmOnly` は `Ok(emptyList())` を返す
   - JvmOnly node の `processed` キャッシュは Klib と同じく GA:version キーで記録される (kernel 側からは透過)。
   - 観測: childLookup を直接叩く unit test、 もしくは fetchNativeMetadata 経由の integration で JvmOnly node から children が出ないことを assert。 既存 Klib のテストすべて緑。
   - _Requirements: 1.2, 3.1_
@@ -104,3 +104,4 @@
 ## Implementation Notes
 
 - Pre-commit hook runs `kolt fmt --check`. Implementer must run `kolt fmt` before declaring READY_FOR_REVIEW or the parent's `git commit` will fail. Discovered on task 1.1.
+- Task 3.1 introduced three placeholder comments with task references (`task 5.x`, `task 4.1`, `task 6.1`) at `NativeResolver.kt` lines 101, 162, 250. Memory `feedback_no_task_refs_in_comments.md` forbids these. Task 4.1 removed the `task 4.1` reference; remaining two are expected to be naturally replaced by tasks 5.x and 6.1 when the real implementation lands. If any remain after task 6.1, do a final sweep before task 8.x.
