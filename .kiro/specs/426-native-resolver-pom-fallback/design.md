@@ -120,7 +120,7 @@ flowchart LR
 
 ### Modified Files
 - `src/nativeMain/kotlin/kolt/resolve/NativeResolver.kt`
-  - `NativeResolved` を `private sealed class` に変更し `Klib` / `JvmOnly` の 2 variant 化。
+  - `NativeResolved` を `internal sealed class` に変更し `Klib` / `JvmOnly` の 2 variant 化 (テストから直接 variant を assert できるよう `internal`)。
   - `fetchNativeMetadata` に root `.module` 404 構造的判定と `.pom` フォールバックを追加。
   - `makeNativeChildLookup` を `NativeResolved` variant 分岐に対応 (Klib → 既存通り、 JvmOnly → 空 children)。
   - `resolveNative` の materialization loop で `node.direct && resolved is JvmOnly` を `NoNativeVariant` エラー、 transitive JvmOnly は skip + 条件付き stderr note。
@@ -242,7 +242,7 @@ sequenceDiagram
 
 **Responsibilities & Constraints**
 - 既存 `data class NativeResolved(redirect, artifact)` を sealed class 化し、 Klib variant に同じ内容を移植。 JvmOnly variant は `coordinate: Coordinate` のみ保持。
-- `private` 修飾を維持。 native resolver 外には露出しない。
+- `internal` 修飾。 native test から variant assertion できるよう resolver module 内では可視。 native resolver の他 production file からは参照しない。
 - caller (childLookup / materialization / createNativeLookup) は variant ごとに分岐する。
 
 **Dependencies**
@@ -278,8 +278,10 @@ sequenceDiagram
 
 ##### Service Interface
 ```kotlin
-// Signature unchanged from current implementation
-private fun fetchNativeMetadata(
+// Visibility promoted to `internal` so the unit test can drive the
+// fetchAndRead/fallback path directly with mocked ResolverDeps;
+// signature otherwise unchanged.
+internal fun fetchNativeMetadata(
   groupArtifact: String,
   version: String,
   nativeTarget: String,
@@ -292,7 +294,7 @@ private fun fetchNativeMetadata(
 - Postconditions: Ok の場合、 `NativeResolved.Klib` (既存と同等) または `NativeResolved.JvmOnly(coordinate=rootCoord)` を返す。
 - Invariants: `.pom` フォールバックは root `.module` のみで発火する。 target `.module` (redirect 先) では発火しない。
 
-#### `is404OnAllAttempts` (新規 internal helper)
+#### `is404OnAllAttempts` (新規 helper)
 
 | Field | Detail |
 |-------|--------|
@@ -300,7 +302,7 @@ private fun fetchNativeMetadata(
 | Requirements | 1.4 |
 
 **Responsibilities & Constraints**
-- private / file-local。 ファイル外に export しない。
+- `internal` / file-local。 native test の真理表 assertion 用に visible だが、 native resolver の他 production file からは参照しない。
 - `RepositoryDownloadFailure.NoRepositoriesConfigured` の場合は false (リポジトリそのものが空なのは "all 404" ではない)。
 - `AllAttemptsFailed.attempts` が空のケースは defensively false。
 
@@ -312,7 +314,7 @@ private fun fetchNativeMetadata(
 
 ##### Service Interface
 ```kotlin
-private fun is404OnAllAttempts(error: ResolveError): Boolean
+internal fun is404OnAllAttempts(error: ResolveError): Boolean
 ```
 - Preconditions: `error` は `fetchAndRead` から返る error 型のいずれか。
 - Postconditions: `error is ResolveError.DownloadFailed`、 かつ `failure is AllAttemptsFailed`、 かつ `attempts` 非空、 かつすべての attempt が `DownloadError.HttpFailed(statusCode = 404)` のときのみ true。
@@ -397,9 +399,9 @@ private fun is404OnAllAttempts(error: ResolveError): Boolean
 
 ### Domain Model
 
-`NativeResolver` 内部 sealed class:
+`NativeResolver` sealed class (`internal` for native-test access; not consumed from any other production file in `src/nativeMain/`):
 ```kotlin
-private sealed class NativeResolved {
+internal sealed class NativeResolved {
   data class Klib(val redirect: NativeRedirect, val artifact: NativeArtifact) : NativeResolved()
   data class JvmOnly(val coordinate: Coordinate) : NativeResolved()
 }

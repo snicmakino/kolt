@@ -185,6 +185,11 @@ class NativeResolverJvmOnlyFallbackTest {
       "expected exactly one stderr note for the transitive kotlin-reflect skip",
     )
 
+    // Verification 4: production code adds no name-based skip for
+    // kotlin-reflect — confirmed by leaving NativeResolver.kt unmodified;
+    // the test reaches its assertions only by exercising the structural
+    // .module 404 → .pom fallback.
+    //
     // Verification 5: fixture is offline. The repo base is the RFC 2606
     // reserved `.example` TLD, so even if `downloadFile` were not mocked, no
     // request could reach Maven Central. Asserting both the positive shape

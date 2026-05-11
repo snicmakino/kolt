@@ -162,11 +162,10 @@ fun resolveNative(
         )
       }
       is NativeResolved.JvmOnly -> {
-        // Direct JvmOnly deps (other than the kotlin-stdlib bundle filtered
-        // out in `resolveNative` above) cannot be silently skipped: the user
-        // declared the artifact in `[dependencies]`, so we surface a hard
-        // error and let the formatter print the dedicated NoNativeVariant
-        // message instead of emitting a transitive-skip note.
+        // Direct JvmOnly deps (other than the kotlin-stdlib bundle already
+        // filtered out in `resolveNative` above) cannot be silently skipped:
+        // the user declared the artifact in `[dependencies]`, so surface
+        // NoNativeVariant rather than continuing.
         if (node.direct) {
           return Err(ResolveError.NoNativeVariant(node.groupArtifact, nativeTarget))
         }

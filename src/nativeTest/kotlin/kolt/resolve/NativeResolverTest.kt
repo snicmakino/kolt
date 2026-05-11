@@ -251,9 +251,10 @@ class NativeResolverTest {
   fun transitiveKotlinStdlibCommonIsSilentSkipNoStderrNote() {
     // Silent skip for kotlin-stdlib-common on the transitive path
     // must not produce the JvmOnly stderr note even though the structural
-    // fallback would otherwise emit one. Defends the user-visible contract
-    // against future regressions in either the childLookup filter or the
-    // materialization-time isKotlinStdlib short-circuit.
+    // fallback would otherwise emit one. childLookup's isKotlinStdlib
+    // filter strips the child before fetchNativeMetadata; the
+    // materialization-time short-circuit is defensive backup that this
+    // fixture does not exercise directly.
     val config =
       testConfig(target = "linuxX64").copy(dependencies = mapOf("com.example:lib" to "1.0.0"))
 
