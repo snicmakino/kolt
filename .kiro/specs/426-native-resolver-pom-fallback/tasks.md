@@ -41,7 +41,7 @@
   - _Requirements: 1.2, 3.1_
 
 - [ ] 5. Core: materialization loop の variant 分岐
-- [ ] 5.1 transitive JvmOnly node が非 stdlib のとき、 stderr に 1 行 note (`note: <ga>:<v> has no Gradle Module Metadata; skipping for native target`) を出して `resolvedDeps` に含めずスキップする
+- [x] 5.1 transitive JvmOnly node が非 stdlib のとき、 stderr に 1 行 note (`note: <ga>:<v> has no Gradle Module Metadata; skipping for native target`) を出して `resolvedDeps` に含めずスキップする
   - eprintln 経路は既存の `kolt.infra.output` の stderr 出口を踏襲。
   - ADR 0011 §4 を引く short anchor comment を skip 直前に 1 行入れる (`structure.md` の "ADR citations in code" に従う)。
   - 観測: 非 stdlib coordinate (例: `org.example:fake-jvm-only`) を transitive に含む resolve で stderr に該当 note 1 行が出力され、 `resolvedDeps` に含まれていないこと。

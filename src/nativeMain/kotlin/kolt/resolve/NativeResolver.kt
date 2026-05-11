@@ -7,6 +7,7 @@ import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
 import kolt.config.konanTargetGradleName
 import kolt.infra.DownloadError
+import kolt.infra.eprintln
 
 // Kotlin/Native bundles the stdlib in the konanc distribution — it must be
 // skipped during dependency resolution even though Gradle module metadata
@@ -60,6 +61,7 @@ fun resolveNative(
   cacheBase: String,
   deps: ResolverDeps,
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
+  noteSink: (String) -> Unit = ::eprintln,
 ): Result<ResolveResult, ResolveError> {
   val nativeTarget = konanTargetGradleName(config.build.target)
   val repos = config.repositories.values.toList()
@@ -158,11 +160,19 @@ fun resolveNative(
           )
         )
       }
-      // Direct-vs-transitive routing (NoNativeVariant on direct, stderr note on
-      // transitive, silent for stdlib) lands in task 5.x. For now the branch is
-      // a no-op that keeps the when exhaustive without changing observable
-      // behavior on the existing Klib-only code paths.
-      is NativeResolved.JvmOnly -> Unit
+      is NativeResolved.JvmOnly -> {
+        if (!node.direct) {
+          // ADR 0011 §4: structural skip generalises the kotlin-stdlib-common
+          // silent-skip policy; stdlib coordinates remain silent here, every
+          // other JvmOnly transitive surfaces a single stderr note so a build
+          // log records which artifact had no native variant.
+          if (!isKotlinStdlib(node.groupArtifact)) {
+            noteSink(
+              "note: ${node.groupArtifact}:${node.version} has no Gradle Module Metadata; skipping for native target"
+            )
+          }
+        }
+      }
     }
   }
 
