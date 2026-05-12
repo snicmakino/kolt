@@ -20,7 +20,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Requirements: 1.1_
   - _Boundary: KoltPaths_
 
-- [ ] 1.2 Introduce `Repository` and `RawRepository` data classes
+- [x] 1.2 Introduce `Repository` and `RawRepository` data classes
   - Add `data class Repository(val url: String)` to the config domain model.
   - Add the matching `@Serializable internal data class RawRepository(val url: String? = null)` wire type.
   - Validation of the `url` field is NOT introduced here; the empty/missing-url rejection happens in 2.1 (decode-lift step) and in 3.4 (post-merge), as required by design.md's two-phase validation rule.

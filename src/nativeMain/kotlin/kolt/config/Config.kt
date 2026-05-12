@@ -105,6 +105,8 @@ data class RunSection(
   @SerialName("sys_props") val sysProps: Map<String, SysPropValue> = emptyMap()
 )
 
+data class Repository(val url: String)
+
 @Serializable
 data class KoltConfig(
   val name: String,
@@ -167,6 +169,8 @@ private data class RawTestSection(
 private data class RawRunSection(
   @SerialName("sys_props") val sysProps: Map<String, RawSysPropValue> = emptyMap()
 )
+
+@Serializable internal data class RawRepository(val url: String? = null)
 
 @Serializable
 private data class RawKoltConfig(
