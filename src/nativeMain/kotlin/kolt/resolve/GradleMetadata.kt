@@ -90,6 +90,15 @@ fun parseNativeArtifact(moduleJson: String, nativeTarget: String): NativeArtifac
     if (!matchesNativeVariant(variant.attributes, nativeTarget)) continue
     val klibFiles = variant.files.filter { it.url.endsWith(".klib") }
     if (klibFiles.isEmpty()) continue
+    // `GradleFile.url` is concatenated verbatim as the trailing path segment
+    // of the cache write target. A url containing `..`, `/`, or `\` would
+    // let malformed or hostile metadata escape the coordinate's cache
+    // directory and write elsewhere on disk. Reject the whole metadata
+    // rather than silently dropping the offending entry, so a wrong-shape
+    // .module fails loudly. Legitimate klib filenames are bare basenames
+    // (`<artifact>-<version>[-cinterop-<name>].klib`) — none of these
+    // checks reject a well-formed file.
+    if (klibFiles.any { !isSafeKlibFilename(it.url) }) return null
     val deps =
       variant.dependencies.map { d ->
         val version = d.version.selectedVersion()
@@ -117,6 +126,9 @@ internal fun isValidGradleModuleJson(moduleJson: String): Boolean =
   } catch (_: Exception) {
     false
   }
+
+private fun isSafeKlibFilename(url: String): Boolean =
+  !url.contains('/') && !url.contains('\\') && !url.contains("..")
 
 private fun matchesNativeVariant(attrs: Map<String, JsonPrimitive>, nativeTarget: String): Boolean =
   attrs["org.jetbrains.kotlin.platform.type"]?.content == "native" &&

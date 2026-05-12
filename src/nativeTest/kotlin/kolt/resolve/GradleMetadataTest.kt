@@ -575,6 +575,79 @@ class GradleMetadataTest {
     assertNull(parseNativeArtifact("not json", "linux_x64"))
   }
 
+  // `GradleFile.url` is concatenated verbatim into the cache path, so an
+  // url containing `..` would let malformed metadata write outside the
+  // coordinate's cache directory. Reject the whole metadata loudly rather
+  // than silently dropping the offending entry. Repeat for `/` and `\` to
+  // cover the same surface.
+  @Test
+  fun parseNativeArtifactRejectsParentDirSegmentInKlibUrl() {
+    val json = singleFileVariantJson(url = "../../../etc/passwd.klib", sha256 = "evil")
+    assertNull(parseNativeArtifact(json, "linux_x64"))
+  }
+
+  @Test
+  fun parseNativeArtifactRejectsForwardSlashInKlibUrl() {
+    val json = singleFileVariantJson(url = "subdir/lib.klib", sha256 = "evil")
+    assertNull(parseNativeArtifact(json, "linux_x64"))
+  }
+
+  @Test
+  fun parseNativeArtifactRejectsBackslashInKlibUrl() {
+    val json = singleFileVariantJson(url = "subdir\\lib.klib", sha256 = "evil")
+    assertNull(parseNativeArtifact(json, "linux_x64"))
+  }
+
+  @Test
+  fun parseNativeArtifactRejectsMetadataWhenOnlyOneOfMultipleKlibsIsUnsafe() {
+    val json =
+      """
+        {
+          "formatVersion": "1.1",
+          "variants": [
+            {
+              "name": "linuxX64ApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.usage": "kotlin-api",
+                "org.jetbrains.kotlin.native.target": "linux_x64",
+                "org.jetbrains.kotlin.platform.type": "native"
+              },
+              "files": [
+                { "name": "main", "url": "lib-linuxx64-1.0.klib", "sha256": "ok" },
+                { "name": "evil", "url": "../escape.klib", "sha256": "bad" }
+              ]
+            }
+          ]
+        }
+        """
+        .trimIndent()
+
+    assertNull(parseNativeArtifact(json, "linux_x64"))
+  }
+
+  private fun singleFileVariantJson(url: String, sha256: String): String =
+    """
+        {
+          "formatVersion": "1.1",
+          "variants": [
+            {
+              "name": "linuxX64ApiElements-published",
+              "attributes": {
+                "org.gradle.category": "library",
+                "org.gradle.usage": "kotlin-api",
+                "org.jetbrains.kotlin.native.target": "linux_x64",
+                "org.jetbrains.kotlin.platform.type": "native"
+              },
+              "files": [
+                { "name": "lib", "url": "$url", "sha256": "$sha256" }
+              ]
+            }
+          ]
+        }
+        """
+      .trimIndent()
+
   @Test
   fun parseNativeArtifactPicksKlibFileAmongMultiple() {
     val json =
