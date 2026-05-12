@@ -105,7 +105,7 @@ data class RunSection(
   @SerialName("sys_props") val sysProps: Map<String, SysPropValue> = emptyMap()
 )
 
-data class Repository(val url: String)
+@Serializable data class Repository(val url: String)
 
 @Serializable
 data class KoltConfig(
@@ -117,7 +117,7 @@ data class KoltConfig(
   val fmt: FmtSection = FmtSection(),
   val dependencies: Map<String, String> = emptyMap(),
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-  val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+  val repositories: Map<String, Repository> = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
   val cinterop: List<CinteropConfig> = emptyList(),
   // [classpaths.<name>] declares a named, resolvable jar bundle independent
   // of [dependencies]. Bundles feed sysprop values via SysPropValue.ClasspathRef
@@ -182,7 +182,8 @@ private data class RawKoltConfig(
   val fmt: FmtSection = FmtSection(),
   val dependencies: Map<String, String> = emptyMap(),
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-  val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+  val repositories: Map<String, RawRepository> =
+    mapOf("central" to RawRepository(MAVEN_CENTRAL_BASE)),
   val cinterop: List<CinteropConfig> = emptyList(),
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
   val tools: Map<String, RawToolEntry>? = null,
@@ -244,6 +245,25 @@ private fun liftSysPropsMap(
         "project_dir" -> SysPropValue.ProjectDir(rawValue.projectDir!!)
         else -> error("unreachable")
       }
+  }
+  return Ok(out)
+}
+
+// Lifts a Map<String, RawRepository> into Map<String, Repository>: strips
+// quotes around keys (consistent with cleanedDeps), rejects entries whose
+// url is null or empty, and preserves the trailing-slash normalization that
+// applied to the legacy flat-form string values.
+private fun liftRepositoriesMap(
+  raw: Map<String, RawRepository>
+): Result<Map<String, Repository>, ConfigError> {
+  val out = LinkedHashMap<String, Repository>(raw.size)
+  for ((rawKey, rawValue) in raw) {
+    val name = rawKey.removeSurrounding("\"")
+    val url = rawValue.url
+    if (url.isNullOrEmpty()) {
+      return Err(ConfigError.ParseFailed("repository '$name' has no url"))
+    }
+    out[name] = Repository(url.trimEnd('/'))
   }
   return Ok(out)
 }
@@ -476,9 +496,9 @@ fun parseConfig(tomlString: String, path: String? = null): Result<KoltConfig, Co
     val cleanedDeps = raw.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
     val cleanedTestDeps = raw.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
     val cleanedRepos =
-      raw.repositories
-        .mapKeys { (key, _) -> key.removeSurrounding("\"") }
-        .mapValues { (_, url) -> url.trimEnd('/') }
+      liftRepositoriesMap(raw.repositories).getOrElse {
+        return Err(it)
+      }
     val cleanedClasspaths =
       raw.classpaths
         .mapKeys { (key, _) -> key.removeSurrounding("\"") }
@@ -541,22 +561,52 @@ fun parseConfig(tomlString: String, path: String? = null): Result<KoltConfig, Co
       )
     )
   } catch (e: SerializationException) {
-    Err(buildKtomlParseError(e.message, path))
+    Err(buildKtomlParseError(e.message, path, tomlString))
   } catch (e: IllegalArgumentException) {
-    Err(buildKtomlParseError(e.message, path))
+    Err(buildKtomlParseError(e.message, path, tomlString))
   }
 }
 
-private fun buildKtomlParseError(rawMessage: String?, path: String?): ConfigError.ParseFailed {
+// ktoml decodes a flat-form `[repositories]\n<name> = "<url>"` into the
+// Map<String, RawRepository> schema by reporting <name> as an unknown key at
+// rootNode scope — byte-identical to a real top-level typo. The exception
+// alone is not deterministic enough to substitute the message, so we keep the
+// raw ktoml error intact and append a migration hint paragraph keyed on the
+// input containing `[repositories]` plus the offending key matching the name
+// that would appear under that table. Conservative: skip the hint when the
+// input has no `[repositories]` header so legitimate top-level typos like
+// `koltn = "stray"` are not corrupted.
+private val REPOSITORIES_HEADER_REGEX = Regex("(?m)^\\s*\\[repositories\\]\\s*$")
+
+private fun buildKtomlParseError(
+  rawMessage: String?,
+  path: String?,
+  tomlString: String,
+): ConfigError.ParseFailed {
   val (lineNo, detail) = extractKtomlLineNo(rawMessage)
   val (keyPath, suggestion) = parseUnknownKey(detail)
-  val headline = "failed to parse kolt.toml: $detail"
+  val baseHeadline = "failed to parse kolt.toml: $detail"
+  val migrationHint =
+    if (keyPath != null && REPOSITORIES_HEADER_REGEX.containsMatchIn(tomlString)) {
+      val nameRegex =
+        Regex(
+          "(?ms)^\\s*\\[repositories\\]\\s*\\R(?:[^\\[]*?\\R)?\\s*\"?" +
+            Regex.escape(keyPath) +
+            "\"?\\s*="
+        )
+      if (nameRegex.containsMatchIn(tomlString)) {
+        "repositories schema migrated to sub-table form; " +
+          "expected '[repositories.<name>] url = \"...\"', " +
+          "got string value at '$keyPath'"
+      } else null
+    } else null
+  val headline = if (migrationHint != null) "$baseHeadline -- $migrationHint" else baseHeadline
   return ConfigError.ParseFailed(
     message = headline,
     path = path,
     lineNo = lineNo,
     keyPath = keyPath,
-    suggestion = suggestion,
+    suggestion = if (migrationHint != null) null else suggestion,
   )
 }
 

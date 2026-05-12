@@ -17,7 +17,7 @@ fun resolveTransitive(
   testSeeds: Map<String, String> = emptyMap(),
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
-  val repos = config.repositories.values.toList()
+  val repos = config.repositories.values.map { it.url }.toList()
 
   val basePomLookup = createPomLookup(repos, cacheBase, deps)
 

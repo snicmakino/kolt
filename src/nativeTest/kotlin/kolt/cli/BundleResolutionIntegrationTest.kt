@@ -6,6 +6,7 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.build.ResolvedJar
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -396,7 +397,8 @@ class BundleResolutionIntegrationTest {
   // pair the lockfile alone could never round-trip.
   @Test
   fun materialiseBundleJarsFromLockBuildsUrlFromCachePathNotGroupArtifact() {
-    val config = testConfig().copy(repositories = mapOf("central" to "https://example.org/m2"))
+    val config =
+      testConfig().copy(repositories = mapOf("central" to Repository("https://example.org/m2")))
 
     val redirectedRelativePath = "org/example/lib-jvm/1.0.0/lib-jvm-1.0.0.jar"
     val redirectedCachePath = "/cache/$redirectedRelativePath"

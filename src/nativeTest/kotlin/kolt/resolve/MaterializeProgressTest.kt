@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import kolt.config.MAVEN_CENTRAL_BASE
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -165,7 +166,7 @@ class MaterializeProgressTest {
     val config =
       testConfig(
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("primary" to repo1, "fallback" to repo2),
+        repositories = mapOf("primary" to Repository(repo1), "fallback" to Repository(repo2)),
       )
     val pomXml =
       """

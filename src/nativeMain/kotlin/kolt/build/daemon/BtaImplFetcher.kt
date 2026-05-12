@@ -8,6 +8,7 @@ import kolt.config.BuildSection
 import kolt.config.KoltConfig
 import kolt.config.KotlinSection
 import kolt.config.MAVEN_CENTRAL_BASE
+import kolt.config.Repository
 import kolt.resolve.Lockfile
 import kolt.resolve.ResolveError
 import kolt.resolve.ResolveResult
@@ -50,7 +51,7 @@ internal fun ensureBtaImplJars(
       kotlin = KotlinSection(version = version),
       build = BuildSection(target = "jvm", main = "unused.Main", sources = emptyList()),
       dependencies = mapOf(BTA_IMPL_GROUP_ARTIFACT to version),
-      repositories = mapOf("central" to MAVEN_CENTRAL_BASE),
+      repositories = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
     )
   val result =
     resolver(syntheticConfig, null, cacheBase, deps).getOrElse {

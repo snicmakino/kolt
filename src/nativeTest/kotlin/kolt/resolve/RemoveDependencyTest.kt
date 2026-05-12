@@ -220,15 +220,15 @@ class RemoveDependencyTest {
         |[dependencies]
         |"foo:bar" = "1.0"
         |
-        |[repositories]
-        |central = "https://repo1.maven.org/maven2"
+        |[repositories.central]
+        |url = "https://repo1.maven.org/maven2"
         |"""
         .trimMargin()
 
     val result = removeDependencyFromToml(toml, "foo:bar")
 
     assertFalse("[dependencies]" in result.newToml, "header must be dropped: ${result.newToml}")
-    assertTrue("[repositories]" in result.newToml)
+    assertTrue("[repositories.central]" in result.newToml)
     assertTrue("central" in result.newToml)
     assertTrue(result.newToml.endsWith("\n"))
   }
@@ -349,15 +349,15 @@ class RemoveDependencyTest {
         |[dependencies]
         |"foo:bar" = "1.0"
         |
-        |[repositories]
-        |central = "https://repo1.maven.org/maven2"
+        |[repositories.central]
+        |url = "https://repo1.maven.org/maven2"
         |"""
         .trimMargin()
 
     val result = removeDependencyFromToml(toml, "foo:bar")
 
     assertEquals(1, result.removed.size)
-    assertTrue("[repositories]" in result.newToml)
+    assertTrue("[repositories.central]" in result.newToml)
     assertTrue("central" in result.newToml)
     assertTrue(result.newToml.endsWith("\n"), "trailing newline must be preserved")
   }

@@ -79,8 +79,8 @@ class DoAddAtomicWriteTest {
       |sources = ["src"]
       |test_sources = []
       |
-      |[repositories]
-      |fake = "http://127.0.0.1:1/"
+      |[repositories.fake]
+      |url = "http://127.0.0.1:1/"
       |"""
         .trimMargin()
     writeFileAsString("kolt.toml", originalToml).getOrElse { error("setup write failed: $it") }

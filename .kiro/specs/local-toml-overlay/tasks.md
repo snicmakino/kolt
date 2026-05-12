@@ -42,7 +42,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
 
 - [ ] 2. Schema migration: flip `[repositories]` to sub-table form and propagate
 
-- [ ] 2.1 Flip `RawKoltConfig.repositories` to `Map<String, RawRepository>`, lift into `Repository`, and wire the migration error
+- [x] 2.1 Flip `RawKoltConfig.repositories` to `Map<String, RawRepository>`, lift into `Repository`, and wire the migration error
   - Change `RawKoltConfig.repositories` type to `Map<String, RawRepository>`; update its default `central` entry.
   - Add the decode-lift step that maps `RawRepository` → `Repository` and rejects any entry whose `url` is null or empty with a message naming the offending repository (R4.4).
   - Catch the ktoml decode error pinned in 1.3 and translate it into the user-facing migration message (substitution or hint-append, per 1.3's verdict, R4.3).
@@ -52,21 +52,21 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Depends: 1.2, 1.3_
   - _Boundary: Config, RepositorySchemaMigrationTest_
 
-- [ ] 2.2 Update 9 resolver and CLI consumers
+- [x] 2.2 Update 9 resolver and CLI consumers
   - Mechanically replace `config.repositories.values.toList()` with `config.repositories.values.map { it.url }.toList()` at the call sites enumerated in `design.md` File Structure Plan: `BundleResolver.kt:180`, `NativeResolver.kt:67`, `TransitiveResolver.kt:20`, `OutdatedCommand.kt:42`, `ToolCommands.kt:163`, `DependencyCommands.kt:54`/`:296`/`:388`/`:407`.
   - **Observable done**: `grep -n "config\.repositories\.values\.toList" src/nativeMain/` returns zero hits, and `kolt build` of the root project still compiles.
   - _Requirements: 4.1_
   - _Depends: 2.1_
   - _Boundary: Resolver consumers, CLI consumers_
 
-- [ ] 2.3 (P) Update 4 Kotlin Map test fixtures
+- [x] 2.3 (P) Update 4 Kotlin Map test fixtures
   - In `ChangeMatrixTest.kt:215`, `BundleResolutionIntegrationTest.kt:399`, `BundleResolverProgressTest.kt:98`, and `NativeResolverJvmOnlyFallbackTest.kt:39`, convert `mapOf("central" to "https://…")` to `mapOf("central" to Repository("https://…"))`.
   - **Observable done**: each affected test compiles and passes against the new schema.
   - _Requirements: 4.1_
   - _Depends: 2.1_
   - _Boundary: ChangeMatrixTest, BundleResolutionIntegrationTest, BundleResolverProgressTest, NativeResolverJvmOnlyFallbackTest_
 
-- [ ] 2.4 (P) Update TOML heredoc test fixtures
+- [x] 2.4 (P) Update TOML heredoc test fixtures
   - In `ConfigTest.kt` lines 812, 837, 870, 896 and in `DoAddAtomicWriteTest.kt:82`, flip each `[repositories]` heredoc body from the flat form to `[repositories.<name>] url = "…"` sub-table form.
   - **Observable done**: all five heredoc-bearing tests run green against the new schema.
   - _Requirements: 4.1_
@@ -80,7 +80,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Depends: 2.1_
   - _Boundary: README, kolt-usage SKILL_
 
-- [ ] 2.6 (P) Update `generateKoltToml` scaffolding template
+- [x] 2.6 (P) Update `generateKoltToml` scaffolding template
   - In the kolt-init scaffolding template, change the emitted `[repositories]` block from `central = "https://repo1.maven.org/maven2"` to `[repositories.central]\nurl = "https://repo1.maven.org/maven2"`.
   - **Observable done**: `kolt new sandbox` (or equivalent test fixture) produces a `kolt.toml` whose `[repositories]` block matches the sub-table form, and the generated project parses cleanly.
   - _Requirements: 4.1_
@@ -217,3 +217,4 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
 ## Implementation Notes
 
 - **Task 1.3 verdict (consumed by 2.1)**: ktoml 0.7.1 surfaces a legacy flat-form `[repositories]\ncentral = "..."` decode against `Map<String, RawRepository>` as `UnknownNameException` with `Unknown key received: <central> in scope <rootNode>` — byte-identical to a real root-scope typo. Migration-message wiring in 2.1 must use **hint-append** (raw ktoml error preserved + hint paragraph appended) based on an input-content heuristic (`[repositories]` table present plus key in offending position), NOT substitution keyed on the exception. Pinned by `ConfigParseMessageFormatTest.legacyFlatRepositoriesShapeSurfacesAsUnknownNameAtRootScope`.
+- **Task 2.1 follow-up (deferred, non-blocking)**: `src/nativeMain/kotlin/kolt/resolve/Resolver.kt:154` still emits the user-facing string `"no repositories configured (add a `[repositories]` entry to kolt.toml)"`. After the schema flip this hint points at the rejected legacy form. Out of scope for tasks 2.1-2.6 (Resolver.kt was not in design.md's enumerated file list). Recommend folding into the v0.20.0 release-note pass alongside other user-facing hint updates.

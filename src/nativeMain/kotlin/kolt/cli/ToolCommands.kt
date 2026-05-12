@@ -160,7 +160,7 @@ internal fun runToolWithDeps(
         paths = paths,
         lockfile = lockfile,
         netDeps = deps,
-        repos = config.repositories.values.toList(),
+        repos = config.repositories.values.map { it.url }.toList(),
       )
       .getOrElse { resolutionError ->
         return surfaceToolError(ToolError.Resolve(resolutionError))

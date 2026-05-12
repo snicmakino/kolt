@@ -39,7 +39,7 @@ private fun doOutdatedInner(opts: OutdatedOptions): Result<Unit, Int> {
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  val repos = config.repositories.values.toList()
+  val repos = config.repositories.values.map { it.url }.toList()
   val report =
     computeOutdated(
       mainDeps = config.dependencies,
