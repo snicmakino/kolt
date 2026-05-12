@@ -123,9 +123,11 @@ test_resources = ["test-resources"]
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
 
-[repositories]
-central = "https://repo1.maven.org/maven2"
-jitpack = "https://jitpack.io"
+[repositories.central]
+url = "https://repo1.maven.org/maven2"
+
+[repositories.jitpack]
+url = "https://jitpack.io"
 ```
 
 ### フィールド
@@ -147,7 +149,7 @@ jitpack = "https://jitpack.io"
 | `[build] test_resources` | テスト時のクラスパスに追加するリソースディレクトリ | `[]` |
 | `[fmt] style` | ktfmt スタイル：`"google"`、`"kotlinlang"`、`"meta"` | `"google"` |
 | `[[cinterop]]` | native target 用の C interop バインディング（`.def` ごとに 1 エントリ） | `[]` |
-| `[repositories]` | Maven リポジトリ（名前 = URL） | Maven Central のみ |
+| `[repositories.<name>]` | Maven リポジトリのサブテーブル（`url` フィールド） | Maven Central のみ |
 | `[classpaths.<name>]` | `[dependencies]` と独立に解決される名前付き jar bundle。TOML 形式は `[dependencies]` と同じ（`"group:artifact" = "version"`）。JVM ターゲットのみ。 | `{}` |
 | `[test.sys_props]` | テスト JVM 用 `-D<key>=<value>` のマップ。各値は `{ literal = "..." }` / `{ classpath = "<bundle>" }` / `{ project_dir = "<rel>" }` のいずれか。JVM ターゲットのみ。 | `{}` |
 | `[run.sys_props]` | `kolt run` 用、形式は `[test.sys_props]` と同じ。JVM ターゲット + `kind = "app"` のみ。 | `{}` |
@@ -178,12 +180,14 @@ kolt add --test io.kotest:kotest-runner-junit5:5.8.0      # テスト依存
 
 ### カスタムリポジトリ
 
-デフォルトでは Maven Central から依存を解決します。カスタムリポジトリ（例：JitPack）を追加するには `[repositories]` で宣言します：
+デフォルトでは Maven Central から依存を解決します。カスタムリポジトリ（例：JitPack）を追加するには `[repositories.<name>]` サブテーブルとして宣言します：
 
 ```toml
-[repositories]
-central = "https://repo1.maven.org/maven2"
-jitpack = "https://jitpack.io"
+[repositories.central]
+url = "https://repo1.maven.org/maven2"
+
+[repositories.jitpack]
+url = "https://jitpack.io"
 ```
 
 リポジトリは宣言順に試行されます。省略時は Maven Central が使用されます。

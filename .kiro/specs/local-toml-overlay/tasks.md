@@ -73,7 +73,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Depends: 2.1_
   - _Boundary: ConfigTest, DoAddAtomicWriteTest_
 
-- [ ] 2.5 (P) Update README and skill documentation code blocks
+- [x] 2.5 (P) Update README and skill documentation code blocks
   - In `README.md` lines 127 and 185, `README.ja.md` lines 126 and 184, and `.claude/skills/kolt-usage/SKILL.md` line 157, replace the flat `[repositories]` code blocks with the sub-table form.
   - **Observable done**: `grep -n "^\\[repositories\\]" README.md README.ja.md .claude/skills/kolt-usage/SKILL.md` returns zero hits for the legacy flat shape.
   - _Requirements: 4.1_
