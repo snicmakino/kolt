@@ -91,7 +91,7 @@ data class BuildSection(
 )
 
 // Per-target fields deferred per ADR 0023 §3.
-@Serializable private data class BuildTargetEntry(val unused: String? = null)
+@Serializable internal data class BuildTargetEntry(val unused: String? = null)
 
 @Serializable data class FmtSection(val style: String = "google")
 
@@ -148,7 +148,7 @@ private val toml = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = false
 // `target` is non-null. Keeping the public schema unchanged lets the 22-odd
 // `config.build.target` consumers stay typed as String.
 @Serializable
-private data class RawBuildSection(
+internal data class RawBuildSection(
   val target: String? = null,
   @SerialName("jvm_target") val jvmTarget: String = "25",
   val jdk: String? = null,
@@ -173,7 +173,7 @@ internal data class RawRunSection(
 @Serializable internal data class RawRepository(val url: String? = null)
 
 @Serializable
-private data class RawKoltConfig(
+internal data class RawKoltConfig(
   val name: String,
   val version: String,
   val kind: String = "app",

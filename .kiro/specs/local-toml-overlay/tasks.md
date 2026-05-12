@@ -110,7 +110,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Depends: 3.1_
   - _Boundary: LocalOverlay, LocalTomlOverlayDecodeTest_
 
-- [ ] 3.3 Implement `mergeSysProps` and `mergeOverlay` (sys_props path only)
+- [x] 3.3 Implement `mergeSysProps` and `mergeOverlay` (sys_props path only)
   - Implement `mergeSysProps(base, overlay)` with key-replace plus union semantics, applied to both `[test.sys_props]` and `[run.sys_props]` from inside `mergeOverlay`.
   - `mergeOverlay` returns the merged `RawKoltConfig` and threads the overlay path through any future structural errors (Phase 6 uses this for repositories).
   - Add `LocalTomlOverlayMergeTest.kt` with unit tests for: same-key replace across both sections (R3.1), new-key union across both sections (R3.2).
