@@ -28,7 +28,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Requirements: 4.1, 4.2_
   - _Boundary: Config_
 
-- [ ] 1.3 Pin ktoml 0.7.1 decode-error shape for `Map<String, RawRepository>` flat-form input
+- [x] 1.3 Pin ktoml 0.7.1 decode-error shape for `Map<String, RawRepository>` flat-form input
   - Add a probe test in `ConfigParseMessageFormatTest` that decodes a TOML containing `[repositories]` with `central = "https://…"` into the production `Map<String, RawRepository>` shape and asserts the actual ktoml exception class and message string.
   - The pinned message is the source of truth for whether the migration error can be substituted in-place or must be surfaced via an appended hint.
   - **Observable done**: a new pinned test in `ConfigParseMessageFormatTest` records the exact exception type and message; `research.md` Topic 6 is updated with the verdict (substitution vs. hint-append) and the chosen branch.
@@ -211,3 +211,9 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - **Observable done**: a fresh `kolt init` produces a `.gitignore` whose contents include `kolt.local.toml` on its own line.
   - _Requirements: 6.1, 6.2_
   - _Boundary: Init scaffolding, InitGitignoreTest_
+
+---
+
+## Implementation Notes
+
+- **Task 1.3 verdict (consumed by 2.1)**: ktoml 0.7.1 surfaces a legacy flat-form `[repositories]\ncentral = "..."` decode against `Map<String, RawRepository>` as `UnknownNameException` with `Unknown key received: <central> in scope <rootNode>` — byte-identical to a real root-scope typo. Migration-message wiring in 2.1 must use **hint-append** (raw ktoml error preserved + hint paragraph appended) based on an input-content heuristic (`[repositories]` table present plus key in offending position), NOT substitution keyed on the exception. Pinned by `ConfigParseMessageFormatTest.legacyFlatRepositoriesShapeSurfacesAsUnknownNameAtRootScope`.
