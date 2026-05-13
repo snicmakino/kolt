@@ -5,6 +5,7 @@ import com.akuleshov7.ktoml.TomlInputConfig
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getOrElse
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 
@@ -30,7 +31,6 @@ internal fun parseLocalOverlay(
   }
 }
 
-@Suppress("UNUSED_PARAMETER")
 internal fun mergeOverlay(
   base: RawKoltConfig,
   overlay: RawLocalOverlayConfig,
@@ -52,7 +52,15 @@ internal fun mergeOverlay(
         sysProps = mergeSysProps(base.run?.sysProps ?: emptyMap(), overlay.run.sysProps)
       )
     }
-  return Ok(base.copy(test = mergedTest, run = mergedRun))
+  val mergedRepositories =
+    if (overlay.repositories == null) {
+      base.repositories
+    } else {
+      mergeRepositories(base.repositories, overlay.repositories, overlayPath).getOrElse {
+        return Err(it)
+      }
+    }
+  return Ok(base.copy(test = mergedTest, run = mergedRun, repositories = mergedRepositories))
 }
 
 private fun mergeSysProps(
@@ -64,4 +72,26 @@ private fun mergeSysProps(
     merged[key] = value
   }
   return merged
+}
+
+private fun mergeRepositories(
+  base: Map<String, RawRepository>,
+  overlay: Map<String, RawRepository>,
+  overlayPath: String,
+): Result<Map<String, RawRepository>, ConfigError> {
+  val merged = LinkedHashMap<String, RawRepository>(base)
+  for ((rawName, overlayRepo) in overlay) {
+    val name = rawName.removeSurrounding("\"")
+    val baseRepo = merged[name]
+    if (baseRepo == null) {
+      return Err(
+        ConfigError.ParseFailed(
+          message = "repository '$name' declared in $overlayPath but not in kolt.toml",
+          path = overlayPath,
+        )
+      )
+    }
+    merged[name] = baseRepo.copy(url = overlayRepo.url ?: baseRepo.url)
+  }
+  return Ok(merged)
 }

@@ -248,6 +248,150 @@ class LocalTomlOverlayMergeTest {
   }
 
   @Test
+  fun parseConfigOverlayRepositoryUrlReplacedByOverlay() {
+    val base =
+      baseToml +
+        """
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
+        """
+          .trimIndent()
+    val overlay =
+      """
+        [repositories.central]
+        url = "https://mirror.example.com/m2"
+      """
+        .trimIndent()
+
+    val config =
+      assertNotNull(
+        parseConfig(
+            base,
+            path = "kolt.toml",
+            overlayString = overlay,
+            overlayPath = "kolt.local.toml",
+          )
+          .get(),
+        "expected overlay url to replace base url for matching repository name",
+      )
+
+    assertEquals(
+      "https://mirror.example.com/m2",
+      config.repositories["central"]?.url,
+      "expected overlay url to replace base url for repository 'central'",
+    )
+  }
+
+  @Test
+  fun parseConfigOverlayOnlyRepositoryNameIsRejected() {
+    val base =
+      baseToml +
+        """
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
+        """
+          .trimIndent()
+    val overlay =
+      """
+        [repositories.unknown]
+        url = "https://private.example.com/m2"
+      """
+        .trimIndent()
+
+    val err =
+      parseConfig(
+          base,
+          path = "kolt.toml",
+          overlayString = overlay,
+          overlayPath = "kolt.local.toml",
+        )
+        .getError()
+    val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
+    val rendered = renderConfigErrorAsLine(parseFailed)
+    assertTrue(
+      "unknown" in rendered && "kolt.local.toml" in rendered,
+      "expected error naming 'unknown' and 'kolt.local.toml'; actual: $rendered",
+    )
+  }
+
+  @Test
+  fun parseConfigOverlayPreservesBaseRepositoryDeclarationOrder() {
+    val base =
+      baseToml +
+        """
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
+
+            [repositories.internal]
+            url = "https://internal.example.com/m2"
+
+            [repositories.jitpack]
+            url = "https://jitpack.io"
+        """
+          .trimIndent()
+    val overlay =
+      """
+        [repositories.internal]
+        url = "https://mirror.example.com/internal"
+      """
+        .trimIndent()
+
+    val config =
+      assertNotNull(
+        parseConfig(
+            base,
+            path = "kolt.toml",
+            overlayString = overlay,
+            overlayPath = "kolt.local.toml",
+          )
+          .get(),
+        "expected overlay overriding a middle entry to preserve base declaration order",
+      )
+
+    assertEquals(
+      listOf("central", "internal", "jitpack"),
+      config.repositories.keys.toList(),
+      "merged repositories must keep base declaration order",
+    )
+    assertEquals(
+      "https://mirror.example.com/internal",
+      config.repositories["internal"]?.url,
+      "overlay must still replace the middle repository's url",
+    )
+  }
+
+  @Test
+  fun parseConfigOverlayEmptyUrlIsRejectedPostMerge() {
+    val base =
+      baseToml +
+        """
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
+        """
+          .trimIndent()
+    val overlay =
+      """
+        [repositories.central]
+        url = ""
+      """
+        .trimIndent()
+
+    val err =
+      parseConfig(
+          base,
+          path = "kolt.toml",
+          overlayString = overlay,
+          overlayPath = "kolt.local.toml",
+        )
+        .getError()
+    val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
+    assertTrue(
+      "central" in parseFailed.message && "has no url" in parseFailed.message,
+      "expected post-merge empty-url rejection naming 'central'; actual: ${parseFailed.message}",
+    )
+  }
+
+  @Test
   fun parseConfigOverlayEnvLiteralIsPreservedVerbatim() {
     val overlay =
       """

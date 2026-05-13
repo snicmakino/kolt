@@ -183,7 +183,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
 
 - [ ] 6. Field-level overlay for `[repositories.<name>]`
 
-- [ ] 6.1 Implement `mergeRepositories` and extend `mergeOverlay`
+- [x] 6.1 Implement `mergeRepositories` and extend `mergeOverlay`
   - Add `mergeRepositories(base, overlay, overlayPath)` returning `Result<Map<String, RawRepository>, ConfigError>` with field-level merge (data-class copy semantics) for matching names and rejection (file-attributed) for overlay-only names.
   - Wire the new merge into `mergeOverlay` so repositories merge happens alongside sys_props.
   - Extend `LocalTomlOverlayMergeTest.kt` with unit tests for: matching-name field-merge with url replaced (R5.1), overlay-only name rejection naming `kolt.local.toml` (R5.2), ordered list position preservation, post-merge empty-`url` rejection on an overlay that clears a base url (R5.3, exercises the 3.4 validator on an overlay-introduced empty value).
@@ -192,7 +192,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
   - _Depends: 3.4_
   - _Boundary: LocalOverlay, LocalTomlOverlayMergeTest_
 
-- [ ] 6.2 (P) Land ADR 0034 skeleton (private Maven repos)
+- [x] 6.2 (P) Land ADR 0034 skeleton (private Maven repos)
   - Create `docs/adr/0034-private-maven-repos.md` with Status (Proposed), Summary (5-7 bullets per memory `adr_summary_section`), Context (env-agnostic vs. credentials), Decision (overlay-file as credential home, env-var resolution deferred to v1.1+), and Consequences sections.
   - Auth-field specifics (`token` / `user` / `password` mutual exclusion, etc.) are stubbed with explicit "to be filled by #416" notes so the document is shape-complete but content-pending.
   - **Observable done**: `docs/adr/0034-private-maven-repos.md` exists with the skeleton sections; the forward reference added in 4.2 now resolves to this file.
