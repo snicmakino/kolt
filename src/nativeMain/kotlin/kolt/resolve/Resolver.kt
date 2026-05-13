@@ -151,7 +151,9 @@ internal fun formatAttemptStatus(error: DownloadError): String =
 private fun repositoryDownloadFailureContext(failure: RepositoryDownloadFailure): List<String> =
   when (failure) {
     is RepositoryDownloadFailure.NoRepositoriesConfigured ->
-      listOf("no repositories configured (add a `[repositories]` entry to kolt.toml)")
+      listOf(
+        "no repositories configured (add a `[repositories.<name>] url = \"...\"` entry to kolt.toml)"
+      )
     is RepositoryDownloadFailure.AllAttemptsFailed ->
       failure.attempts.map { "${it.url} -> ${formatAttemptStatus(it.error)}" }
   }
