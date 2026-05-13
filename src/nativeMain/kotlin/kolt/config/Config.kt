@@ -351,19 +351,27 @@ private fun validateNewSchemaTargetCompat(
 }
 
 // Every SysPropValue.ClasspathRef must point at a declared bundle. The
-// offending sysprop key and the missing bundle name are both surfaced
-// (Req 2.3). Both [test.sys_props] and [run.sys_props] are checked against
-// the same single [classpaths] declaration scope.
+// rendered diagnostic surfaces the offending sysprop key, the missing
+// bundle name, and the source file the entry came from (Req 2.3, Req 3.3).
+// `testSysPropSources` / `runSysPropSources` map each sysprop key to the
+// file that contributed it (overlay wins on collision, mirroring the
+// mergeSysProps semantics); the resolved path lands in ParseFailed.path
+// so renderConfigError(AsLine) names kolt.local.toml for overlay-sourced
+// violations and kolt.toml for base-sourced ones.
 private fun validateBundleReferences(
   testSysProps: Map<String, SysPropValue>,
   runSysProps: Map<String, SysPropValue>,
   classpaths: Map<String, Map<String, String>>,
+  testSysPropSources: Map<String, String?>,
+  runSysPropSources: Map<String, String?>,
 ): Result<Unit, ConfigError> {
   for ((key, value) in testSysProps) {
     if (value is SysPropValue.ClasspathRef && value.bundleName !in classpaths) {
       return Err(
         ConfigError.ParseFailed(
-          "[test.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'"
+          message =
+            "[test.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'",
+          path = testSysPropSources[key],
         )
       )
     }
@@ -372,12 +380,37 @@ private fun validateBundleReferences(
     if (value is SysPropValue.ClasspathRef && value.bundleName !in classpaths) {
       return Err(
         ConfigError.ParseFailed(
-          "[run.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'"
+          message =
+            "[run.sys_props] \"$key\": references undeclared classpath bundle '${value.bundleName}'",
+          path = runSysPropSources[key],
         )
       )
     }
   }
   return Ok(Unit)
+}
+
+// Per-sysprop-key source attribution: maps the lifted key (quotes stripped,
+// matching liftSysPropsMap) to the file that contributed it. Overlay keys
+// override base keys, matching mergeSysProps' last-write-wins semantics. A
+// null value means the contributing file path is unknown (only happens when
+// the caller did not pass `path` to parseConfig, e.g. internal tests).
+private fun sysPropSourceMap(
+  baseSysProps: Map<String, RawSysPropValue>,
+  overlaySysProps: Map<String, RawSysPropValue>?,
+  basePath: String?,
+  overlayPath: String?,
+): Map<String, String?> {
+  val out = LinkedHashMap<String, String?>(baseSysProps.size + (overlaySysProps?.size ?: 0))
+  for (key in baseSysProps.keys) {
+    out[key.removeSurrounding("\"")] = basePath
+  }
+  if (overlaySysProps != null) {
+    for (key in overlaySysProps.keys) {
+      out[key.removeSurrounding("\"")] = overlayPath
+    }
+  }
+  return out
 }
 
 // Walks all SysPropValue.ProjectDir entries in [test.sys_props] and
@@ -476,12 +509,16 @@ fun parseConfig(
   }
   return try {
     val rawBase = toml.decodeFromString(RawKoltConfig.serializer(), tomlString)
-    val raw =
+    val rawOverlay: RawLocalOverlayConfig? =
       if (overlayString != null && overlayPath != null) {
-        val rawOverlay =
-          parseLocalOverlay(overlayString, overlayPath).getOrElse {
-            return Err(it)
-          }
+        parseLocalOverlay(overlayString, overlayPath).getOrElse {
+          return Err(it)
+        }
+      } else {
+        null
+      }
+    val raw =
+      if (rawOverlay != null && overlayPath != null) {
         mergeOverlay(rawBase, rawOverlay, overlayPath).getOrElse {
           return Err(it)
         }
@@ -551,9 +588,31 @@ fun parseConfig(
       ?.let {
         return Err(it)
       }
-    validateBundleReferences(testSysProps, runSysProps, cleanedClasspaths).getError()?.let {
-      return Err(it)
-    }
+    val testSysPropSources =
+      sysPropSourceMap(
+        baseSysProps = rawBase.test?.sysProps.orEmpty(),
+        overlaySysProps = rawOverlay?.test?.sysProps,
+        basePath = path,
+        overlayPath = overlayPath,
+      )
+    val runSysPropSources =
+      sysPropSourceMap(
+        baseSysProps = rawBase.run?.sysProps.orEmpty(),
+        overlaySysProps = rawOverlay?.run?.sysProps,
+        basePath = path,
+        overlayPath = overlayPath,
+      )
+    validateBundleReferences(
+        testSysProps,
+        runSysProps,
+        cleanedClasspaths,
+        testSysPropSources,
+        runSysPropSources,
+      )
+      .getError()
+      ?.let {
+        return Err(it)
+      }
     validateSysPropsProjectDirs(testSysProps, runSysProps).getError()?.let {
       return Err(it)
     }

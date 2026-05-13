@@ -36,6 +36,7 @@ fun testRunCommand(
     add("-jar")
     add(consoleLauncherPath)
     add("execute")
+    add("--disable-banner")
     add("--class-path")
     add(cp)
     if (!hasExplicitSelector) add("--scan-class-path")

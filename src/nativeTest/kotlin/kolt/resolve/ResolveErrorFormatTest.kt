@@ -126,7 +126,9 @@ class ResolveErrorFormatTest {
     val diag = formatResolveError(error)
     assertEquals("failed to download com.example:lib", diag.headline)
     assertEquals(
-      listOf("no repositories configured (add a `[repositories]` entry to kolt.toml)"),
+      listOf(
+        "no repositories configured (add a `[repositories.<name>] url = \"...\"` entry to kolt.toml)"
+      ),
       diag.context,
     )
   }
@@ -185,7 +187,9 @@ class ResolveErrorFormatTest {
     val diag = formatResolveError(error)
     assertEquals("could not fetch metadata for com.example:lib", diag.headline)
     assertEquals(
-      listOf("no repositories configured (add a `[repositories]` entry to kolt.toml)"),
+      listOf(
+        "no repositories configured (add a `[repositories.<name>] url = \"...\"` entry to kolt.toml)"
+      ),
       diag.context,
     )
   }

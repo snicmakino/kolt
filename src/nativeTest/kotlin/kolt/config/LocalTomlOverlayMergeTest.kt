@@ -425,6 +425,88 @@ class LocalTomlOverlayMergeTest {
     )
   }
 
+  // R3.3 negative branch: an overlay-only sysprop that references a bundle
+  // the merged classpaths scope does not declare must be rejected, and the
+  // rendered diagnostic must name kolt.local.toml so the user knows which
+  // file to fix. Without per-key source attribution the validator would
+  // either drop the path field or misattribute it to kolt.toml.
+  @Test
+  fun parseConfigOverlayOnlyClasspathRefToMissingBundleNamesOverlayFile() {
+    val overlay =
+      """
+        [test.sys_props]
+        "kolt.X" = { classpath = "missing" }
+      """
+        .trimIndent()
+
+    val err =
+      parseConfig(
+          baseToml,
+          path = "kolt.toml",
+          overlayString = overlay,
+          overlayPath = "kolt.local.toml",
+        )
+        .getError()
+    val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
+    val rendered = renderConfigErrorAsLine(parseFailed)
+    assertTrue(
+      "missing" in rendered && "kolt.local.toml" in rendered,
+      "expected error naming 'missing' and 'kolt.local.toml'; actual: $rendered",
+    )
+  }
+
+  // Parity check for the [run.sys_props] code path. The validator iterates
+  // test then run sysprops with independently-built source maps; a wiring
+  // mistake (feeding `rawBase.test?.sysProps` into the run-path source map)
+  // would slip past the [test.sys_props] cases above. Pin the run-path
+  // attribution directly.
+  @Test
+  fun parseConfigOverlayOnlyRunClasspathRefToMissingBundleNamesOverlayFile() {
+    val overlay =
+      """
+        [run.sys_props]
+        "kolt.X" = { classpath = "missing" }
+      """
+        .trimIndent()
+
+    val err =
+      parseConfig(
+          baseToml,
+          path = "kolt.toml",
+          overlayString = overlay,
+          overlayPath = "kolt.local.toml",
+        )
+        .getError()
+    val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
+    val rendered = renderConfigErrorAsLine(parseFailed)
+    assertTrue(
+      "missing" in rendered && "kolt.local.toml" in rendered,
+      "expected error naming 'missing' and 'kolt.local.toml'; actual: $rendered",
+    )
+  }
+
+  // Companion to the overlay-only case: a base-sourced classpath-ref to a
+  // missing bundle must still name kolt.toml (not kolt.local.toml), so the
+  // source-attribution change does not regress base diagnostics.
+  @Test
+  fun parseConfigBaseClasspathRefToMissingBundleNamesBaseFile() {
+    val base =
+      baseToml +
+        """
+          [test.sys_props]
+          "kolt.X" = { classpath = "missing" }
+        """
+          .trimIndent()
+
+    val err = parseConfig(base, path = "kolt.toml").getError()
+    val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
+    val rendered = renderConfigErrorAsLine(parseFailed)
+    assertTrue(
+      "missing" in rendered && "at kolt.toml" in rendered,
+      "expected error naming 'missing' and 'at kolt.toml'; actual: $rendered",
+    )
+  }
+
   @Test
   fun parseConfigOverlayMergesWhenBaseKeyIsQuotedButOverlayKeyIsBare() {
     val base =
