@@ -98,6 +98,7 @@ fun generateGitignore(): String =
   """
   build/
   workspace.json
+  kolt.local.toml
   .idea/
   *.iml
   .DS_Store

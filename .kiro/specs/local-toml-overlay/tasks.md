@@ -205,7 +205,7 @@ Each implementation sub-task pairs the failing test (RED) and its passing implem
 
 - [ ] 7. `kolt init` writes `kolt.local.toml` to `.gitignore`
 
-- [ ] 7.1 Append `kolt.local.toml` to the gitignore template
+- [x] 7.1 Append `kolt.local.toml` to the gitignore template
   - Update the kolt-init gitignore template to include `kolt.local.toml` in a deterministic position (alphabetical or alongside `workspace.json`); the template remains a hardcoded literal — no preset-merge step is introduced.
   - Add or extend `InitGitignoreTest.kt` to assert that `kolt init` (and `kolt new`) produces a `.gitignore` containing `kolt.local.toml` exactly once, regardless of project `kind` (`bin` / `lib`) and `target`.
   - **Observable done**: a fresh `kolt init` produces a `.gitignore` whose contents include `kolt.local.toml` on its own line.
