@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -86,7 +87,7 @@ class ResolveNativeProgressTest {
       testConfig(
         target = "linuxX64",
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("primary" to repo1, "fallback" to repo2),
+        repositories = mapOf("primary" to Repository(repo1), "fallback" to Repository(repo2)),
       )
 
     val rootModule = rootModuleJson("com.example", "lib-linuxx64", "1.0.0")

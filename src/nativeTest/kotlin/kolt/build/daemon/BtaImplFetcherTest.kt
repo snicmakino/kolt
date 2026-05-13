@@ -6,6 +6,7 @@ import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.config.KoltConfig
 import kolt.config.MAVEN_CENTRAL_BASE
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.OpenFailed
 import kolt.infra.Sha256Error
@@ -83,7 +84,7 @@ class BtaImplFetcherTest {
       config.dependencies,
     )
     assertEquals("jvm", config.build.target)
-    assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    assertEquals(Repository(MAVEN_CENTRAL_BASE), config.repositories["central"])
   }
 
   @Test

@@ -177,7 +177,7 @@ internal fun materialiseBundleJarsFromLock(
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<Unit, ResolveError> {
   val locked = existingLock.classpathBundles[bundleName] ?: return Ok(Unit)
-  val repos = config.repositories.values.toList()
+  val repos = config.repositories.values.map { it.url }.toList()
   val cachePrefix = "$cacheBase/"
   // Pre-count uncached locked jars so the total `M` is known before any
   // emission. Cache-warm jars do not advance the index and stay silent.

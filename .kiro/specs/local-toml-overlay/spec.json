@@ -1,0 +1,22 @@
+{
+  "feature_name": "local-toml-overlay",
+  "created_at": "2026-05-12T17:44:18Z",
+  "updated_at": "2026-05-12T18:36:09Z",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}

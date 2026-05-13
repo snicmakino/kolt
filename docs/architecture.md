@@ -122,6 +122,23 @@ Fallback chain for JVM compilation: daemon backend → subprocess backend, via `
 
 Fallback chain for native compilation: `FallbackNativeCompilerBackend` wraps `NativeDaemonBackend` over `NativeSubprocessBackend`. `isNativeFallbackEligible` decides per error whether to retry on the subprocess — infrastructure failures (connect refused, spawn failure, unexpected disconnect) fall back; genuine compilation errors do not, so the user sees konanc diagnostics without a duplicate subprocess run.
 
+## Configuration layers
+
+kolt assembles its runtime configuration from two on-disk files and one runtime channel:
+
+- `kolt.toml` — team-shared, committed, env-agnostic. Defines the full project shape and is the only required file.
+- `kolt.local.toml` — optional per-project overlay sitting next to `kolt.toml`, gitignored by default, used for per-machine values that must stay out of the shared tree. The overlay is restricted to an allowlist: `[test.sys_props]`, `[run.sys_props]`, and `[repositories.<name>]`. Any other section or a top-level scalar in `kolt.local.toml` is rejected at parse time with the offending construct and `kolt.local.toml` named in the diagnostic.
+- `-D<key>=<value>` — runtime CLI flag for `kolt test` and `kolt run`, used for one-off overrides.
+
+The three layers merge in this order: `kolt.toml` ← `kolt.local.toml` ← `-D`. Earlier layers are overridden by later ones.
+
+Merge semantics per allowlisted section:
+
+- **`[test.sys_props]` / `[run.sys_props]`** — key-replace plus union. A key declared in both files takes the overlay value; keys unique to either file are union-merged. Cross-references (`{ classpath = "<bundle>" }`) resolve against the merged result, so an overlay sys_prop may target a bundle declared only in the base `kolt.toml`.
+- **`[repositories.<name>]`** — field-level merge by name. Matching names merge per field (overlay non-null fields replace base fields); the merged repository keeps its base declaration-list position. An overlay-only repository name is rejected, naming `kolt.local.toml` as the source. See [ADR 0034](adr/0034-private-maven-repos.md) (private Maven repos, shared with #416) for the env-agnostic ↔ overlay framing.
+
+The overlay is parsed by the same ktoml pipeline as the base file, so identical strict-mode rules apply (unknown sections fail loudly; the env-agnostic literal rule applies to overlay values too — no `${env.X}` interpolation).
+
 ## Configuration change semantics
 
 The behavior on `kolt.toml` edits is governed by a fixed three-value `SectionAction` taxonomy (`AutoReload` / `NotifyOnly` / `NoOp`) and a per-section matrix maintained in `kolt.config.ChangeMatrix`. Per-invocation entry points (`kolt build`, `kolt test`, `kolt run`, `kolt {add, fetch, update}`) re-read `kolt.toml` fresh on every command, so any edit takes effect on the next invocation. Watch mode classifies each detected change against the same matrix and dispatches accordingly: auto-reload sections (e.g. `[build] sources`, `[run.sys_props]`) take effect silently; notify-only sections (e.g. `[dependencies]`, `[kotlin] compiler`) emit a notification on stderr and require an explicit user action; no-op sections (`[fmt]`) are ignored. When a debounce window contains both auto-reload and notify-only changes, notify-only prevails — auto-reload is deferred until the user takes the recommended action and the watch process restarts. See [ADR 0033](adr/0033-kolt-toml-change-handling-model.md).

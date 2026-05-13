@@ -26,3 +26,6 @@ def = "src/nativeInterop/cinterop/libcurl.def"
 [[cinterop]]
 name = "libarchive"
 def = "src/nativeInterop/cinterop/libarchive.def"
+
+[repositories.central]
+url = "https://repo1.maven.org/maven2"

@@ -39,6 +39,9 @@ fun generateKoltToml(
     appendLine("""main = "$mainFqn"""")
   }
   appendLine("""sources = ["src"]""")
+  appendLine()
+  appendLine("[repositories.central]")
+  appendLine("""url = "https://repo1.maven.org/maven2"""")
 }
 
 fun generateTestKt(packageDecl: String? = null): String = buildString {

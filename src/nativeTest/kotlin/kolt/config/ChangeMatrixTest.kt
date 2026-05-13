@@ -212,7 +212,7 @@ class ChangeMatrixTest {
   @Test
   fun classifyChangeDetectsRepositoriesChange() {
     val old = testConfig()
-    val new = old.copy(repositories = mapOf("central" to "https://repo.example/maven"))
+    val new = old.copy(repositories = mapOf("central" to Repository("https://repo.example/maven")))
     val result = classifyChange(old, new)
     assertEquals(1, result.size)
     assertEquals("[repositories]", result[0].sectionName)

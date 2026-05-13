@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -36,7 +37,7 @@ class NativeResolverJvmOnlyFallbackTest {
       testConfig(target = "linuxX64")
         .copy(
           dependencies = mapOf("io.ktor:ktor-server-core" to "3.4.3"),
-          repositories = mapOf("central" to "https://repo1.example/"),
+          repositories = mapOf("central" to Repository("https://repo1.example/")),
         )
 
     val parentRoot =

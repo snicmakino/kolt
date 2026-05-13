@@ -64,7 +64,7 @@ fun resolveNative(
   noteSink: (String) -> Unit = ::eprintln,
 ): Result<ResolveResult, ResolveError> {
   val nativeTarget = konanTargetGradleName(config.build.target)
-  val repos = config.repositories.values.toList()
+  val repos = config.repositories.values.map { it.url }.toList()
 
   for ((groupArtifact, _) in config.dependencies) {
     if (isKotlinStdlib(groupArtifact)) continue

@@ -23,3 +23,6 @@ test_sources = ["src/test/kotlin"]
 [test-dependencies]
 "org.junit.jupiter:junit-jupiter" = "5.11.3"
 "org.junit.platform:junit-platform-launcher" = "1.11.3"
+
+[repositories.central]
+url = "https://repo1.maven.org/maven2"

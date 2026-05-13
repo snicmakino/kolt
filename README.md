@@ -124,9 +124,11 @@ test_resources = ["test-resources"]
 [dependencies]
 "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
 
-[repositories]
-central = "https://repo1.maven.org/maven2"
-jitpack = "https://jitpack.io"
+[repositories.central]
+url = "https://repo1.maven.org/maven2"
+
+[repositories.jitpack]
+url = "https://jitpack.io"
 ```
 
 ### Fields
@@ -148,7 +150,7 @@ jitpack = "https://jitpack.io"
 | `[build] test_resources` | Test resource directories added to test classpath | `[]` |
 | `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
 | `[[cinterop]]` | C interop bindings for native targets (one array entry per `.def`) | `[]` |
-| `[repositories]` | Maven repositories (name = URL) | Maven Central only |
+| `[repositories.<name>]` | Maven repository sub-table with `url` field | Maven Central only |
 | `[classpaths.<name>]` | Named jar bundle, resolved independently of `[dependencies]`. Same TOML shape (`"group:artifact" = "version"`). JVM target only. | `{}` |
 | `[test.sys_props]` | Map of `-D<key>=<value>` for the test JVM. Each value is `{ literal = "..." }` / `{ classpath = "<bundle>" }` / `{ project_dir = "<rel>" }`. JVM target only. | `{}` |
 | `[run.sys_props]` | Same shape as `[test.sys_props]` for `kolt run`. JVM target + `kind = "app"` only. | `{}` |
@@ -179,12 +181,14 @@ Transitive dependencies are resolved automatically via POM metadata. A `kolt.loc
 
 ### Custom Repositories
 
-By default, kolt resolves dependencies from Maven Central. To add custom repositories (e.g., JitPack), declare them in `[repositories]`:
+By default, kolt resolves dependencies from Maven Central. To add custom repositories (e.g., JitPack), declare them as `[repositories.<name>]` sub-tables:
 
 ```toml
-[repositories]
-central = "https://repo1.maven.org/maven2"
-jitpack = "https://jitpack.io"
+[repositories.central]
+url = "https://repo1.maven.org/maven2"
+
+[repositories.jitpack]
+url = "https://jitpack.io"
 ```
 
 Repositories are tried in declaration order. When omitted, Maven Central is used.

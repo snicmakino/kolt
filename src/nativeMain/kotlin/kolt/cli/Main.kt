@@ -231,35 +231,41 @@ internal fun parseDFlag(arg: String): Pair<String, String>? {
   return key to rest.substring(eq + 1)
 }
 
+internal fun usageLines(): List<String> =
+  listOf(
+    "usage: kolt <command>",
+    "",
+    "commands:",
+    "  init       Create a new project in the current directory",
+    "  new        Create a new project in <name>/ (same flags as init)",
+    "             init/new flags: --lib|--app, --target <target>, --group <group>",
+    "  build      Compile the project",
+    "  check      Check compilation without producing artifacts",
+    "  run        Build and run the project",
+    "  test       Build and run tests",
+    "  fmt        Format source files with ktfmt",
+    "  clean      Remove build artifacts",
+    "  add        Add a dependency to kolt.toml",
+    "  remove     Remove a dependency from kolt.toml",
+    "  fetch      Resolve dependencies and download JARs",
+    "  update     Re-resolve dependencies and update kolt.lock",
+    "  tree       Show dependency tree",
+    "  outdated   Show dependencies with newer versions on Maven Central",
+    "  tool       Run a [tools] alias (kolt tool run <alias> [-- args...])",
+    "  toolchain  Manage toolchains (install, list, remove)",
+    "  daemon     Manage compiler daemons (stop)",
+    "  cache      Manage the global dependency cache (clean)",
+    "  info       Display environment and project information",
+    "  version    Show version information",
+    "",
+    "flags:",
+    "  --watch         Watch source files and re-run on change",
+    "  --no-daemon     Skip the warm compiler daemon for this invocation",
+    "  --release       Build under the release profile (Native: -opt; JVM: no-op)",
+    "  -D<key>=<value> JVM system property for kolt test/run; third overlay layer (kolt.toml <- kolt.local.toml <- -D) over [test|run.sys_props]",
+    "  kolt.local.toml Optional per-project overlay file; allowed sections: [test.sys_props], [run.sys_props], [repositories.<name>]",
+  )
+
 private fun printUsage() {
-  eprintln("usage: kolt <command>")
-  eprintln("")
-  eprintln("commands:")
-  eprintln("  init       Create a new project in the current directory")
-  eprintln("  new        Create a new project in <name>/ (same flags as init)")
-  eprintln("             init/new flags: --lib|--app, --target <target>, --group <group>")
-  eprintln("  build      Compile the project")
-  eprintln("  check      Check compilation without producing artifacts")
-  eprintln("  run        Build and run the project")
-  eprintln("  test       Build and run tests")
-  eprintln("  fmt        Format source files with ktfmt")
-  eprintln("  clean      Remove build artifacts")
-  eprintln("  add        Add a dependency to kolt.toml")
-  eprintln("  remove     Remove a dependency from kolt.toml")
-  eprintln("  fetch      Resolve dependencies and download JARs")
-  eprintln("  update     Re-resolve dependencies and update kolt.lock")
-  eprintln("  tree       Show dependency tree")
-  eprintln("  outdated   Show dependencies with newer versions on Maven Central")
-  eprintln("  tool       Run a [tools] alias (kolt tool run <alias> [-- args...])")
-  eprintln("  toolchain  Manage toolchains (install, list, remove)")
-  eprintln("  daemon     Manage compiler daemons (stop)")
-  eprintln("  cache      Manage the global dependency cache (clean)")
-  eprintln("  info       Display environment and project information")
-  eprintln("  version    Show version information")
-  eprintln("")
-  eprintln("flags:")
-  eprintln("  --watch         Watch source files and re-run on change")
-  eprintln("  --no-daemon     Skip the warm compiler daemon for this invocation")
-  eprintln("  --release       Build under the release profile (Native: -opt; JVM: no-op)")
-  eprintln("  -D<key>=<value> JVM system property for kolt test/run; overlays [test|run.sys_props]")
+  for (line in usageLines()) eprintln(line)
 }

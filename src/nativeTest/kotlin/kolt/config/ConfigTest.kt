@@ -791,7 +791,7 @@ class ConfigTest {
     val config = assertNotNull(parseConfig(minimalToml).get())
 
     assertEquals(1, config.repositories.size)
-    assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    assertEquals(Repository(MAVEN_CENTRAL_BASE), config.repositories["central"])
   }
 
   @Test
@@ -809,14 +809,17 @@ class ConfigTest {
             main = "com.example.main"
             sources = ["src"]
 
-            [repositories]
-            myrepo = "https://nexus.example.com/repository/maven-public"
+            [repositories.myrepo]
+            url = "https://nexus.example.com/repository/maven-public"
         """
         .trimIndent()
 
     val config = assertNotNull(parseConfig(toml).get())
     assertEquals(1, config.repositories.size)
-    assertEquals("https://nexus.example.com/repository/maven-public", config.repositories["myrepo"])
+    assertEquals(
+      Repository("https://nexus.example.com/repository/maven-public"),
+      config.repositories["myrepo"],
+    )
   }
 
   @Test
@@ -834,9 +837,11 @@ class ConfigTest {
             main = "com.example.main"
             sources = ["src"]
 
-            [repositories]
-            internal = "https://nexus.example.com/repository/internal"
-            central = "https://repo1.maven.org/maven2"
+            [repositories.internal]
+            url = "https://nexus.example.com/repository/internal"
+
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
         """
         .trimIndent()
 
@@ -844,9 +849,9 @@ class ConfigTest {
     assertEquals(2, config.repositories.size)
     val entries = config.repositories.entries.toList()
     assertEquals("internal", entries[0].key)
-    assertEquals("https://nexus.example.com/repository/internal", entries[0].value)
+    assertEquals(Repository("https://nexus.example.com/repository/internal"), entries[0].value)
     assertEquals("central", entries[1].key)
-    assertEquals("https://repo1.maven.org/maven2", entries[1].value)
+    assertEquals(Repository("https://repo1.maven.org/maven2"), entries[1].value)
   }
 
   @Test
@@ -867,9 +872,11 @@ class ConfigTest {
             [dependencies]
             "org.jetbrains.kotlinx:kotlinx-coroutines-core" = "1.9.0"
 
-            [repositories]
-            central = "https://repo1.maven.org/maven2"
-            internal = "https://nexus.example.com/repository/maven-public"
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2"
+
+            [repositories.internal]
+            url = "https://nexus.example.com/repository/maven-public"
         """
         .trimIndent()
 
@@ -893,15 +900,17 @@ class ConfigTest {
             main = "com.example.main"
             sources = ["src"]
 
-            [repositories]
-            jitpack = "https://jitpack.io/"
-            central = "https://repo1.maven.org/maven2/"
+            [repositories.jitpack]
+            url = "https://jitpack.io/"
+
+            [repositories.central]
+            url = "https://repo1.maven.org/maven2/"
         """
         .trimIndent()
 
     val config = assertNotNull(parseConfig(toml).get())
-    assertEquals("https://jitpack.io", config.repositories["jitpack"])
-    assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    assertEquals(Repository("https://jitpack.io"), config.repositories["jitpack"])
+    assertEquals(Repository(MAVEN_CENTRAL_BASE), config.repositories["central"])
   }
 
   @Test
@@ -1050,7 +1059,7 @@ class ConfigTest {
   fun mavenCentralBaseDefinedInConfigPackage() {
     assertEquals("https://repo1.maven.org/maven2", MAVEN_CENTRAL_BASE)
     val config = assertNotNull(parseConfig(minimalToml).get())
-    assertEquals(MAVEN_CENTRAL_BASE, config.repositories["central"])
+    assertEquals(Repository(MAVEN_CENTRAL_BASE), config.repositories["central"])
   }
 
   @Test

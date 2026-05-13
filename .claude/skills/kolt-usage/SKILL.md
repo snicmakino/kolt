@@ -154,9 +154,11 @@ style = "google"
 [test-dependencies]
 "io.kotest:kotest-runner-junit5" = "5.8.0"
 
-[repositories]
-central = "https://repo1.maven.org/maven2"
-jitpack = "https://jitpack.io"
+[repositories.central]
+url = "https://repo1.maven.org/maven2"
+
+[repositories.jitpack]
+url = "https://jitpack.io"
 
 [[cinterop]]
 name = "libcurl"
@@ -195,7 +197,7 @@ package = "libcurl"
 | `[build] test_resources` | Test resource directories added to test classpath | `[]` |
 | `[fmt] style` | ktfmt style: `"google"`, `"kotlinlang"`, `"meta"` | `"google"` |
 | `[[cinterop]]` | C interop bindings for native targets (array of `.def` entries) | `[]` |
-| `[repositories]` | Maven repositories (name = URL, tried in order) | Maven Central only |
+| `[repositories.<name>]` | Maven repository sub-table with `url` field; declarations tried in order | Maven Central only |
 | `[classpaths.<name>]` | Named jar bundle resolved independently of `[dependencies]`. Same TOML shape (`"group:artifact" = "version"`). Referenced from `[test\|run.sys_props]` via `{ classpath = "<name>" }`. JVM target only. | `{}` |
 | `[test.sys_props]` | Map of `-D<key>=<value>` for the test JVM. Each value is `{ literal = "..." }` / `{ classpath = "<bundle>" }` / `{ project_dir = "<rel>" }`. JVM target only. | `{}` |
 | `[run.sys_props]` | Same shape as `[test.sys_props]` for `kolt run`. JVM target + `kind = "app"` only. | `{}` |

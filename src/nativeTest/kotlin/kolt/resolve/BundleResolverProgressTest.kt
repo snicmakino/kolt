@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -95,7 +96,8 @@ class BundleResolverProgressTest {
   // path.
   @Test
   fun lockReuseWithOneEvictedJarEmitsOneOfOne() {
-    val config = testConfig().copy(repositories = mapOf("primary" to "https://repo.example.com"))
+    val config =
+      testConfig().copy(repositories = mapOf("primary" to Repository("https://repo.example.com")))
 
     // Two bundle deps locked: one cached, one evicted.
     val cachedDep =

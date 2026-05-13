@@ -248,4 +248,9 @@ class KoltPathsTest {
     kotlin.test.assertNotEquals(bundleDir, flatArtifact)
     kotlin.test.assertTrue(bundleDir.startsWith("${paths.toolsDir}/bundles/"))
   }
+
+  @Test
+  fun koltLocalTomlConstantNamesOverlayFile() {
+    assertEquals("kolt.local.toml", KOLT_LOCAL_TOML)
+  }
 }

@@ -62,3 +62,58 @@ internal fun parseUnknownKey(detail: String): Pair<String?, String?> {
   if (scope != KTOML_ROOT_SCOPE) return key to null
   return key to closestMatch(key, KNOWN_TOP_LEVEL_SECTIONS)
 }
+
+// ktoml decodes a flat-form `[repositories]\n<name> = "<url>"` into the
+// Map<String, RawRepository> schema by reporting <name> as an unknown key at
+// rootNode scope — byte-identical to a real top-level typo. The exception
+// alone is not deterministic enough to substitute the message, so we keep the
+// raw ktoml error intact and append a migration hint paragraph keyed on the
+// input containing `[repositories]` plus the offending key matching the name
+// that would appear under that table. Conservative: skip the hint when the
+// input has no `[repositories]` header so legitimate top-level typos like
+// `koltn = "stray"` are not corrupted. The hint applies only to kolt.toml —
+// the overlay schema (kolt.local.toml) is sub-table only by design and has
+// no flat form to migrate from.
+private val REPOSITORIES_HEADER_REGEX = Regex("(?m)^\\s*\\[repositories\\]\\s*$")
+
+internal fun buildKtomlParseError(
+  rawMessage: String?,
+  path: String?,
+  tomlString: String,
+  sourceFile: String = "kolt.toml",
+): ConfigError.ParseFailed {
+  val (lineNo, detail) = extractKtomlLineNo(rawMessage)
+  val (keyPath, suggestion) = parseUnknownKey(detail)
+  val baseHeadline = "failed to parse $sourceFile: $detail"
+  val migrationHint =
+    if (
+      sourceFile == "kolt.toml" &&
+        keyPath != null &&
+        REPOSITORIES_HEADER_REGEX.containsMatchIn(tomlString)
+    ) {
+      // Match `[repositories]` followed by either the offending key directly
+      // on the next non-empty line OR after at most one preceding flat-form
+      // entry (so a hint still fires for the second offending key in a
+      // multi-entry flat block). A wider gap means the key is unlikely to
+      // belong to this `[repositories]` table — keep the hint conservative.
+      val nameRegex =
+        Regex(
+          "(?ms)^\\s*\\[repositories\\]\\s*\\R(?:[^\\[]*?\\R)?\\s*\"?" +
+            Regex.escape(keyPath) +
+            "\"?\\s*="
+        )
+      if (nameRegex.containsMatchIn(tomlString)) {
+        "repositories schema migrated to sub-table form; " +
+          "expected '[repositories.<name>] url = \"...\"', " +
+          "got string value at '$keyPath'"
+      } else null
+    } else null
+  val headline = if (migrationHint != null) "$baseHeadline -- $migrationHint" else baseHeadline
+  return ConfigError.ParseFailed(
+    message = headline,
+    path = path,
+    lineNo = lineNo,
+    keyPath = keyPath,
+    suggestion = if (migrationHint != null) null else suggestion,
+  )
+}

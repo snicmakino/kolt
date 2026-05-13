@@ -5,6 +5,8 @@ import com.github.michaelbull.result.map
 import com.github.michaelbull.result.mapError
 import kolt.infra.homeDirectory
 
+internal const val KOLT_LOCAL_TOML = "kolt.local.toml"
+
 internal data class KoltPaths(val home: String) {
   val cacheBase: String = "$home/.kolt/cache"
   val toolsDir: String = "$home/.kolt/tools"

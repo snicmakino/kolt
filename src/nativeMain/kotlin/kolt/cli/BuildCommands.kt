@@ -249,13 +249,40 @@ internal fun filterExistingDirs(
 internal fun absoluteKoltTomlPath(): String =
   currentWorkingDirectory()?.let { absolutise(KOLT_TOML, it) } ?: KOLT_TOML
 
+internal fun absoluteKoltLocalTomlPath(): String =
+  currentWorkingDirectory()?.let { absolutise(KOLT_LOCAL_TOML, it) } ?: KOLT_LOCAL_TOML
+
+// `fileExists` gate distinguishes absence (silent no-op) from a present-but-unreadable
+// overlay (surfaced as ConfigError). `readFileAsString` returns a flat `OpenFailed`
+// so the gate is the only way to keep "no overlay" from masking a real I/O failure.
+internal fun readOverlayIfPresent(): Result<Pair<String?, String?>, ConfigError> {
+  if (!fileExists(KOLT_LOCAL_TOML)) return Ok(null to null)
+  val content =
+    readFileAsString(KOLT_LOCAL_TOML).getOrElse { error ->
+      return Err(ConfigError.ParseFailed("could not read ${error.path}"))
+    }
+  return Ok(content to absoluteKoltLocalTomlPath())
+}
+
 internal fun loadProjectConfig(): Result<KoltConfig, Int> {
   val tomlString =
     readFileAsString(KOLT_TOML).getOrElse { error ->
       eprintError("could not read ${error.path}")
       return Err(EXIT_CONFIG_ERROR)
     }
-  return parseConfig(tomlString, path = absoluteKoltTomlPath())
+  val (overlayString, overlayPath) =
+    readOverlayIfPresent().getOrElse { error ->
+      when (error) {
+        is ConfigError.ParseFailed -> eprintDiagnostic(renderConfigError(error))
+      }
+      return Err(EXIT_CONFIG_ERROR)
+    }
+  return parseConfig(
+      tomlString,
+      path = absoluteKoltTomlPath(),
+      overlayString = overlayString,
+      overlayPath = overlayPath,
+    )
     .getOrElse { error ->
       when (error) {
         is ConfigError.ParseFailed -> eprintDiagnostic(renderConfigError(error))
@@ -275,7 +302,16 @@ internal fun parseProjectConfig(): Result<KoltConfig, ConfigError> {
     readFileAsString(KOLT_TOML).getOrElse { error ->
       return Err(ConfigError.ParseFailed("could not read ${error.path}"))
     }
-  return parseConfig(tomlString, path = absoluteKoltTomlPath())
+  val (overlayString, overlayPath) =
+    readOverlayIfPresent().getOrElse {
+      return Err(it)
+    }
+  return parseConfig(
+    tomlString,
+    path = absoluteKoltTomlPath(),
+    overlayString = overlayString,
+    overlayPath = overlayPath,
+  )
 }
 
 internal fun doCheck(

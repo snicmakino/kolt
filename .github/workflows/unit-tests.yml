@@ -90,6 +90,13 @@ jobs:
       - name: Run kolt test
         run: |
           set -euo pipefail
+          # Pre-v0.20.0 bootstrap shim: KOLT_BOOTSTRAP_TAG (v0.19.x) predates
+          # the [repositories.<name>] sub-table schema introduced in #320, so
+          # the bootstrap binary cannot parse the new kolt.toml. Stage the
+          # flat form for this step only and restore on exit. Remove the shim
+          # and bump KOLT_BOOTSTRAP_TAG in the v0.20.0 release PR.
+          ./scripts/ci-kolt-toml-bootstrap-shim.sh apply kolt.toml
+          trap './scripts/ci-kolt-toml-bootstrap-shim.sh restore kolt.toml || true' EXIT
           echo "::group::kolt test"
           "$BOOTSTRAP_KOLT" test -- --ktest_logger=SILENT
           echo "::endgroup::"
@@ -110,6 +117,11 @@ jobs:
       - name: Verify daemon thin jar builds standalone
         run: |
           set -euo pipefail
+          # Same pre-v0.20.0 bootstrap shim — applied to the daemon kolt.toml
+          # because the bootstrap binary builds it here too. See the kolt test
+          # step above for the rationale and removal trigger.
+          ./scripts/ci-kolt-toml-bootstrap-shim.sh apply kolt-jvm-compiler-daemon/kolt.toml
+          trap './scripts/ci-kolt-toml-bootstrap-shim.sh restore kolt-jvm-compiler-daemon/kolt.toml || true' EXIT
           cd kolt-jvm-compiler-daemon
           "$BOOTSTRAP_KOLT" build 2> >(tee kolt-build.stderr >&2)
           test -f build/debug/kolt-jvm-compiler-daemon.jar

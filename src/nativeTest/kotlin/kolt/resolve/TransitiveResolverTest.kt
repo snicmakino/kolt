@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -1392,7 +1393,7 @@ class TransitiveResolverTest {
     val config =
       testConfig(
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("myrepo" to customRepoBase),
+        repositories = mapOf("myrepo" to Repository(customRepoBase)),
       )
     val pomXml =
       """
@@ -1442,7 +1443,8 @@ class TransitiveResolverTest {
     val config =
       testConfig(
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("primary" to repo1Base, "fallback" to repo2Base),
+        repositories =
+          mapOf("primary" to Repository(repo1Base), "fallback" to Repository(repo2Base)),
       )
     val pomXml =
       """

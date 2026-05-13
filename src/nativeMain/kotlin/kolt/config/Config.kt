@@ -91,7 +91,7 @@ data class BuildSection(
 )
 
 // Per-target fields deferred per ADR 0023 §3.
-@Serializable private data class BuildTargetEntry(val unused: String? = null)
+@Serializable internal data class BuildTargetEntry(val unused: String? = null)
 
 @Serializable data class FmtSection(val style: String = "google")
 
@@ -105,6 +105,8 @@ data class RunSection(
   @SerialName("sys_props") val sysProps: Map<String, SysPropValue> = emptyMap()
 )
 
+@Serializable data class Repository(val url: String)
+
 @Serializable
 data class KoltConfig(
   val name: String,
@@ -115,7 +117,7 @@ data class KoltConfig(
   val fmt: FmtSection = FmtSection(),
   val dependencies: Map<String, String> = emptyMap(),
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-  val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+  val repositories: Map<String, Repository> = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
   val cinterop: List<CinteropConfig> = emptyList(),
   // [classpaths.<name>] declares a named, resolvable jar bundle independent
   // of [dependencies]. Bundles feed sysprop values via SysPropValue.ClasspathRef
@@ -146,7 +148,7 @@ private val toml = Toml(inputConfig = TomlInputConfig(ignoreUnknownNames = false
 // `target` is non-null. Keeping the public schema unchanged lets the 22-odd
 // `config.build.target` consumers stay typed as String.
 @Serializable
-private data class RawBuildSection(
+internal data class RawBuildSection(
   val target: String? = null,
   @SerialName("jvm_target") val jvmTarget: String = "25",
   val jdk: String? = null,
@@ -159,17 +161,19 @@ private data class RawBuildSection(
 )
 
 @Serializable
-private data class RawTestSection(
+internal data class RawTestSection(
   @SerialName("sys_props") val sysProps: Map<String, RawSysPropValue> = emptyMap()
 )
 
 @Serializable
-private data class RawRunSection(
+internal data class RawRunSection(
   @SerialName("sys_props") val sysProps: Map<String, RawSysPropValue> = emptyMap()
 )
 
+@Serializable internal data class RawRepository(val url: String? = null)
+
 @Serializable
-private data class RawKoltConfig(
+internal data class RawKoltConfig(
   val name: String,
   val version: String,
   val kind: String = "app",
@@ -178,7 +182,8 @@ private data class RawKoltConfig(
   val fmt: FmtSection = FmtSection(),
   val dependencies: Map<String, String> = emptyMap(),
   @SerialName("test-dependencies") val testDependencies: Map<String, String> = emptyMap(),
-  val repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+  val repositories: Map<String, RawRepository> =
+    mapOf("central" to RawRepository(MAVEN_CENTRAL_BASE)),
   val cinterop: List<CinteropConfig> = emptyList(),
   val classpaths: Map<String, Map<String, String>> = emptyMap(),
   val tools: Map<String, RawToolEntry>? = null,
@@ -240,6 +245,25 @@ private fun liftSysPropsMap(
         "project_dir" -> SysPropValue.ProjectDir(rawValue.projectDir!!)
         else -> error("unreachable")
       }
+  }
+  return Ok(out)
+}
+
+// Lifts a Map<String, RawRepository> into Map<String, Repository>: strips
+// quotes around keys (consistent with cleanedDeps), rejects entries whose
+// url is null or empty, and preserves the trailing-slash normalization that
+// applied to the legacy flat-form string values.
+internal fun liftRepositoriesMap(
+  raw: Map<String, RawRepository>
+): Result<Map<String, Repository>, ConfigError> {
+  val out = LinkedHashMap<String, Repository>(raw.size)
+  for ((rawKey, rawValue) in raw) {
+    val name = rawKey.removeSurrounding("\"")
+    val url = rawValue.url
+    if (url.isNullOrEmpty()) {
+      return Err(ConfigError.ParseFailed("repository '$name' has no url"))
+    }
+    out[name] = Repository(url.trimEnd('/'))
   }
   return Ok(out)
 }
@@ -432,9 +456,38 @@ private fun resolveEffectiveTarget(raw: RawBuildSection): Result<String, ConfigE
 // `path` is the kolt.toml location the caller read `tomlString` from,
 // surfaced verbatim in the rendered diagnostic when populated. Internal
 // validation paths and tests omit it (defaults to null).
-fun parseConfig(tomlString: String, path: String? = null): Result<KoltConfig, ConfigError> {
+//
+// `overlayString` / `overlayPath` carry an optional `kolt.local.toml` payload
+// to merge into the base before validation. The pair must be both null or both
+// non-null; a half-set call is a programmer-error contract surfaced as
+// ParseFailed (exceptions are prohibited).
+fun parseConfig(
+  tomlString: String,
+  path: String? = null,
+  overlayString: String? = null,
+  overlayPath: String? = null,
+): Result<KoltConfig, ConfigError> {
+  if ((overlayString == null) != (overlayPath == null)) {
+    return Err(
+      ConfigError.ParseFailed(
+        "overlayString and overlayPath must be supplied together or both null"
+      )
+    )
+  }
   return try {
-    val raw = toml.decodeFromString(RawKoltConfig.serializer(), tomlString)
+    val rawBase = toml.decodeFromString(RawKoltConfig.serializer(), tomlString)
+    val raw =
+      if (overlayString != null && overlayPath != null) {
+        val rawOverlay =
+          parseLocalOverlay(overlayString, overlayPath).getOrElse {
+            return Err(it)
+          }
+        mergeOverlay(rawBase, rawOverlay, overlayPath).getOrElse {
+          return Err(it)
+        }
+      } else {
+        rawBase
+      }
     // Validation order is load-bearing: tests match on canonical error
     // substrings per design.md §Components → Config parser kind+main rule.
     validateKind(raw.kind).getError()?.let {
@@ -472,9 +525,9 @@ fun parseConfig(tomlString: String, path: String? = null): Result<KoltConfig, Co
     val cleanedDeps = raw.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
     val cleanedTestDeps = raw.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
     val cleanedRepos =
-      raw.repositories
-        .mapKeys { (key, _) -> key.removeSurrounding("\"") }
-        .mapValues { (_, url) -> url.trimEnd('/') }
+      liftRepositoriesMap(raw.repositories).getOrElse {
+        return Err(it)
+      }
     val cleanedClasspaths =
       raw.classpaths
         .mapKeys { (key, _) -> key.removeSurrounding("\"") }
@@ -537,23 +590,10 @@ fun parseConfig(tomlString: String, path: String? = null): Result<KoltConfig, Co
       )
     )
   } catch (e: SerializationException) {
-    Err(buildKtomlParseError(e.message, path))
+    Err(buildKtomlParseError(e.message, path, tomlString))
   } catch (e: IllegalArgumentException) {
-    Err(buildKtomlParseError(e.message, path))
+    Err(buildKtomlParseError(e.message, path, tomlString))
   }
-}
-
-private fun buildKtomlParseError(rawMessage: String?, path: String?): ConfigError.ParseFailed {
-  val (lineNo, detail) = extractKtomlLineNo(rawMessage)
-  val (keyPath, suggestion) = parseUnknownKey(detail)
-  val headline = "failed to parse kolt.toml: $detail"
-  return ConfigError.ParseFailed(
-    message = headline,
-    path = path,
-    lineNo = lineNo,
-    keyPath = keyPath,
-    suggestion = suggestion,
-  )
 }
 
 // Renders a ParseFailed into the writer-ready diagnostic shape. The headline

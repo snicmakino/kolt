@@ -11,8 +11,8 @@ main = "smoke.main"
 sources = ["src/main/kotlin"]
 test_sources = []
 
-[repositories]
-maven_central = "https://repo1.maven.org/maven2"
+[repositories.maven_central]
+url = "https://repo1.maven.org/maven2"
 
 # io.ktor:ktor-utils-linuxx64 publishes both the platform klib and a
 # `cinterop-threadUtils` sub-klib in its linuxX64ApiElements-published

@@ -5,6 +5,7 @@ import kolt.config.CinteropConfig
 import kolt.config.KoltConfig
 import kolt.config.KotlinSection
 import kolt.config.MAVEN_CENTRAL_BASE
+import kolt.config.Repository
 
 fun testConfig(
   name: String = "my-app",
@@ -14,7 +15,7 @@ fun testConfig(
   testSources: List<String> = listOf("test"),
   testDependencies: Map<String, String> = emptyMap(),
   plugins: Map<String, Boolean> = emptyMap(),
-  repositories: Map<String, String> = mapOf("central" to MAVEN_CENTRAL_BASE),
+  repositories: Map<String, Repository> = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
   jdk: String? = null,
   target: String = "jvm",
   cinterop: List<CinteropConfig> = emptyList(),
