@@ -82,7 +82,7 @@
   - _Boundary: kolt.config.Config (liftRepositoriesMap)_
   - _Depends: 1.2, 2.1, 2.5_
 
-- [ ] 2.7 `RepositoryAuthConfigTest` (parametric Req 1 + Req 2 + Req 2.3 + name invariant) を追加
+- [x] 2.7 `RepositoryAuthConfigTest` (parametric Req 1 + Req 2 + Req 2.3 + name invariant) を追加
   - 単一 test ファイル内で fixture (kolt.toml + kolt.local.toml string) を共有、 data-table parametric で網羅
   - 検証マトリクス: schema accept/reject (Req 1.1-1.7、 空・whitespace `literal` reject 含む) / placement (Req 2.1 base reject、 2.2 overlay accept、 source attribution) / env-form recognize-and-reject (Req 2.3 token/user/password 各 1 ケース、 message が `kolt.local.toml` を指す) / pre-v0.20.0 backward-compat (Req 1.8: base side の `kolt.toml` `[repositories.central]` auth field なし、 overlay side の `kolt.local.toml` `[repositories.central]` auth field なしの双方で parse 成功し anonymous 扱い) / `Repository.name == map_key` invariant
   - 2-hop UX シナリオは個別 case として組まず: placement message と env-not-supported message は (g) base-placement / (k) env-reject の 2 ケースの message 差で間接的に検証される ([[feedback_sdd_test_inflation]])
