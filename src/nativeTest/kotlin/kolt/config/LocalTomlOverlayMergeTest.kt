@@ -192,7 +192,12 @@ class LocalTomlOverlayMergeTest {
   fun parseConfigRejectsMergedRawWithEmptyRepositoryUrl() {
     val raw =
       mapOf("custom" to RawRepository(url = ""), "central" to RawRepository(url = "https://x"))
-    val err = liftRepositoriesMap(raw).getError()
+    val src =
+      mapOf(
+        "custom" to mapOf<String, String?>("url" to "kolt.toml"),
+        "central" to mapOf<String, String?>("url" to "kolt.toml"),
+      )
+    val err = liftRepositoriesMap(raw, src).getError()
     val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
     assertTrue(
       "custom" in parseFailed.message && "url" in parseFailed.message,

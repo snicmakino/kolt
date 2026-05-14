@@ -9,6 +9,7 @@ import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.infra.output.RenderedDiagnostic
 import kolt.infra.output.Severity
+import kolt.infra.redactUrlUserinfo
 import kolt.resolve.compareVersions
 import kolt.usertool.RawToolEntry
 import kolt.usertool.ToolEntry
@@ -299,20 +300,123 @@ internal fun rejectBaseCredentialLiterals(
 }
 
 // Lifts a Map<String, RawRepository> into Map<String, Repository>: strips
-// quotes around keys (consistent with cleanedDeps), rejects entries whose
-// url is null or empty, and preserves the trailing-slash normalization that
-// applied to the legacy flat-form string values.
+// quotes around keys (consistent with cleanedDeps), validates url and any
+// declared credential fields, and preserves trailing-slash normalization.
+//
+// `sourceMap` (Map<repoName, Map<field, contributingPath?>>) is consulted on
+// rejection to surface ParseFailed.path attributing the offending field to
+// kolt.toml or kolt.local.toml. See `repositorySourceMap` for shape.
+//
+// Validation order (fail-fast, first failure wins):
+//   1. url non-empty
+//   2. url has no userinfo (`@` before path) — message uses redactUrlUserinfo
+//   3. auth mutex: token must not coexist with user / password
+//   4. auth pair completeness: user iff password
+//   5. auth field non-empty: Literal value must not be empty / all whitespace
+//   6. env form unsupported in v1.0 — message directs to literal form
+//
+// Steps 3 / 4 sit ahead of 5 so a structurally-broken config (e.g. token + user
+// without password) gets the mutex / pair message rather than a non-empty error
+// on whatever happens to be empty. Step 6 sits last so a misplaced env form
+// has already passed the schema sanity checks above before its v1.0-specific
+// rejection fires.
 internal fun liftRepositoriesMap(
-  raw: Map<String, RawRepository>
+  raw: Map<String, RawRepository>,
+  sourceMap: Map<String, Map<String, String?>>,
 ): Result<Map<String, Repository>, ConfigError> {
   val out = LinkedHashMap<String, Repository>(raw.size)
   for ((rawKey, rawValue) in raw) {
     val name = rawKey.removeSurrounding("\"")
+    val urlSource = sourceMap[name]?.get("url")
+
+    // 1. url non-empty
     val url = rawValue.url
     if (url.isNullOrEmpty()) {
-      return Err(ConfigError.ParseFailed("repository '$name' has no url"))
+      return Err(
+        ConfigError.ParseFailed(message = "repository '$name' has no url", path = urlSource)
+      )
     }
-    out[name] = Repository(name = name, url = url.trimEnd('/'), auth = null)
+
+    // 2. url has no userinfo
+    val redacted = redactUrlUserinfo(url)
+    if (redacted != url) {
+      return Err(
+        ConfigError.ParseFailed(
+          message =
+            "[repositories.$name] url contains userinfo (redacted: '$redacted'); " +
+              "declare credentials in the token field or the user / password fields instead",
+          path = urlSource,
+        )
+      )
+    }
+
+    // 3. auth mutex
+    if (rawValue.token != null && (rawValue.user != null || rawValue.password != null)) {
+      val other = if (rawValue.user != null) "user" else "password"
+      return Err(
+        ConfigError.ParseFailed(
+          message =
+            "[repositories.$name] token is mutually exclusive with $other; " +
+              "use either token (Bearer) or user + password (Basic), not both",
+          path = sourceMap[name]?.get("token"),
+        )
+      )
+    }
+
+    // 4. pair completeness
+    if ((rawValue.user != null) != (rawValue.password != null)) {
+      val missing = if (rawValue.user == null) "user" else "password"
+      val presentField = if (rawValue.user == null) "password" else "user"
+      return Err(
+        ConfigError.ParseFailed(
+          message =
+            "[repositories.$name] $presentField is set without $missing; " +
+              "user and password must be declared together",
+          path = sourceMap[name]?.get(presentField),
+        )
+      )
+    }
+
+    // 5. non-empty literal check
+    for ((fieldName, field) in
+      listOf("token" to rawValue.token, "user" to rawValue.user, "password" to rawValue.password)) {
+      if (field is RawCredentialField.Literal) {
+        if (field.value.isEmpty() || field.value.all { it.isWhitespace() }) {
+          return Err(
+            ConfigError.ParseFailed(
+              message = "[repositories.$name] $fieldName literal value is empty or whitespace-only",
+              path = sourceMap[name]?.get(fieldName),
+            )
+          )
+        }
+      }
+    }
+
+    // 6. env-form not supported in v1.0
+    for ((fieldName, field) in
+      listOf("token" to rawValue.token, "user" to rawValue.user, "password" to rawValue.password)) {
+      if (field is RawCredentialField.Env) {
+        return Err(
+          ConfigError.ParseFailed(
+            message =
+              "[repositories.$name] $fieldName = { env = \"...\" } is not supported in v1.0; " +
+                "use { literal = \"...\" } in kolt.local.toml",
+            path = sourceMap[name]?.get(fieldName),
+          )
+        )
+      }
+    }
+
+    // All validators passed; construct typed RepositoryAuth.
+    val auth =
+      when {
+        rawValue.token is RawCredentialField.Literal -> RepositoryAuth.Bearer(rawValue.token.value)
+        rawValue.user is RawCredentialField.Literal &&
+          rawValue.password is RawCredentialField.Literal ->
+          RepositoryAuth.Basic(rawValue.user.value, rawValue.password.value)
+        else -> null
+      }
+    out[name] = Repository(name = name, url = url.trimEnd('/'), auth = auth)
   }
   return Ok(out)
 }
@@ -655,8 +759,15 @@ fun parseConfig(
     // ktoml preserves quotes in map keys; strip them.
     val cleanedDeps = raw.dependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
     val cleanedTestDeps = raw.testDependencies.mapKeys { (key, _) -> key.removeSurrounding("\"") }
+    val repoSources =
+      repositorySourceMap(
+        baseRepositories = rawBase.repositories,
+        overlayRepositories = rawOverlay?.repositories,
+        basePath = path,
+        overlayPath = overlayPath,
+      )
     val cleanedRepos =
-      liftRepositoriesMap(raw.repositories).getOrElse {
+      liftRepositoriesMap(raw.repositories, repoSources).getOrElse {
         return Err(it)
       }
     val cleanedClasspaths =

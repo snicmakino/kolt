@@ -73,7 +73,7 @@
   - _Boundary: kolt.config.Config (repositorySourceMap)_
   - _Depends: 2.1_
 
-- [ ] 2.6 `liftRepositoriesMap` を auth 検証で拡張
+- [x] 2.6 `liftRepositoriesMap` を auth 検証で拡張
   - 検証順 (fail-fast): URL 非空 (既存) → URL userinfo (`@` before path) → auth mutex (`token` ∧ (`user` ∨ `password`)) → auth pair 完全性 (`user` ⟺ `password`) → auth field 非空 (`literal` 値が empty / Unicode whitespace のみ → reject)
   - validator が field-level rejection を出すとき `repositorySourceMap` から該当 field の contributing file を引いて `ParseFailed.path` にセット
   - `Repository.name == map_key` invariant を構築時に enforce (`raw` の map key を `Repository.name` に代入)
