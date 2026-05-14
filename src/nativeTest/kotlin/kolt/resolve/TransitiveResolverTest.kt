@@ -1001,7 +1001,11 @@ class TransitiveResolverTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         val forcedError = downloadErrors[url]
         if (forcedError != null) return Err(forcedError)
         cachedFiles.add(destPath)
@@ -1032,7 +1036,13 @@ class TransitiveResolverTest {
     val deps = fakeTransitiveDeps(cachedFiles = mutableSetOf(sourcesCachePath))
 
     val result =
-      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = true)
+      resolveSourcesPath(
+        coord,
+        "/cache",
+        listOf(Repository(name = "r", url = "https://r")),
+        deps,
+        binaryWasCached = true,
+      )
 
     assertEquals(sourcesCachePath, result)
   }
@@ -1047,7 +1057,11 @@ class TransitiveResolverTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           downloadedUrls.add(url)
           return Ok(Unit)
         }
@@ -1060,7 +1074,13 @@ class TransitiveResolverTest {
       }
 
     val result =
-      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = true)
+      resolveSourcesPath(
+        coord,
+        "/cache",
+        listOf(Repository(name = "r", url = "https://r")),
+        deps,
+        binaryWasCached = true,
+      )
 
     assertEquals(null, result)
     assertTrue(downloadedUrls.isEmpty(), "must not re-probe when binary was already cached")
@@ -1072,7 +1092,13 @@ class TransitiveResolverTest {
     val deps = fakeTransitiveDeps()
 
     val result =
-      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+      resolveSourcesPath(
+        coord,
+        "/cache",
+        listOf(Repository(name = "r", url = "https://r")),
+        deps,
+        binaryWasCached = false,
+      )
 
     assertEquals("/cache/com/example/lib/1.0.0/lib-1.0.0-sources.jar", result)
   }
@@ -1087,7 +1113,13 @@ class TransitiveResolverTest {
       )
 
     val result =
-      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+      resolveSourcesPath(
+        coord,
+        "/cache",
+        listOf(Repository(name = "r", url = "https://r")),
+        deps,
+        binaryWasCached = false,
+      )
 
     assertEquals(null, result)
   }
@@ -1102,7 +1134,13 @@ class TransitiveResolverTest {
       )
 
     val result =
-      resolveSourcesPath(coord, "/cache", listOf("https://r"), deps, binaryWasCached = false)
+      resolveSourcesPath(
+        coord,
+        "/cache",
+        listOf(Repository(name = "r", url = "https://r")),
+        deps,
+        binaryWasCached = false,
+      )
 
     assertEquals(null, result)
   }
@@ -1193,10 +1231,14 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example.com"),
+            Repository(name = "r2", url = "https://repo2.example.com"),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ ->
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ ->
           downloadedUrls.add(url)
           Ok(Unit)
         },
@@ -1216,10 +1258,14 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf(repo1Base, repo2Base),
+        repos =
+          listOf(
+            Repository(name = "r1", url = repo1Base),
+            Repository(name = "r2", url = repo2Base),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ ->
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ ->
           downloadedUrls.add(url)
           if (url.startsWith(repo1Base)) Err(DownloadError.HttpFailed(url, 404)) else Ok(Unit)
         },
@@ -1237,10 +1283,14 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example.com"),
+            Repository(name = "r2", url = "https://repo2.example.com"),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) },
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ -> Err(DownloadError.HttpFailed(url, 404)) },
       )
 
     val failure = assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
@@ -1264,10 +1314,14 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf("https://repo1.example.com", "https://repo2.example.com"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example.com"),
+            Repository(name = "r2", url = "https://repo2.example.com"),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ ->
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ ->
           downloadedUrls.add(url)
           Err(DownloadError.NetworkError(url, "connection refused"))
         },
@@ -1289,10 +1343,15 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf(repo1, repo2, repo3),
+        repos =
+          listOf(
+            Repository(name = "r1", url = repo1),
+            Repository(name = "r2", url = repo2),
+            Repository(name = "r3", url = repo3),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ ->
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ ->
           touched.add(url)
           when {
             url.startsWith(repo1) -> Err(DownloadError.HttpFailed(url, 404))
@@ -1317,8 +1376,8 @@ class TransitiveResolverTest {
       downloadFromRepositories(
         repos = emptyList(),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { _, _ -> fail("should not be invoked") },
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { _, _, _ -> fail("should not be invoked") },
       )
 
     assertEquals(RepositoryDownloadFailure.NoRepositoriesConfigured, result.getError())
@@ -1333,13 +1392,13 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf(repo1, repo2),
+        repos = listOf(Repository(name = "r1", url = repo1), Repository(name = "r2", url = repo2)),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ ->
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ ->
           if (url.startsWith(repo1)) Err(DownloadError.HttpFailed(url, 404)) else Ok(Unit)
         },
-        onRetry = { repo -> captured.add(repo) },
+        onRetry = { repo -> captured.add(repo.url) },
       )
 
     assertNotNull(result.get())
@@ -1355,11 +1414,11 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf(repo1, repo2),
+        repos = listOf(Repository(name = "r1", url = repo1), Repository(name = "r2", url = repo2)),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ -> Err(DownloadError.NetworkError(url, "connection refused")) },
-        onRetry = { repo -> captured.add(repo) },
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ -> Err(DownloadError.NetworkError(url, "connection refused")) },
+        onRetry = { repo -> captured.add(repo.url) },
       )
 
     assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
@@ -1376,11 +1435,16 @@ class TransitiveResolverTest {
 
     val result =
       downloadFromRepositories(
-        repos = listOf(repo1, repo2, repo3),
+        repos =
+          listOf(
+            Repository(name = "r1", url = repo1),
+            Repository(name = "r2", url = repo2),
+            Repository(name = "r3", url = repo3),
+          ),
         destPath = "/cache/lib.jar",
-        urlBuilder = { repo -> buildDownloadUrl(coord, repo) },
-        download = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) },
-        onRetry = { repo -> captured.add(repo) },
+        urlBuilder = { repo -> buildDownloadUrl(coord, repo.url) },
+        download = { url, _, _ -> Err(DownloadError.HttpFailed(url, 404)) },
+        onRetry = { repo -> captured.add(repo.url) },
       )
 
     assertIs<RepositoryDownloadFailure.AllAttemptsFailed>(result.getError())
@@ -1393,7 +1457,7 @@ class TransitiveResolverTest {
     val config =
       testConfig(
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("myrepo" to Repository(customRepoBase)),
+        repositories = mapOf("myrepo" to Repository(name = "myrepo", url = customRepoBase)),
       )
     val pomXml =
       """
@@ -1415,7 +1479,11 @@ class TransitiveResolverTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           downloadedUrls.add(url)
           cachedFiles.add(destPath)
           return Ok(Unit)
@@ -1444,7 +1512,10 @@ class TransitiveResolverTest {
       testConfig(
         dependencies = mapOf("com.example:lib" to "1.0.0"),
         repositories =
-          mapOf("primary" to Repository(repo1Base), "fallback" to Repository(repo2Base)),
+          mapOf(
+            "primary" to Repository(name = "primary", url = repo1Base),
+            "fallback" to Repository(name = "fallback", url = repo2Base),
+          ),
       )
     val pomXml =
       """
@@ -1465,7 +1536,11 @@ class TransitiveResolverTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           return if (url.startsWith(repo1Base)) {
             Err(DownloadError.HttpFailed(url, 404))
           } else {
@@ -1500,7 +1575,11 @@ class TransitiveResolverTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         cachedFiles.add(destPath)
         return Ok(Unit)
       }

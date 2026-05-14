@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
+import kolt.config.Repository
 import kolt.config.resolveKoltPaths
 import kolt.infra.downloadFile
 import kolt.infra.ensureDirectoryRecursive
@@ -39,7 +40,7 @@ private fun doOutdatedInner(opts: OutdatedOptions): Result<Unit, Int> {
       return Err(EXIT_DEPENDENCY_ERROR)
     }
 
-  val repos = config.repositories.values.map { it.url }.toList()
+  val repos = config.repositories.values.toList()
   val report =
     computeOutdated(
       mainDeps = config.dependencies,
@@ -68,7 +69,7 @@ private fun doOutdatedInner(opts: OutdatedOptions): Result<Unit, Int> {
 private fun fetchLatestVersionString(
   group: String,
   artifact: String,
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
 ): Result<String, String> {
   val groupPath = group.replace('.', '/')
@@ -82,7 +83,7 @@ private fun fetchLatestVersionString(
     downloadFromRepositories(
         repos,
         metadataPath,
-        { repo -> buildMetadataDownloadUrl(group, artifact, repo) },
+        { repo -> buildMetadataDownloadUrl(group, artifact, repo.url) },
         ::downloadFile,
       )
       .getError()
@@ -121,6 +122,8 @@ private fun shortMetadataFailure(failure: RepositoryDownloadFailure): String =
       val statuses = failure.attempts.joinToString(", ") { formatAttemptStatus(it.error) }
       "metadata fetch failed ($statuses)"
     }
+    is RepositoryDownloadFailure.AuthFailed ->
+      "metadata fetch failed (${failure.repositoryName}: ${failure.statusCode})"
   }
 
 private fun reportArgsError(error: OutdatedArgsError) {

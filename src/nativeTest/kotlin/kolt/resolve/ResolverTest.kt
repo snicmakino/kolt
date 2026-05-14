@@ -235,8 +235,11 @@ class ResolverTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> =
-          Err(DownloadError.HttpFailed(url, 404))
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> = Err(DownloadError.HttpFailed(url, 404))
 
         override fun computeSha256(filePath: String): Result<String, Sha256Error> =
           Err(Sha256Error(filePath))
@@ -336,7 +339,11 @@ class ResolverTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         downloadedFiles[destPath] = url
         cachedFiles.add(destPath)
         return Ok(Unit)

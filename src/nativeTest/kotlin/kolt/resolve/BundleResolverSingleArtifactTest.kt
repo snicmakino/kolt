@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -31,7 +32,7 @@ class BundleResolverSingleArtifactTest {
       resolveSingleArtifact(
         coord = Coordinate("com.example", "tool", "1.0.0"),
         classifier = null,
-        repos = listOf("https://repo1/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1/")),
         cacheBase = "/cache",
         deps = deps,
       )
@@ -56,7 +57,7 @@ class BundleResolverSingleArtifactTest {
         resolveSingleArtifact(
             coord = Coordinate("com.example", "tool", "1.0.0"),
             classifier = "all",
-            repos = listOf("https://repo1/"),
+            repos = listOf(Repository(name = "r", url = "https://repo1/")),
             cacheBase = "/cache",
             deps = deps,
           )
@@ -82,7 +83,7 @@ class BundleResolverSingleArtifactTest {
         resolveSingleArtifact(
             coord = Coordinate("com.example", "tool", "1.0.0"),
             classifier = null,
-            repos = listOf("https://repo1/"),
+            repos = listOf(Repository(name = "r", url = "https://repo1/")),
             cacheBase = "/cache",
             deps = deps,
           )
@@ -106,7 +107,11 @@ class BundleResolverSingleArtifactTest {
         resolveSingleArtifact(
             coord = Coordinate("com.example", "missing", "1.0.0"),
             classifier = null,
-            repos = listOf("https://repo1/", "https://repo2/"),
+            repos =
+              listOf(
+                Repository(name = "r1", url = "https://repo1/"),
+                Repository(name = "r2", url = "https://repo2/"),
+              ),
             cacheBase = "/cache",
             deps = deps,
           )
@@ -163,7 +168,11 @@ class BundleResolverSingleArtifactTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         recordDownloads?.add(url)
         if (downloadResult != null) return downloadResult.invoke(url, destPath)
         cachedFiles.add(destPath)

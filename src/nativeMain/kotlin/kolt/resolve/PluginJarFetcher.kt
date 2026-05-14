@@ -47,7 +47,11 @@ interface PluginFetcherDeps {
 
   fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed>
 
-  fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError>
+  fun downloadFile(
+    url: String,
+    destPath: String,
+    headers: Map<String, String>? = null,
+  ): Result<Unit, DownloadError>
 
   fun computeSha256(filePath: String): Result<String, Sha256Error>
 
@@ -144,7 +148,11 @@ fun fetchPluginJar(
     return Err(PluginFetchError.CacheDirCreationFailed(artifactDir))
   }
 
-  deps.downloadFile(url, jarPath).getOrElse { cause ->
+  // Compiler plugin jars come from Maven Central only (the [repositories]
+  // config does not apply here; see module doc), so no Authorization
+  // header is ever set — the 3-arg call passes `null` explicitly to keep
+  // the seam uniform with `ResolverDeps.downloadFile`.
+  deps.downloadFile(url, jarPath, headers = null).getOrElse { cause ->
     return Err(PluginFetchError.DownloadFailed(alias, url, cause))
   }
 

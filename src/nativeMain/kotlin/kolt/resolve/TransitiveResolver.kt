@@ -6,7 +6,11 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
+import kolt.config.Repository
+import kolt.config.toHeaders
+import kolt.config.toStateProjection
 import kolt.infra.DownloadError
+import kolt.infra.redactUrlUserinfo
 
 fun resolveTransitive(
   config: KoltConfig,
@@ -17,7 +21,7 @@ fun resolveTransitive(
   testSeeds: Map<String, String> = emptyMap(),
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
-  val repos = config.repositories.values.map { it.url }.toList()
+  val repos = config.repositories.values.toList()
 
   val basePomLookup = createPomLookup(repos, cacheBase, deps)
 
@@ -58,7 +62,7 @@ fun resolveTransitive(
 internal fun resolveSourcesPath(
   coord: Coordinate,
   cacheBase: String,
-  repos: List<String>,
+  repos: List<Repository>,
   deps: ResolverDeps,
   binaryWasCached: Boolean,
 ): String? {
@@ -69,45 +73,62 @@ internal fun resolveSourcesPath(
     downloadFromRepositories(
         repos,
         sourcesCachePath,
-        { buildSourcesDownloadUrl(coord, it) },
+        { buildSourcesDownloadUrl(coord, it.url) },
         deps::downloadFile,
       )
       .getError()
   return if (error == null) sourcesCachePath else null
 }
 
-// Falls back to next repo only on 404; any other error stops the loop
-// and surfaces with the attempts list. Each attempt records the URL we
+// Falls back to next repo only on 404; 401/403 short-circuits to AuthFailed
+// so a misconfigured private repo never falls through to a public mirror
+// (Req 6.1, 6.2, 6.4). Any other non-2xx stops the loop and surfaces with
+// the attempts list. Each attempt records the repository name + URL we
 // tried so the resolver can dump per-repo status (#355). Empty repos
 // surfaces as `NoRepositoriesConfigured` so the user gets a config-fix
 // hint instead of a "tried nothing" misread.
 internal fun downloadFromRepositories(
-  repos: List<String>,
+  repos: List<Repository>,
   destPath: String,
-  urlBuilder: (String) -> String,
-  download: (String, String) -> Result<Unit, DownloadError>,
-  onRetry: (String) -> Unit = {},
+  urlBuilder: (Repository) -> String,
+  download: (String, String, Map<String, String>?) -> Result<Unit, DownloadError>,
+  onRetry: (Repository) -> Unit = {},
 ): Result<Unit, RepositoryDownloadFailure> {
   if (repos.isEmpty()) return Err(RepositoryDownloadFailure.NoRepositoriesConfigured)
   val attempts = mutableListOf<RepositoryAttempt>()
   for (i in repos.indices) {
     val repo = repos[i]
     val url = urlBuilder(repo)
-    val error = download(url, destPath).getError()
+    val headers = repo.auth?.toHeaders()
+    val error = download(url, destPath, headers).getError()
     if (error == null) return Ok(Unit)
-    attempts.add(RepositoryAttempt(url, error))
-    if (error !is DownloadError.HttpFailed || error.statusCode != 404) {
-      return Err(RepositoryDownloadFailure.AllAttemptsFailed(attempts))
+    if (error is DownloadError.HttpFailed) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return Err(
+          RepositoryDownloadFailure.AuthFailed(
+            repositoryName = repo.name,
+            url = redactUrlUserinfo(error.url),
+            statusCode = error.statusCode,
+            authState = repo.auth.toStateProjection(),
+          )
+        )
+      }
+      if (error.statusCode == 404) {
+        attempts.add(RepositoryAttempt(repo.name, url, error))
+        if (i + 1 < repos.size) {
+          onRetry(repos[i + 1])
+        }
+        continue
+      }
     }
-    if (i + 1 < repos.size) {
-      onRetry(repos[i + 1])
-    }
+    attempts.add(RepositoryAttempt(repo.name, url, error))
+    return Err(RepositoryDownloadFailure.AllAttemptsFailed(attempts))
   }
   return Err(RepositoryDownloadFailure.AllAttemptsFailed(attempts))
 }
 
 internal fun createPomLookup(
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
   deps: ResolverDeps,
 ): (String, String) -> PomInfo? {
@@ -128,7 +149,7 @@ internal fun createPomLookup(
             downloadFromRepositories(
                 repos,
                 pomCachePath,
-                { buildPomDownloadUrl(coord, it) },
+                { buildPomDownloadUrl(coord, it.url) },
                 deps::downloadFile,
               )
               .getOrElse { null }
@@ -145,7 +166,7 @@ internal fun createPomLookup(
 }
 
 private fun createModuleLookup(
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
   deps: ResolverDeps,
 ): (String, String) -> JvmRedirect? {
@@ -169,7 +190,7 @@ private fun createModuleLookup(
 private fun checkModuleFile(
   groupArtifact: String,
   version: String,
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
   deps: ResolverDeps,
 ): JvmRedirect? {
@@ -186,7 +207,7 @@ private fun checkModuleFile(
     downloadFromRepositories(
         repos,
         moduleCachePath,
-        { buildModuleDownloadUrl(coord, it) },
+        { buildModuleDownloadUrl(coord, it.url) },
         deps::downloadFile,
       )
       .getOrElse {
@@ -209,7 +230,7 @@ private fun materialize(
   existingLock: Lockfile?,
   cacheBase: String,
   deps: ResolverDeps,
-  repos: List<String>,
+  repos: List<Repository>,
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<ResolveResult, ResolveError> {
   var lockChanged = false
@@ -252,9 +273,9 @@ private fun materialize(
       downloadFromRepositories(
           repos,
           fullCachePath,
-          { buildDownloadUrl(coord, it) },
+          { buildDownloadUrl(coord, it.url) },
           deps::downloadFile,
-          onRetry = progress::onRetryAgainst,
+          onRetry = { repo -> progress.onRetryAgainst(repo.url) },
         )
         .getOrElse { failure ->
           return Err(ResolveError.DownloadFailed(node.groupArtifact, failure))

@@ -6,6 +6,7 @@ import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
 import kolt.config.KoltPaths
+import kolt.config.Repository
 import kolt.infra.CopyFailed
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
@@ -25,7 +26,7 @@ import kotlin.test.assertTrue
 class ToolResolutionTest {
 
   private val paths = KoltPaths(home = "/home/u")
-  private val repos = listOf("https://central/")
+  private val repos = listOf(Repository(name = "central", url = "https://central/"))
 
   // The Maven-layout cacheBase that resolveSingleArtifact writes into.
   private val cacheBase = "/home/u/.kolt/cache"
@@ -316,7 +317,11 @@ class ToolResolutionTest {
   @Test
   fun allRepos404SurfaceAsResolveFailedWithAttemptedUrls() {
     val coords = Coordinate("com.example", "tool", "1.0.0")
-    val tried = listOf("https://repo1/", "https://repo2/")
+    val tried =
+      listOf(
+        Repository(name = "r1", url = "https://repo1/"),
+        Repository(name = "r2", url = "https://repo2/"),
+      )
     val deps = fakeDeps(downloadResult = { url, _ -> Err(DownloadError.HttpFailed(url, 404)) })
     val lockfile = emptyLockfile()
 
@@ -387,7 +392,11 @@ class ToolResolutionTest {
 
     override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-    override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+    override fun downloadFile(
+      url: String,
+      destPath: String,
+      headers: Map<String, String>?,
+    ): Result<Unit, DownloadError> {
       downloads.add(url)
       if (downloadResult != null) return downloadResult.invoke(url, destPath)
       cachedFiles.add(destPath)

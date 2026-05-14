@@ -7,6 +7,7 @@ import com.github.michaelbull.result.getOrElse
 import com.github.michaelbull.result.map
 import kolt.build.ResolvedJar
 import kolt.config.KoltConfig
+import kolt.config.Repository
 
 // BundleResolver runs an independent fixpointResolve pass per bundle so that
 // transitive deps, strict pins, and rejects stay bundle-local (Req 4.5). The
@@ -106,7 +107,7 @@ internal fun resolveBundle(
 fun resolveSingleArtifact(
   coord: Coordinate,
   classifier: String?,
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
   deps: ResolverDeps,
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
@@ -124,9 +125,9 @@ fun resolveSingleArtifact(
     downloadFromRepositories(
         repos,
         cachePath,
-        { repo -> "$repo/$relativePath" },
+        { repo -> "${repo.url}/$relativePath" },
         deps::downloadFile,
-        onRetry = progress::onRetryAgainst,
+        onRetry = { repo -> progress.onRetryAgainst(repo.url) },
       )
       .getOrElse { failure ->
         return Err(ResolveError.DownloadFailed(groupArtifact, failure))
@@ -177,7 +178,7 @@ internal fun materialiseBundleJarsFromLock(
   progress: ResolverProgressSink = ResolverProgressSink.NoOp,
 ): Result<Unit, ResolveError> {
   val locked = existingLock.classpathBundles[bundleName] ?: return Ok(Unit)
-  val repos = config.repositories.values.map { it.url }.toList()
+  val repos = config.repositories.values.toList()
   val cachePrefix = "$cacheBase/"
   // Pre-count uncached locked jars so the total `M` is known before any
   // emission. Cache-warm jars do not advance the index and stay silent.
@@ -197,9 +198,9 @@ internal fun materialiseBundleJarsFromLock(
     downloadFromRepositories(
         repos,
         dep.cachePath,
-        { repo -> "$repo/$relativePath" },
+        { repo -> "${repo.url}/$relativePath" },
         deps::downloadFile,
-        onRetry = progress::onRetryAgainst,
+        onRetry = { repo -> progress.onRetryAgainst(repo.url) },
       )
       .getOrElse { failure ->
         return Err(ResolveError.DownloadFailed(dep.groupArtifact, failure))

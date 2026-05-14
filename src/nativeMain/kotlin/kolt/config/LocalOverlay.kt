@@ -99,7 +99,13 @@ private fun mergeRepositories(
         )
       )
     }
-    merged[name] = baseRepo.copy(url = overlayRepo.url ?: baseRepo.url)
+    merged[name] =
+      baseRepo.copy(
+        url = overlayRepo.url ?: baseRepo.url,
+        token = overlayRepo.token ?: baseRepo.token,
+        user = overlayRepo.user ?: baseRepo.user,
+        password = overlayRepo.password ?: baseRepo.password,
+      )
   }
   return Ok(merged)
 }

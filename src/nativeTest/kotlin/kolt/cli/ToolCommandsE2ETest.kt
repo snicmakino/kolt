@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import kolt.config.KoltPaths
+import kolt.config.Repository
 import kolt.infra.CopyFailed
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
@@ -113,7 +114,7 @@ class ToolCommandsE2ETest {
               paths = paths,
               lockfile = lockfile,
               netDeps = deps,
-              repos = listOf("https://central/"),
+              repos = listOf(Repository(name = "r", url = "https://central/")),
             )
             .get()
         )
@@ -185,7 +186,7 @@ class ToolCommandsE2ETest {
               paths = paths,
               lockfile = lockfile,
               netDeps = deps,
-              repos = listOf("https://central/"),
+              repos = listOf(Repository(name = "r", url = "https://central/")),
             )
             .get()
         )
@@ -271,7 +272,11 @@ class ToolCommandsE2ETest {
     override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> =
       kolt.infra.ensureDirectoryRecursive(path)
 
-    override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+    override fun downloadFile(
+      url: String,
+      destPath: String,
+      headers: Map<String, String>?,
+    ): Result<Unit, DownloadError> {
       downloads.add(url)
       return Ok(Unit)
     }

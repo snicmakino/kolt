@@ -5,6 +5,8 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltPaths
+import kolt.config.MAVEN_CENTRAL_BASE
+import kolt.config.Repository
 import kolt.infra.CopyFailed
 import kolt.resolve.Coordinate
 import kolt.resolve.Lockfile
@@ -56,7 +58,8 @@ internal fun <T> ensureTool(
   paths: KoltPaths,
   lockfile: Lockfile,
   netDeps: T,
-  repos: List<String> = listOf("https://repo.maven.apache.org/maven2"),
+  repos: List<Repository> =
+    listOf(Repository(name = "central", url = MAVEN_CENTRAL_BASE, auth = null)),
 ): Result<ToolJarHandle, ToolResolutionError> where T : ResolverDeps, T : ToolFsDeps {
   val coords = entry.coords
   val classifier = entry.classifier
@@ -185,6 +188,7 @@ private fun translateResolveError(
       val urls =
         when (val f = err.failure) {
           is RepositoryDownloadFailure.AllAttemptsFailed -> f.attempts.map { it.url }
+          is RepositoryDownloadFailure.AuthFailed -> listOf(f.url)
           RepositoryDownloadFailure.NoRepositoriesConfigured -> emptyList()
         }
       ToolResolutionError.ResolveFailed(alias = alias, coords = coords, attempts = urls)

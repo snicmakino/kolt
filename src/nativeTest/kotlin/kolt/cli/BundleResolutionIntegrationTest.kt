@@ -398,7 +398,11 @@ class BundleResolutionIntegrationTest {
   @Test
   fun materialiseBundleJarsFromLockBuildsUrlFromCachePathNotGroupArtifact() {
     val config =
-      testConfig().copy(repositories = mapOf("central" to Repository("https://example.org/m2")))
+      testConfig()
+        .copy(
+          repositories =
+            mapOf("central" to Repository(name = "central", url = "https://example.org/m2"))
+        )
 
     val redirectedRelativePath = "org/example/lib-jvm/1.0.0/lib-jvm-1.0.0.jar"
     val redirectedCachePath = "/cache/$redirectedRelativePath"
@@ -413,7 +417,11 @@ class BundleResolutionIntegrationTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           downloadedUrls.add(url)
           cached.add(destPath)
           return Ok(Unit)
@@ -617,7 +625,11 @@ class BundleResolutionIntegrationTest {
 
     override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-    override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+    override fun downloadFile(
+      url: String,
+      destPath: String,
+      headers: Map<String, String>?,
+    ): Result<Unit, DownloadError> {
       downloadCount += 1
       cachedFiles.add(destPath)
       return Ok(Unit)

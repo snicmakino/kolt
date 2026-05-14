@@ -17,10 +17,12 @@ class Is404OnAllAttemptsTest {
             attempts =
               listOf(
                 RepositoryAttempt(
+                  repositoryName = "a",
                   url = "https://a.example/lib.module",
                   error = DownloadError.HttpFailed("https://a.example/lib.module", 404),
                 ),
                 RepositoryAttempt(
+                  repositoryName = "b",
                   url = "https://b.example/lib.module",
                   error = DownloadError.HttpFailed("https://b.example/lib.module", 404),
                 ),
@@ -41,10 +43,12 @@ class Is404OnAllAttemptsTest {
             attempts =
               listOf(
                 RepositoryAttempt(
+                  repositoryName = "a",
                   url = "https://a.example/lib.module",
                   error = DownloadError.HttpFailed("https://a.example/lib.module", 404),
                 ),
                 RepositoryAttempt(
+                  repositoryName = "b",
                   url = "https://b.example/lib.module",
                   error = DownloadError.HttpFailed("https://b.example/lib.module", 503),
                 ),
@@ -65,14 +69,17 @@ class Is404OnAllAttemptsTest {
             attempts =
               listOf(
                 RepositoryAttempt(
+                  repositoryName = "a",
                   url = "https://a.example/lib.module",
                   error = DownloadError.HttpFailed("https://a.example/lib.module", 404),
                 ),
                 RepositoryAttempt(
+                  repositoryName = "b",
                   url = "https://b.example/lib.module",
                   error = DownloadError.NetworkError("https://b.example/lib.module", "timeout"),
                 ),
                 RepositoryAttempt(
+                  repositoryName = "c",
                   url = "https://c.example/lib.module",
                   error = DownloadError.WriteFailed("/tmp/lib.module"),
                 ),

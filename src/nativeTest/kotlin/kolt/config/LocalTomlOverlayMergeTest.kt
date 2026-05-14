@@ -192,7 +192,12 @@ class LocalTomlOverlayMergeTest {
   fun parseConfigRejectsMergedRawWithEmptyRepositoryUrl() {
     val raw =
       mapOf("custom" to RawRepository(url = ""), "central" to RawRepository(url = "https://x"))
-    val err = liftRepositoriesMap(raw).getError()
+    val src =
+      mapOf(
+        "custom" to mapOf<String, String?>("url" to "kolt.toml"),
+        "central" to mapOf<String, String?>("url" to "kolt.toml"),
+      )
+    val err = liftRepositoriesMap(raw, src).getError()
     val parseFailed = assertNotNull(err) as ConfigError.ParseFailed
     assertTrue(
       "custom" in parseFailed.message && "url" in parseFailed.message,
@@ -505,6 +510,104 @@ class LocalTomlOverlayMergeTest {
       "missing" in rendered && "at kolt.toml" in rendered,
       "expected error naming 'missing' and 'at kolt.toml'; actual: $rendered",
     )
+  }
+
+  @Test
+  fun mergeRepositoriesUnionsBaseUrlWithOverlayTokenLiteral() {
+    val base =
+      baseConfig()
+        .copy(
+          repositories = mapOf("internal" to RawRepository(url = "https://internal.example.com/m2"))
+        )
+    val overlay =
+      RawLocalOverlayConfig(
+        repositories = mapOf("internal" to RawRepository(token = RawCredentialField.Literal("abc")))
+      )
+
+    val merged =
+      assertNotNull(
+        mergeOverlay(base, overlay, overlayPath = "kolt.local.toml").get(),
+        "expected base url + overlay token to merge into a single RawRepository",
+      )
+
+    val repo = assertNotNull(merged.repositories["internal"])
+    assertEquals("https://internal.example.com/m2", repo.url)
+    assertEquals(RawCredentialField.Literal("abc"), repo.token)
+    assertEquals(null, repo.user)
+    assertEquals(null, repo.password)
+  }
+
+  @Test
+  fun mergeRepositoriesUnionsBaseUrlWithOverlayUserAndPassword() {
+    val base =
+      baseConfig()
+        .copy(
+          repositories = mapOf("internal" to RawRepository(url = "https://internal.example.com/m2"))
+        )
+    val overlay =
+      RawLocalOverlayConfig(
+        repositories =
+          mapOf(
+            "internal" to
+              RawRepository(
+                user = RawCredentialField.Literal("alice"),
+                password = RawCredentialField.Env("REPO_PASSWORD"),
+              )
+          )
+      )
+
+    val merged =
+      assertNotNull(
+        mergeOverlay(base, overlay, overlayPath = "kolt.local.toml").get(),
+        "expected base url + overlay user/password to merge into a single RawRepository",
+      )
+
+    val repo = assertNotNull(merged.repositories["internal"])
+    assertEquals("https://internal.example.com/m2", repo.url)
+    assertEquals(null, repo.token)
+    assertEquals(RawCredentialField.Literal("alice"), repo.user)
+    assertEquals(RawCredentialField.Env("REPO_PASSWORD"), repo.password)
+  }
+
+  @Test
+  fun mergeRepositoriesOverlayCredentialReplacesBaseCredentialLastWriteWins() {
+    val base =
+      baseConfig()
+        .copy(
+          repositories =
+            mapOf(
+              "internal" to
+                RawRepository(
+                  url = "https://internal.example.com/m2",
+                  token = RawCredentialField.Literal("base-token"),
+                  user = RawCredentialField.Literal("base-user"),
+                  password = RawCredentialField.Literal("base-password"),
+                )
+            )
+        )
+    val overlay =
+      RawLocalOverlayConfig(
+        repositories =
+          mapOf(
+            "internal" to
+              RawRepository(
+                token = RawCredentialField.Literal("overlay-token"),
+                password = RawCredentialField.Env("OVERLAY_PW"),
+              )
+          )
+      )
+
+    val merged =
+      assertNotNull(
+        mergeOverlay(base, overlay, overlayPath = "kolt.local.toml").get(),
+        "expected overlay credentials to override base credentials last-write-wins",
+      )
+
+    val repo = assertNotNull(merged.repositories["internal"])
+    assertEquals("https://internal.example.com/m2", repo.url)
+    assertEquals(RawCredentialField.Literal("overlay-token"), repo.token)
+    assertEquals(RawCredentialField.Literal("base-user"), repo.user)
+    assertEquals(RawCredentialField.Env("OVERLAY_PW"), repo.password)
   }
 
   @Test

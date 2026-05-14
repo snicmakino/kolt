@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.getError
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -34,7 +35,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath.endsWith(".module")) {
             return Err(DownloadError.HttpFailed(url, 404))
           }
@@ -60,7 +65,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
         version = "1.0.0",
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/", "https://repo2.example/"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example/"),
+            Repository(name = "r2", url = "https://repo2.example/"),
+          ),
         deps = deps,
       )
 
@@ -83,8 +92,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> =
-          Err(DownloadError.HttpFailed(url, 404))
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> = Err(DownloadError.HttpFailed(url, 404))
 
         override fun computeSha256(filePath: String): Result<String, Sha256Error> =
           Err(Sha256Error(filePath))
@@ -99,7 +111,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
         version = "1.0.0",
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/", "https://repo2.example/"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example/"),
+            Repository(name = "r2", url = "https://repo2.example/"),
+          ),
         deps = deps,
       )
 
@@ -148,7 +164,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           recorded.add(url)
           if (destPath.endsWith(".module")) {
             return Err(moduleErrorFor(url))
@@ -171,7 +191,11 @@ class FetchNativeMetadataJvmOnlyFallbackTest {
         version = "1.0.0",
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/", "https://repo2.example/"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example/"),
+            Repository(name = "r2", url = "https://repo2.example/"),
+          ),
         deps = deps,
       )
 

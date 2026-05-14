@@ -38,7 +38,11 @@ class ResolveNativeDirectJvmOnlyErrorTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath == jvmOnlyModulePath) {
             return Err(DownloadError.HttpFailed(url, 404))
           }

@@ -51,7 +51,8 @@ internal fun ensureBtaImplJars(
       kotlin = KotlinSection(version = version),
       build = BuildSection(target = "jvm", main = "unused.Main", sources = emptyList()),
       dependencies = mapOf(BTA_IMPL_GROUP_ARTIFACT to version),
-      repositories = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
+      repositories =
+        mapOf("central" to Repository(name = "central", url = MAVEN_CENTRAL_BASE, auth = null)),
     )
   val result =
     resolver(syntheticConfig, null, cacheBase, deps).getOrElse {

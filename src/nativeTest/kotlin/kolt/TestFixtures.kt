@@ -15,7 +15,8 @@ fun testConfig(
   testSources: List<String> = listOf("test"),
   testDependencies: Map<String, String> = emptyMap(),
   plugins: Map<String, Boolean> = emptyMap(),
-  repositories: Map<String, Repository> = mapOf("central" to Repository(MAVEN_CENTRAL_BASE)),
+  repositories: Map<String, Repository> =
+    mapOf("central" to Repository(name = "central", url = MAVEN_CENTRAL_BASE)),
   jdk: String? = null,
   target: String = "jvm",
   cinterop: List<CinteropConfig> = emptyList(),

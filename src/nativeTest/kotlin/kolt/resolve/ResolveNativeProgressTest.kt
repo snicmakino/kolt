@@ -87,7 +87,11 @@ class ResolveNativeProgressTest {
       testConfig(
         target = "linuxX64",
         dependencies = mapOf("com.example:lib" to "1.0.0"),
-        repositories = mapOf("primary" to Repository(repo1), "fallback" to Repository(repo2)),
+        repositories =
+          mapOf(
+            "primary" to Repository(name = "primary", url = repo1),
+            "fallback" to Repository(name = "fallback", url = repo2),
+          ),
       )
 
     val rootModule = rootModuleJson("com.example", "lib-linuxx64", "1.0.0")
@@ -115,7 +119,11 @@ class ResolveNativeProgressTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath.endsWith(".klib") && url.startsWith(repo1)) {
             return Err(DownloadError.HttpFailed(url, 404))
           }
@@ -304,7 +312,11 @@ class ResolveNativeProgressTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         cachedFiles.add(destPath)
         return Ok(Unit)
       }

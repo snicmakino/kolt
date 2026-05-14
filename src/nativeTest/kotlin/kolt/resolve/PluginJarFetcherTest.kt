@@ -36,7 +36,11 @@ private class FakeFetcherDeps(
     return Ok(Unit)
   }
 
-  override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+  override fun downloadFile(
+    url: String,
+    destPath: String,
+    headers: Map<String, String>?,
+  ): Result<Unit, DownloadError> {
     downloadCalls += url to destPath
     val outcome = downloadResult(url, destPath)
     if (outcome.get() != null) {

@@ -4,6 +4,7 @@ import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getError
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -62,7 +63,11 @@ class NativeResolverTargetModule404GoldenTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           recordedDownloadUrls.add(url)
           // Root `.module` succeeds on the first repo so the redirect is parseable.
           // Target `.module` (parent-linuxx64) 404s on every repo. `.pom` URLs
@@ -90,7 +95,11 @@ class NativeResolverTargetModule404GoldenTest {
         version = "1.0.0",
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/", "https://repo2.example/"),
+        repos =
+          listOf(
+            Repository(name = "r1", url = "https://repo1.example/"),
+            Repository(name = "r2", url = "https://repo2.example/"),
+          ),
         deps = deps,
       )
 

@@ -160,7 +160,7 @@ internal fun runToolWithDeps(
         paths = paths,
         lockfile = lockfile,
         netDeps = deps,
-        repos = config.repositories.values.map { it.url }.toList(),
+        repos = config.repositories.values.toList(),
       )
       .getOrElse { resolutionError ->
         return surfaceToolError(ToolError.Resolve(resolutionError))
@@ -270,7 +270,8 @@ private fun createToolDeps(): ToolDeps {
 
     override fun ensureDirectoryRecursive(path: String) = resolver.ensureDirectoryRecursive(path)
 
-    override fun downloadFile(url: String, destPath: String) = resolver.downloadFile(url, destPath)
+    override fun downloadFile(url: String, destPath: String, headers: Map<String, String>?) =
+      resolver.downloadFile(url, destPath, headers)
 
     override fun computeSha256(filePath: String) = resolver.computeSha256(filePath)
 

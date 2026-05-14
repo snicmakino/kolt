@@ -51,11 +51,7 @@ private fun doAddInner(args: List<String>): Result<Unit, Int> {
     if (addArgs.version != null) {
       addArgs.version
     } else {
-      fetchLatestVersion(
-          addArgs.group,
-          addArgs.artifact,
-          config.repositories.values.map { it.url }.toList(),
-        )
+      fetchLatestVersion(addArgs.group, addArgs.artifact, config.repositories.values.toList())
         .getOrElse {
           return Err(it)
         }
@@ -145,7 +141,7 @@ private fun doRemoveInner(args: List<String>): Result<Unit, Int> {
 private fun fetchLatestVersion(
   group: String,
   artifact: String,
-  repos: List<String>,
+  repos: List<Repository>,
 ): Result<String, Int> {
   val paths =
     resolveKoltPaths().getOrElse {
@@ -165,7 +161,7 @@ private fun fetchLatestVersion(
     downloadFromRepositories(
         repos,
         metadataPath,
-        { repo -> buildMetadataDownloadUrl(group, artifact, repo) },
+        { repo -> buildMetadataDownloadUrl(group, artifact, repo.url) },
         ::downloadFile,
       )
       .getError()
@@ -297,7 +293,7 @@ private fun doUpdateInner(): Result<Unit, Int> {
           resolveSingleArtifact(
             coord = coord,
             classifier = classifier,
-            repos = config.repositories.values.map { it.url }.toList(),
+            repos = config.repositories.values.toList(),
             cacheBase = paths.cacheBase,
             deps = resolverDeps,
           )
@@ -389,7 +385,7 @@ internal fun doTree(): Result<Unit, Int> {
   if (config.build.target in NATIVE_TARGETS) {
     val nativeLookup =
       createNativeLookup(
-        config.repositories.values.map { it.url }.toList(),
+        config.repositories.values.toList(),
         paths.cacheBase,
         createResolverDeps(),
         nativeTarget = konanTargetGradleName(config.build.target),
@@ -408,11 +404,7 @@ internal fun doTree(): Result<Unit, Int> {
   }
 
   val pomLookup =
-    createPomLookup(
-      config.repositories.values.map { it.url }.toList(),
-      paths.cacheBase,
-      createResolverDeps(),
-    )
+    createPomLookup(config.repositories.values.toList(), paths.cacheBase, createResolverDeps())
   if (seeds.mainSeeds.isNotEmpty()) {
     val tree = buildDependencyTree(seeds.mainSeeds, pomLookup)
     println(formatDependencyTree(tree))

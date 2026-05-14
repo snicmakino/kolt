@@ -2,6 +2,7 @@ package kolt.resolve
 
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.get
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -34,7 +35,11 @@ class MakeNativeChildLookupTest {
         fail("unexpected ensureDirectoryRecursive call: $path")
       }
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         fail("unexpected downloadFile call: $url -> $destPath")
       }
 
@@ -60,7 +65,7 @@ class MakeNativeChildLookupTest {
         processed = processed,
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         deps = noIoDeps,
       )
 
@@ -99,7 +104,7 @@ class MakeNativeChildLookupTest {
         processed = processed,
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         deps = noIoDeps,
       )
 
@@ -135,7 +140,7 @@ class MakeNativeChildLookupTest {
         processed = processed,
         nativeTarget = "linux_x64",
         cacheBase = "/cache",
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         deps = noIoDeps,
       )
 

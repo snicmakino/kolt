@@ -5,6 +5,7 @@ import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import com.github.michaelbull.result.getOrElse
 import kolt.config.KoltConfig
+import kolt.config.Repository
 import kolt.config.konanTargetGradleName
 import kolt.infra.DownloadError
 import kolt.infra.eprintln
@@ -64,7 +65,7 @@ fun resolveNative(
   noteSink: (String) -> Unit = ::eprintln,
 ): Result<ResolveResult, ResolveError> {
   val nativeTarget = konanTargetGradleName(config.build.target)
-  val repos = config.repositories.values.map { it.url }.toList()
+  val repos = config.repositories.values.toList()
 
   for ((groupArtifact, _) in config.dependencies) {
     if (isKotlinStdlib(groupArtifact)) continue
@@ -139,9 +140,9 @@ fun resolveNative(
             downloadFromRepositories(
                 repos,
                 klibCachePath,
-                { buildKlibDownloadUrl(targetCoord, it, klibFile.url) },
+                { buildKlibDownloadUrl(targetCoord, it.url, klibFile.url) },
                 deps::downloadFile,
-                onRetry = progress::onRetryAgainst,
+                onRetry = { repo -> progress.onRetryAgainst(repo.url) },
               )
               .getOrElse { failure ->
                 return Err(ResolveError.DownloadFailed(node.groupArtifact, failure))
@@ -202,7 +203,7 @@ internal fun makeNativeChildLookup(
   processed: MutableMap<String, NativeResolved>,
   nativeTarget: String,
   cacheBase: String,
-  repos: List<String>,
+  repos: List<Repository>,
   deps: ResolverDeps,
 ): (String, String) -> Result<List<Child>, ResolveError> = lookup@{ ga, v ->
   val cacheKey = "$ga:$v"
@@ -245,7 +246,7 @@ internal fun makeNativeChildLookup(
  * behaviour.
  */
 fun createNativeLookup(
-  repos: List<String>,
+  repos: List<Repository>,
   cacheBase: String,
   deps: ResolverDeps,
   nativeTarget: String,
@@ -305,7 +306,7 @@ internal fun fetchNativeMetadata(
   version: String,
   nativeTarget: String,
   cacheBase: String,
-  repos: List<String>,
+  repos: List<Repository>,
   deps: ResolverDeps,
 ): Result<NativeResolved, ResolveError> {
   val rootCoord =
@@ -317,7 +318,7 @@ internal fun fetchNativeMetadata(
     fetchAndRead(
         coord = rootCoord,
         relativePath = buildModuleCachePath(rootCoord),
-        urlBuilder = { buildModuleDownloadUrl(rootCoord, it) },
+        urlBuilder = { buildModuleDownloadUrl(rootCoord, it.url) },
         cacheBase = cacheBase,
         repos = repos,
         deps = deps,
@@ -328,7 +329,7 @@ internal fun fetchNativeMetadata(
             fetchAndRead(
               coord = rootCoord,
               relativePath = buildPomCachePath(rootCoord),
-              urlBuilder = { buildPomDownloadUrl(rootCoord, it) },
+              urlBuilder = { buildPomDownloadUrl(rootCoord, it.url) },
               cacheBase = cacheBase,
               repos = repos,
               deps = deps,
@@ -353,7 +354,7 @@ internal fun fetchNativeMetadata(
     fetchAndRead(
         coord = targetCoord,
         relativePath = buildModuleCachePath(targetCoord),
-        urlBuilder = { buildModuleDownloadUrl(targetCoord, it) },
+        urlBuilder = { buildModuleDownloadUrl(targetCoord, it.url) },
         cacheBase = cacheBase,
         repos = repos,
         deps = deps,
@@ -379,9 +380,9 @@ internal fun fetchNativeMetadata(
 private fun fetchAndRead(
   coord: Coordinate,
   relativePath: String,
-  urlBuilder: (String) -> String,
+  urlBuilder: (Repository) -> String,
   cacheBase: String,
-  repos: List<String>,
+  repos: List<Repository>,
   deps: ResolverDeps,
 ): Result<String, ResolveError> {
   val groupArtifact = "${coord.group}:${coord.artifact}"

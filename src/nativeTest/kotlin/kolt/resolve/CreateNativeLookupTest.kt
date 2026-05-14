@@ -3,6 +3,7 @@ package kolt.resolve
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import kolt.config.Repository
 import kolt.infra.DownloadError
 import kolt.infra.MkdirFailed
 import kolt.infra.OpenFailed
@@ -39,7 +40,11 @@ class CreateNativeLookupTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath.endsWith(".module")) {
             return Err(DownloadError.HttpFailed(url, 404))
           }
@@ -61,7 +66,7 @@ class CreateNativeLookupTest {
 
     val lookup =
       createNativeLookup(
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         cacheBase = "/cache",
         deps = deps,
         nativeTarget = "linux_x64",
@@ -145,7 +150,11 @@ class CreateNativeLookupTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath in contents) {
             cachedFiles.add(destPath)
             return Ok(Unit)
@@ -164,7 +173,7 @@ class CreateNativeLookupTest {
 
     val lookup =
       createNativeLookup(
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         cacheBase = "/cache",
         deps = deps,
         nativeTarget = "linux_x64",
@@ -198,7 +207,11 @@ class CreateNativeLookupTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           if (destPath.endsWith(".module")) {
             moduleAttempts += 1
             return Err(DownloadError.HttpFailed(url, 404))
@@ -222,7 +235,7 @@ class CreateNativeLookupTest {
 
     val lookup =
       createNativeLookup(
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         cacheBase = "/cache",
         deps = deps,
         nativeTarget = "linux_x64",
@@ -260,8 +273,11 @@ class CreateNativeLookupTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> =
-          Err(DownloadError.HttpFailed(url, 404))
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> = Err(DownloadError.HttpFailed(url, 404))
 
         override fun computeSha256(filePath: String): Result<String, Sha256Error> =
           Err(Sha256Error(filePath))
@@ -272,7 +288,7 @@ class CreateNativeLookupTest {
 
     val lookup =
       createNativeLookup(
-        repos = listOf("https://repo1.example/"),
+        repos = listOf(Repository(name = "r", url = "https://repo1.example/")),
         cacheBase = "/cache",
         deps = deps,
         nativeTarget = "linux_x64",

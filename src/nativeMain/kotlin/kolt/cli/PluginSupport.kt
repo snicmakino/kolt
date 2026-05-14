@@ -24,8 +24,11 @@ private fun defaultPluginFetcherDeps(): PluginFetcherDeps =
     override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> =
       kolt.infra.ensureDirectoryRecursive(path)
 
-    override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> =
-      kolt.infra.downloadFile(url, destPath)
+    override fun downloadFile(
+      url: String,
+      destPath: String,
+      headers: Map<String, String>?,
+    ): Result<Unit, DownloadError> = kolt.infra.downloadFile(url, destPath, headers)
 
     override fun computeSha256(filePath: String): Result<String, Sha256Error> =
       kolt.infra.computeSha256(filePath)

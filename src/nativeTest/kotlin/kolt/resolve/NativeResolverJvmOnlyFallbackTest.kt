@@ -37,7 +37,8 @@ class NativeResolverJvmOnlyFallbackTest {
       testConfig(target = "linuxX64")
         .copy(
           dependencies = mapOf("io.ktor:ktor-server-core" to "3.4.3"),
-          repositories = mapOf("central" to Repository("https://repo1.example/")),
+          repositories =
+            mapOf("central" to Repository(name = "central", url = "https://repo1.example/")),
         )
 
     val parentRoot =
@@ -128,7 +129,11 @@ class NativeResolverJvmOnlyFallbackTest {
 
         override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-        override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+        override fun downloadFile(
+          url: String,
+          destPath: String,
+          headers: Map<String, String>?,
+        ): Result<Unit, DownloadError> {
           recordedDownloads.add(url)
           if (destPath == kotlinReflectModulePath) {
             return Err(DownloadError.HttpFailed(url, 404))

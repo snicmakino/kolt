@@ -97,7 +97,11 @@ class BundleResolverProgressTest {
   @Test
   fun lockReuseWithOneEvictedJarEmitsOneOfOne() {
     val config =
-      testConfig().copy(repositories = mapOf("primary" to Repository("https://repo.example.com")))
+      testConfig()
+        .copy(
+          repositories =
+            mapOf("primary" to Repository(name = "primary", url = "https://repo.example.com"))
+        )
 
     // Two bundle deps locked: one cached, one evicted.
     val cachedDep =
@@ -176,7 +180,11 @@ class BundleResolverProgressTest {
 
       override fun ensureDirectoryRecursive(path: String): Result<Unit, MkdirFailed> = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String): Result<Unit, DownloadError> {
+      override fun downloadFile(
+        url: String,
+        destPath: String,
+        headers: Map<String, String>?,
+      ): Result<Unit, DownloadError> {
         cachedFiles.add(destPath)
         return Ok(Unit)
       }

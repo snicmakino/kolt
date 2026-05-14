@@ -226,7 +226,11 @@ class DaemonPreconditionsTest {
           "org.jetbrains.kotlin:kotlin-build-tools-impl",
           RepositoryDownloadFailure.AllAttemptsFailed(
             listOf(
-              RepositoryAttempt("http://example", DownloadError.HttpFailed("http://example", 503))
+              RepositoryAttempt(
+                repositoryName = "central",
+                url = "http://example",
+                error = DownloadError.HttpFailed("http://example", 503),
+              )
             )
           ),
         ),
@@ -451,8 +455,9 @@ class DaemonPreconditionsTest {
                 RepositoryDownloadFailure.AllAttemptsFailed(
                   listOf(
                     RepositoryAttempt(
-                      "http://example",
-                      DownloadError.HttpFailed("http://example", 503),
+                      repositoryName = "central",
+                      url = "http://example",
+                      error = DownloadError.HttpFailed("http://example", 503),
                     )
                   )
                 ),

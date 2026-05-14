@@ -31,7 +31,8 @@ class BtaImplFetcherTest {
 
       override fun ensureDirectoryRecursive(path: String) = error("must not be called")
 
-      override fun downloadFile(url: String, destPath: String) = error("must not be called")
+      override fun downloadFile(url: String, destPath: String, headers: Map<String, String>?) =
+        error("must not be called")
 
       override fun computeSha256(filePath: String) = error("must not be called")
 
@@ -84,7 +85,10 @@ class BtaImplFetcherTest {
       config.dependencies,
     )
     assertEquals("jvm", config.build.target)
-    assertEquals(Repository(MAVEN_CENTRAL_BASE), config.repositories["central"])
+    assertEquals(
+      Repository(name = "central", url = MAVEN_CENTRAL_BASE),
+      config.repositories["central"],
+    )
   }
 
   @Test
@@ -109,7 +113,11 @@ class BtaImplFetcherTest {
         "org.jetbrains.kotlin:kotlin-build-tools-impl",
         RepositoryDownloadFailure.AllAttemptsFailed(
           listOf(
-            RepositoryAttempt("http://example/", DownloadError.HttpFailed("http://example/", 503))
+            RepositoryAttempt(
+              repositoryName = "central",
+              url = "http://example/",
+              error = DownloadError.HttpFailed("http://example/", 503),
+            )
           )
         ),
       )
@@ -178,7 +186,7 @@ class BtaImplFetcherTest {
 
       override fun ensureDirectoryRecursive(path: String) = Ok(Unit)
 
-      override fun downloadFile(url: String, destPath: String) =
+      override fun downloadFile(url: String, destPath: String, headers: Map<String, String>?) =
         Err(DownloadError.NetworkError(url, "stub"))
 
       override fun computeSha256(filePath: String) = Err(Sha256Error(filePath))
