@@ -9,7 +9,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class RejectBaseCredentialLiteralsTest {
+class RejectBaseCredentialFieldsTest {
 
   // Minimal valid base kolt.toml stem; tests append `[repositories.x]` blocks.
   private val baseStem =
@@ -119,7 +119,7 @@ class RejectBaseCredentialLiteralsTest {
   @Test
   fun acceptsOverlayOnlyCredential() {
     // Base declares the repository without credentials; overlay supplies
-    // the token. rejectBaseCredentialLiterals must not fire because it
+    // the token. rejectBaseCredentialFields must not fire because it
     // inspects rawBase only, not the merged result.
     val baseToml =
       baseStem +

@@ -172,14 +172,19 @@ private fun repositoryDownloadFailureContext(failure: RepositoryDownloadFailure)
     // construction (TransitiveResolver passes it through redactUrlUserinfo),
     // but we re-apply here so any future caller path cannot leak userinfo
     // into the renderer. The operation is idempotent.
-    is RepositoryDownloadFailure.AuthFailed ->
+    is RepositoryDownloadFailure.AuthFailed -> {
+      val phrase = reasonPhrase(failure.statusCode)
+      val statusLine =
+        if (phrase.isEmpty()) "status: ${failure.statusCode}"
+        else "status: ${failure.statusCode} $phrase"
       listOf(
         "repository: ${failure.repositoryName}",
         "url: ${redactUrlUserinfo(failure.url)}",
-        "status: ${failure.statusCode} ${reasonPhrase(failure.statusCode)}",
+        statusLine,
         "credentials: ${failure.authState.toDisplayString()}",
         "hint: ${formatAuthHint(failure.statusCode, failure.authState)}",
       )
+    }
   }
 
 private fun reasonPhrase(statusCode: Int): String =

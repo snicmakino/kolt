@@ -65,7 +65,10 @@ fun downloadFile(
   val tempPath = "$destPath.tmp.${getpid()}"
 
   val curl =
-    curl_easy_init() ?: return Err(DownloadError.NetworkError(url, "failed to initialize libcurl"))
+    curl_easy_init()
+      ?: return Err(
+        DownloadError.NetworkError(redactUrlUserinfo(url), "failed to initialize libcurl")
+      )
 
   val fp = fopen(tempPath, "wb")
   if (fp == null) {
@@ -86,7 +89,12 @@ fun downloadFile(
         fclose(fp)
         curl_easy_cleanup(curl)
         remove(tempPath)
-        return Err(DownloadError.NetworkError(url, "failed to allocate libcurl header list"))
+        return Err(
+          DownloadError.NetworkError(
+            redactUrlUserinfo(url),
+            "failed to allocate libcurl header list",
+          )
+        )
       }
       headerList = appended
     }
@@ -114,7 +122,7 @@ fun downloadFile(
     val res = curl_easy_perform(curl)
     if (res != CURLE_OK) {
       val msg = curl_easy_strerror(res)?.toKString() ?: "unknown error"
-      return Err(DownloadError.NetworkError(url, msg))
+      return Err(DownloadError.NetworkError(redactUrlUserinfo(url), msg))
     }
 
     memScoped {

@@ -11,7 +11,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // End-to-end parametric matrix driving parseConfig (with overlay) so that the
-// full chain — ktoml decode -> rejectBaseCredentialLiterals -> mergeOverlay ->
+// full chain — ktoml decode -> rejectBaseCredentialFields -> mergeOverlay ->
 // repositorySourceMap -> liftRepositoriesMap — composes with realistic
 // kolt.toml / kolt.local.toml fixtures. Per-validator unit branches live in
 // LiftRepositoriesMapAuthValidatorTest; this file pins source attribution
@@ -288,7 +288,7 @@ class RepositoryAuthConfigTest {
       ),
       // (k') Req 2.1 + Req 2.3 ordering: env-form in BASE produces the
       // placement message, NOT the env-not-supported message. Confirms
-      // rejectBaseCredentialLiterals runs before liftRepositoriesMap env-reject.
+      // rejectBaseCredentialFields runs before liftRepositoriesMap env-reject.
       Scenario(
         label = "k'/base-token-env-form -> placement (not env-reject)",
         baseRepos =

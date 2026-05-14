@@ -273,7 +273,13 @@ private fun liftSysPropsMap(
 // Iteration is in declaration order; the first offending field on the
 // first offending repository wins. The error message names the repository
 // and the offending field but never the credential value (Req 2.4).
-internal fun rejectBaseCredentialLiterals(
+//
+// `AuthStateProjection.toDisplayString()`'s "from kolt.local.toml" suffix
+// depends on this validator: any credential that reaches the resolver
+// provably originated in kolt.local.toml because base-side credentials
+// are rejected here. Do not weaken this validator without revisiting
+// that display string.
+internal fun rejectBaseCredentialFields(
   rawBase: RawKoltConfig,
   basePath: String?,
 ): Result<Unit, ConfigError.ParseFailed> {
@@ -704,7 +710,7 @@ fun parseConfig(
     // Placement-policy gate: credentials in `kolt.toml` are rejected before
     // the overlay is merged, so the diagnostic path points at the base file
     // even when an overlay is supplied.
-    rejectBaseCredentialLiterals(rawBase, path).getError()?.let {
+    rejectBaseCredentialFields(rawBase, path).getError()?.let {
       return Err(it)
     }
     val rawOverlay: RawLocalOverlayConfig? =

@@ -10,7 +10,7 @@ import kotlin.test.assertNotNull
 
 // End-to-end driver for Req 3.x (URL userinfo rejection). Exercises the real
 // parseConfig chain so the userinfo validator inside liftRepositoriesMap is
-// wired through ktoml decode + rejectBaseCredentialLiterals + sourceMap path
+// wired through ktoml decode + rejectBaseCredentialFields + sourceMap path
 // attribution. Per-validator branches live in LiftRepositoriesMapAuthValidatorTest;
 // this file pins (a) reject for user:password@ form, (b) reject for user@ form,
 // (c) accept for `@` inside path, and (d) the Req 3.3 leak guard: the userinfo
