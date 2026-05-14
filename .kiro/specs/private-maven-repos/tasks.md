@@ -48,7 +48,7 @@
   - _Boundary: kolt.config.Repository, kolt.build.daemon.BtaImplFetcher_
   - _Depends: 1.1_
 
-- [ ] 2.3 `mergeRepositories` を credential field merge に拡張
+- [x] 2.3 `mergeRepositories` を credential field merge に拡張
   - `LocalOverlay.kt:82-105` の `mergeRepositories` を更新し、 overlay の credential field (token / user / password) を base に対して last-write-wins で merge する: `baseRepo.copy(url = overlayRepo.url ?: baseRepo.url, token = overlayRepo.token ?: baseRepo.token, user = overlayRepo.user ?: baseRepo.user, password = overlayRepo.password ?: baseRepo.password)`
   - 既存の overlay-only-name rejection 動作 (#415) は変更しない
   - 観察可能な完了: 単体 test で `kolt.toml` の `[repositories.x] url = "..."` と `kolt.local.toml` の `[repositories.x] token = { literal = "abc" }` が merge 後に `RawRepository(url = "...", token = Literal("abc"))` を生成する
