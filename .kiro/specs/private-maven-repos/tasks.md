@@ -22,7 +22,7 @@
   - _Requirements: 1.1, 1.4, 1.6, 1.7, 2.3_
   - _Boundary: kolt.config.RawCredentialField_
 
-- [ ] 1.3 (P) `redactUrlUserinfo` shared utility と `UrlRedactionTest` を追加
+- [x] 1.3 (P) `redactUrlUserinfo` shared utility と `UrlRedactionTest` を追加
   - `kolt.infra.redactUrlUserinfo(url: String): String` を実装、 `://` と `@` の位置関係 (`@` がパス区切り `/?#` より前にあること) で userinfo を検出して除去
   - 5 ケース matrix test: (a) `https://host/path` 不変、 (b) `https://u:p@host/path` → userinfo 除去、 (c) `https://u@host/path` → userinfo 除去、 (d) `https://host/foo@bar` 不変 (path 内 `@`)、 (e) `not-a-url-at-all` 不変
   - 観察可能な完了: `UrlRedactionTest` 5 ケース全 green
