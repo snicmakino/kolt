@@ -56,7 +56,7 @@
   - _Boundary: kolt.config.LocalOverlay_
   - _Depends: 2.1_
 
-- [ ] 2.4 `rejectBaseCredentialLiterals` (新規) を実装し parseConfig pre-merge に挿入
+- [x] 2.4 `rejectBaseCredentialLiterals` (新規) を実装し parseConfig pre-merge に挿入
   - `parseConfig` 内の base raw decode 直後・overlay merge 前に呼び出される shape-blind validator を新規実装
   - `rawBase.repositories` を走査し、 `token` / `user` / `password` のいずれかが non-null なら `ConfigError.ParseFailed(path = basePath, message = "kolt.toml [repositories.<name>]: literal <field> field. kolt.toml is intended to be committed; declare <field> in kolt.local.toml instead.")` を返す。 message には credential 値そのものは含めない
   - `env` form / `literal` form を区別せず両方 reject (placement-policy first)

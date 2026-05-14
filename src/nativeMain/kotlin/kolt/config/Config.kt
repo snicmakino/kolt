@@ -261,6 +261,43 @@ private fun liftSysPropsMap(
   return Ok(out)
 }
 
+// Rejects `kolt.toml` (the base file) carrying any credential-related field
+// on a repository entry. Shape-blind: both `{ literal = "..." }` and
+// `{ env = "..." }` forms trigger the placement-policy message. The
+// env-not-supported message (Req 2.3) is emitted later by `liftRepositoriesMap`
+// on the merged result, so a user who tries `{ env = ... }` in kolt.toml
+// sees the placement message first and, after moving to kolt.local.toml,
+// the env-not-supported message (intentional 2-hop in v1.0).
+//
+// Iteration is in declaration order; the first offending field on the
+// first offending repository wins. The error message names the repository
+// and the offending field but never the credential value (Req 2.4).
+internal fun rejectBaseCredentialLiterals(
+  rawBase: RawKoltConfig,
+  basePath: String?,
+): Result<Unit, ConfigError.ParseFailed> {
+  for ((rawName, repo) in rawBase.repositories) {
+    val name = rawName.removeSurrounding("\"")
+    val offendingField =
+      when {
+        repo.token != null -> "token"
+        repo.user != null -> "user"
+        repo.password != null -> "password"
+        else -> null
+      } ?: continue
+    return Err(
+      ConfigError.ParseFailed(
+        message =
+          "kolt.toml [repositories.$name]: literal $offendingField field. " +
+            "kolt.toml is intended to be committed; declare $offendingField in " +
+            "kolt.local.toml instead.",
+        path = basePath,
+      )
+    )
+  }
+  return Ok(Unit)
+}
+
 // Lifts a Map<String, RawRepository> into Map<String, Repository>: strips
 // quotes around keys (consistent with cleanedDeps), rejects entries whose
 // url is null or empty, and preserves the trailing-slash normalization that
@@ -521,6 +558,12 @@ fun parseConfig(
   }
   return try {
     val rawBase = toml.decodeFromString(RawKoltConfig.serializer(), tomlString)
+    // Placement-policy gate: credentials in `kolt.toml` are rejected before
+    // the overlay is merged, so the diagnostic path points at the base file
+    // even when an overlay is supplied.
+    rejectBaseCredentialLiterals(rawBase, path).getError()?.let {
+      return Err(it)
+    }
     val rawOverlay: RawLocalOverlayConfig? =
       if (overlayString != null && overlayPath != null) {
         parseLocalOverlay(overlayString, overlayPath).getOrElse {
