@@ -177,7 +177,7 @@
   - _Boundary: kolt.resolve.Resolver (formatResolveError, repositoryDownloadFailureContext)_
   - _Depends: 1.1, 4.1_
 
-- [ ] 5.2 `RepositoryAuthFailureTest` (4-row hint matrix + iteration stop) を追加
+- [x] 5.2 `RepositoryAuthFailureTest` (4-row hint matrix + iteration stop) を追加
   - loopback fixture を `[401-repo, 200-repo]` / `[404-repo, 401-repo, 200-repo]` / 4 hint variants の scenarios で構成
   - 4 row parametric matrix で `(statusCode, AuthStateProjection)` × `(401/403, NotConfigured/ConfiguredToken/ConfiguredBasic)` の hint text を完全一致 assert
   - iteration stop assertion: `[401-repo, 200-repo]` で central (200-repo) に request が **届かない** ことを loopback server access log で確認

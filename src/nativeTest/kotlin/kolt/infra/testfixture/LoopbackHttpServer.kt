@@ -134,10 +134,31 @@ private constructor(
       }
     }
 
+    // Arbitrary-status response, used by RepositoryAuthFailureTest to drive
+    // 401 / 403 / 404 paths through `downloadFromRepositories`. The `reason`
+    // is the HTTP/1.1 reason phrase ("Unauthorized" / "Forbidden" / etc.);
+    // it's wire-only — libcurl doesn't surface it back to callers, but it
+    // keeps the response line spec-conformant.
+    data class WithStatus(val code: Int, val reason: String, val body: String) : Response() {
+      override fun render(): ByteArray {
+        val bodyBytes = body.encodeToByteArray()
+        val head =
+          "HTTP/1.1 $code $reason\r\n" +
+            "Content-Length: ${bodyBytes.size}\r\n" +
+            "Content-Type: application/octet-stream\r\n" +
+            "Connection: close\r\n" +
+            "\r\n"
+        return head.encodeToByteArray() + bodyBytes
+      }
+    }
+
     companion object {
       fun ok(body: String): Response = Ok(body)
 
       fun redirect(location: String): Response = Redirect(location)
+
+      fun withStatus(code: Int, reason: String, body: String): Response =
+        WithStatus(code, reason, body)
     }
   }
 
