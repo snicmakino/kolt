@@ -31,7 +31,7 @@ permissions:
   contents: write
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.16.3
+  KOLT_BOOTSTRAP_TAG: v0.20.0
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
@@ -169,26 +169,9 @@ jobs:
       # emits both the tarball and .sha256. The KOLT env var points the
       # script at the prebuilt bootstrap kexe instead of its default
       # `build/release/kolt.kexe` lookup.
-      #
-      # Pre-v0.20.0 bootstrap shim: KOLT_BOOTSTRAP_TAG (v0.16.3) predates
-      # the `[repositories.<name>]` sub-table schema, so we stage the
-      # three kolt.toml files in the legacy flat-string-map form for the
-      # duration of the bootstrap build only; the trap restores them
-      # before the tarball is assembled into dist/ (assemble-dist.sh
-      # does not bundle kolt.toml into the release tarball, so the
-      # transient flat form never reaches users). Remove the shim and
-      # bump KOLT_BOOTSTRAP_TAG once v0.20.0+ is the bootstrap pin.
       - name: Assemble tarball + sha256
         run: |
           set -euo pipefail
-          ./scripts/ci-kolt-toml-bootstrap-shim.sh apply \
-            kolt.toml \
-            kolt-jvm-compiler-daemon/kolt.toml \
-            kolt-native-compiler-daemon/kolt.toml
-          trap './scripts/ci-kolt-toml-bootstrap-shim.sh restore \
-            kolt.toml \
-            kolt-jvm-compiler-daemon/kolt.toml \
-            kolt-native-compiler-daemon/kolt.toml || true' EXIT
           KOLT="$BOOTSTRAP_KOLT" \
             ./scripts/assemble-dist.sh
 
