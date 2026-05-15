@@ -27,7 +27,7 @@ permissions:
   contents: read
 
 env:
-  KOLT_BOOTSTRAP_TAG: v0.19.2
+  KOLT_BOOTSTRAP_TAG: v0.20.0
   # Run the bootstrap kolt from inside the extracted release tree so
   # `DaemonJarResolver` can find `libexec/<daemon>/*.jar` siblings and
   # spawn the warm daemon. Copying the binary out (as the original
@@ -97,14 +97,6 @@ jobs:
       - name: Self-host build (kolt builds itself from kolt.toml)
         run: |
           set -euo pipefail
-          # Pre-v0.20.0 bootstrap shim: KOLT_BOOTSTRAP_TAG (v0.19.x) predates
-          # the [repositories.<name>] sub-table schema introduced in #320, so
-          # the bootstrap binary cannot parse the new kolt.toml. Stage a
-          # flat-form kolt.toml for this step only; restore on exit so the
-          # subsequent steps see the real source-of-truth file. Remove the
-          # shim and bump KOLT_BOOTSTRAP_TAG in the v0.20.0 release PR.
-          ./scripts/ci-kolt-toml-bootstrap-shim.sh apply kolt.toml
-          trap './scripts/ci-kolt-toml-bootstrap-shim.sh restore kolt.toml || true' EXIT
           "$BOOTSTRAP_KOLT" build 2> >(tee kolt-build.stderr >&2)
           if ! grep -q 'starting native compiler daemon' kolt-build.stderr; then
             echo "Canary failed: bootstrap kolt did not reach the native daemon spawn path" >&2
