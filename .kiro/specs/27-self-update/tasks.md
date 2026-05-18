@@ -21,7 +21,7 @@
   - _Requirements: 5.3_
   - _Boundary: infra FileSystem_
 
-- [ ] 1.4 (P) `GithubReleasesFixture` test fixture を作成
+- [x] 1.4 (P) `GithubReleasesFixture` test fixture を作成
   - LoopbackHttpServer に載せる canned `releases/latest` JSON、および `kolt-<ver>-linux-x64.tar.gz` + 同 `.sha256` を生成する builder (3.3/3.4 の integration test が依存する test-infra)
   - 観察: fixture を使う最小 test が green — 生成 tarball が `extractArchive` で展開でき、生成 `.sha256` が `computeSha256` 結果と一致する
   - _Requirements: 4.1, 4.2_
