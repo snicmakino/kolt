@@ -43,7 +43,7 @@
   - _Depends: 1.1, 1.3_
   - _Boundary: SelfUpdater_
 
-- [ ] 3.2 `check()` + `SelfUpdaterCheckTest`
+- [x] 3.2 `check()` + `SelfUpdaterCheckTest`
   - `ensureLinuxX64` → `fetchLatest` → `compareVersions` → CheckOutcome、`detectLayout`/`verifyWritable` は呼ばない、ファイル書き込みゼロ
   - 観察: SelfUpdaterCheckTest が green — update available / already latest(equal) / older / Platform 不一致で fetch しない / layout 不一致でも version を返す / 書き込み 0 行
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 6.2_

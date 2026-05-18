@@ -3,6 +3,8 @@ package kolt.selfupdate
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.getError
+import com.github.michaelbull.result.getOrElse
 import kolt.config.KOLT_VERSION
 import kolt.infra.SelfExeError
 import kolt.infra.SymlinkError
@@ -10,6 +12,7 @@ import kolt.infra.canWrite as fsCanWrite
 import kolt.infra.fileExists
 import kolt.infra.readSelfExe
 import kolt.infra.replaceSymlinkAtomically
+import kolt.resolve.compareVersions
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.alloc
@@ -48,7 +51,35 @@ class SelfUpdater(
     ::replaceSymlinkAtomically,
   private val uname: () -> Pair<String, String> = ::hostUname,
   private val out: (String) -> Unit = ::println,
+  // Seam mirroring GithubReleasesClient.fetchLatest's own `url` default so
+  // loopback-server tests can drive check() without a real GitHub round-trip.
+  private val releasesUrl: String = GITHUB_RELEASES_LATEST_URL,
 ) {
+  // --check answers "is a newer stable release out?" with zero filesystem
+  // side effects: platform gate first, then fetch + tag-validate + semver
+  // compare. No layout probe, no staging, no symlink — those belong to the
+  // write-bearing update() path only.
+  fun check(): Result<CheckOutcome, SelfUpdateError> {
+    ensureLinuxX64().getError()?.let {
+      return Err(it)
+    }
+
+    val release =
+      releases.fetchLatest(releasesUrl).getOrElse {
+        return Err(it)
+      }
+    val latest =
+      releases.validateTag(release.tagName).getOrElse {
+        return Err(it)
+      }
+
+    return if (compareVersions(latest, currentVersion) > 0) {
+      Ok(CheckOutcome.UpdateAvailable(current = currentVersion, latest = latest))
+    } else {
+      Ok(CheckOutcome.AlreadyLatest(current = currentVersion))
+    }
+  }
+
   // Wide assertion: linuxX64 is the only build target today. The `amd64`
   // alias is accepted because some kernels report it instead of `x86_64`.
   internal fun ensureLinuxX64(): Result<Unit, SelfUpdateError> {
@@ -153,4 +184,12 @@ class SelfUpdater(
     val currentInstallDir: String, // ~/.local/share/kolt/<ver>/
     val shareRoot: String, // ~/.local/share/kolt/
   )
+}
+
+sealed interface CheckOutcome {
+  val current: String
+
+  data class UpdateAvailable(override val current: String, val latest: String) : CheckOutcome
+
+  data class AlreadyLatest(override val current: String) : CheckOutcome
 }
