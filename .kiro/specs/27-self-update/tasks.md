@@ -65,7 +65,7 @@
   - _Boundary: SelfUpdater_
 
 - [ ] 4. Integration: CLI 配線
-- [ ] 4.1 `SelfCommands.doSelf` + `SelfCommandsTest`
+- [x] 4.1 `SelfCommands.doSelf` + `SelfCommandsTest`
   - 引数 parse: `[]`→EmptyHelp exit0 / `--help`→Help exit0 / `update`→update / `update --check`→check / 未知フラグ→非ゼロ / 未知 subcommand→非ゼロ、全 `SelfUpdateError` variant を人間可読 1 行メッセージへマップ
   - 観察: SelfCommandsTest が green — 6 引数パターンの ExitCode と出力、全 error variant が空でないメッセージを返す
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.3, 2.4, 2.6, 3.3, 7.4_
