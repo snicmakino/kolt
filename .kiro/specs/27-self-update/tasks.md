@@ -80,7 +80,7 @@
   - _Boundary: cli Main_
 
 - [ ] 5. Validation
-- [ ] 5.1 全経路通し + self-host smoke 非影響 + workflows grep
+- [x] 5.1 全経路通し + self-host smoke 非影響 + workflows grep
   - `doSelf` 経由で check / update / 各 error 経路を通し確認、full `kolt test` を green に、`.github/workflows/` を grep して新 `self` subcommand と `KNOWN_SUBCOMMANDS_SORTED` 変更で破綻する path 仮定がないこと、`self-host-post` 経路に regression がないことを確認
   - 観察: full `kolt test` が green、`.github/workflows/` grep で新規 path 仮定の破綻なし、self-host smoke 経路に regression なし
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1_
