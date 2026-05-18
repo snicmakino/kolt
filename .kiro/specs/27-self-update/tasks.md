@@ -28,7 +28,7 @@
   - _Boundary: testfixture_
 
 - [ ] 2. Core: GitHub Releases クライアント
-- [ ] 2.1 `GithubReleasesClient` を実装 + `GithubReleasesClientTest`
+- [x] 2.1 `GithubReleasesClient` を実装 + `GithubReleasesClientTest`
   - `downloadFile` を一時パスへ呼び `readFileAsString` → `Json.decodeFromString` (ignoreUnknownKeys)、`User-Agent: kolt/<ver>` を headers で送出、`validateTag` は `^v(\d+)\.(\d+)\.(\d+)$` で `X.Y.Z` を返す、asset 名 lookup で欠落は Asset(name)。既存 LoopbackHttpServer + awaitAccessLog を再利用し新規 server infra は作らない、fixture は 1.4 を使用
   - 観察: GithubReleasesClientTest が green — 正常 JSON decode / `tag_name` 不在→Metadata / tag 形式違反→Metadata / UA が `kolt/<ver>` で送出 (awaitAccessLog) / asset 欠落→Asset(name)
   - _Requirements: 2.1, 4.1, 4.4, 7.1, 7.2_
