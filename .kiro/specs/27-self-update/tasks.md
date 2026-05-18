@@ -3,7 +3,7 @@
 > 圧縮版 spec (install.sh 同等スコープ)。kolt は TDD: 各実装サブタスクは対応する test を同一ユニットで green にする (reviewer の mechanical test-pass check が RED-only commit を拒否するため)。
 
 - [ ] 1. Foundation: 共有型・OS プリミティブ・test fixture
-- [ ] 1.1 (P) `SelfUpdateError` sealed ADT を定義
+- [x] 1.1 (P) `SelfUpdateError` sealed ADT を定義
   - Network / Metadata / Asset / Extract / Layout / Platform / Home の 7 トップ variant、各 variant は detail / path / name を String で保持 (粗粒度方針)
   - 観察: 全 variant がコンパイル可能で、design の Error Handling 表に対応する引数を持つ
   - _Requirements: 7.1, 7.2, 7.3_
