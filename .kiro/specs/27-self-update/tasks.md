@@ -9,7 +9,7 @@
   - _Requirements: 7.1, 7.2, 7.3_
   - _Boundary: SelfUpdateError_
 
-- [ ] 1.2 (P) `replaceSymlinkAtomically` と `SymlinkError` を実装 + `SymlinkTest`
+- [x] 1.2 (P) `replaceSymlinkAtomically` と `SymlinkError` を実装 + `SymlinkTest`
   - `SymlinkError` sealed ADT (CreateFailed / RenameFailed)、`symlink(2)` で一時 symlink を作り `rename(2)` で linkPath を上書き、rename 失敗時は一時 symlink を unlink
   - 観察: SymlinkTest が green — (a) linkPath 不在で新規作成 (b) 既存 symlink を atomic 置換 (前後を lstat+readlink で観測) (c) newTarget 不在でも symlink(2) 成功 (d) regular file 上書き挙動を pin
   - _Requirements: 3.6_
