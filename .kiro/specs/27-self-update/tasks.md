@@ -36,7 +36,7 @@
   - _Boundary: GithubReleasesClient_
 
 - [ ] 3. Core: SelfUpdater 本体 (同一ファイル `SelfUpdater.kt`、順次)
-- [ ] 3.1 ゲート群 `ensureLinuxX64` / `detectLayout` / `verifyWritable` + `SelfUpdaterLayoutTest`
+- [x] 3.1 ゲート群 `ensureLinuxX64` / `detectLayout` / `verifyWritable` + `SelfUpdaterLayoutTest`
   - `ensureLinuxX64`: uname で sysname=Linux && machine ∈ {x86_64, amd64}、`detectLayout`: lstat→readlink→target が `<shareRoot><X.Y.Z>/bin/kolt` の文字列 prefix にマッチ、非一致は単一 `Layout`、`verifyWritable` は `canWrite`
   - 観察: SelfUpdaterLayoutTest が green — installer 通り通過 / regular file・dangling・外部 target は単一 `Layout` / `canWrite=false` は writable 系 `Layout` / 非 linuxX64→Platform
   - _Requirements: 5.1, 5.2, 5.3, 6.1_
