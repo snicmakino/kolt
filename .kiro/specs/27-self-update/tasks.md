@@ -15,7 +15,7 @@
   - _Requirements: 3.6_
   - _Boundary: infra Symlink_
 
-- [ ] 1.3 (P) `FileSystem.canWrite(path)` を追加 + test
+- [x] 1.3 (P) `FileSystem.canWrite(path)` を追加 + test
   - `access(path, W_OK) == 0` の薄いラッパ、`@OptIn(ExperimentalForeignApi::class)` を function-level に、既存 `fileExists` の隣
   - 観察: 書き込み可能 dir で true、0500 dir で false を assert する test が green
   - _Requirements: 5.3_
@@ -85,3 +85,6 @@
   - 観察: full `kolt test` が green、`.github/workflows/` grep で新規 path 仮定の破綻なし、self-host smoke 経路に regression なし
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1_
   - _Depends: 4.2_
+
+## Implementation Notes
+- 実装後は必ず `kolt fmt` を実行すること。pre-commit の ktfmt フックが未整形ファイルの commit を拒否する (task 1.2 で発覚)。
