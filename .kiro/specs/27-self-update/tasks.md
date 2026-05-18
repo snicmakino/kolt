@@ -50,7 +50,7 @@
   - _Depends: 2.1, 3.1_
   - _Boundary: SelfUpdater_
 
-- [ ] 3.3 `update()` + `runStaged` 本体 + `SelfUpdaterUpdateTest`
+- [x] 3.3 `update()` + `runStaged` 本体 + `SelfUpdaterUpdateTest`
   - `ensureLinuxX64`→`detectLayout`→`verifyWritable`→`fetchLatest`→compare、新しければ自 pid `~/.local/share/kolt/.staging-<pid>/` を作り直し→tarball+`.sha256` download→`computeSha256` 検証(一致で通過)→`extractArchive`→`rename` で `<new-ver>` 確定→`replaceSymlinkAtomically`→progress 5 段表示→旧バージョン dir 非削除。死 pid 掃除はここに含めない (3.4)
   - 観察: SelfUpdaterUpdateTest が green — 5 ステージ進捗が順に出る / `<new>/bin/kolt` 作成 / symlink が新 target / 旧 dir 残存 / 自 pid staging が成功後に削除 / checksum 一致で extract に進む / latest≤current は no-op exit 0
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.5_
@@ -88,3 +88,4 @@
 
 ## Implementation Notes
 - 実装後は必ず `kolt fmt` を実行すること。pre-commit の ktfmt フックが未整形ファイルの commit を拒否する (task 1.2 で発覚)。
+- production コメントに `Requirement N.N` / task / spec ID を書かない (WHY のみ)。直接 posix 呼び出し (`getpid`/`rename`/`access` 等) には function-level `@OptIn(ExperimentalForeignApi::class)` を付ける。task 3.3 で両方再発し reviewer reject → remediation 要した。test ファイルの `// Req N.N:` シナリオタグは許容 idiom。

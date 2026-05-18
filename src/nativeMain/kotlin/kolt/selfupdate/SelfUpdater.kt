@@ -9,8 +9,14 @@ import kolt.config.KOLT_VERSION
 import kolt.infra.SelfExeError
 import kolt.infra.SymlinkError
 import kolt.infra.canWrite as fsCanWrite
+import kolt.infra.computeSha256
+import kolt.infra.downloadFile
+import kolt.infra.ensureDirectoryRecursive
+import kolt.infra.extractArchive
 import kolt.infra.fileExists
+import kolt.infra.readFileAsString
 import kolt.infra.readSelfExe
+import kolt.infra.removeDirectoryRecursive
 import kolt.infra.replaceSymlinkAtomically
 import kolt.resolve.compareVersions
 import kotlinx.cinterop.ByteVar
@@ -25,8 +31,10 @@ import kotlinx.cinterop.toKString
 import platform.posix.PATH_MAX
 import platform.posix.S_IFLNK
 import platform.posix.S_IFMT
+import platform.posix.getpid
 import platform.posix.lstat
 import platform.posix.readlink
+import platform.posix.rename
 import platform.posix.stat
 import platform.posix.uname
 import platform.posix.utsname
@@ -47,6 +55,10 @@ class SelfUpdater(
   private val currentVersion: String = KOLT_VERSION,
   private val readSelfExe: () -> Result<String, SelfExeError> = ::readSelfExe,
   private val canWrite: (String) -> Boolean = ::fsCanWrite,
+  // Asset transport seam: the staged tarball / .sha256 fetch goes through
+  // this so tests can serve the binary archive from disk without a real
+  // HTTPS round-trip. Production wires the same libcurl GET as everything else.
+  private val downloader: Downloader = Downloader(::downloadFile),
   private val replaceSymlink: (String, String) -> Result<Unit, SymlinkError> =
     ::replaceSymlinkAtomically,
   private val uname: () -> Pair<String, String> = ::hostUname,
@@ -78,6 +90,142 @@ class SelfUpdater(
     } else {
       Ok(CheckOutcome.AlreadyLatest(current = currentVersion))
     }
+  }
+
+  // The write-bearing path. The platform gate is first so an unsupported
+  // host is rejected before any network or disk work; the layout +
+  // writability gates run next so a non-installer layout is rejected
+  // without touching GitHub or disk. Only once a strictly newer stable
+  // release is confirmed does the staged download/verify/extract/swap run.
+  fun update(): Result<UpdateOutcome, SelfUpdateError> {
+    ensureLinuxX64().getError()?.let {
+      return Err(it)
+    }
+    val layout =
+      detectLayout().getOrElse {
+        return Err(it)
+      }
+    verifyWritable(layout).getError()?.let {
+      return Err(it)
+    }
+
+    out("fetching release metadata")
+    val release =
+      releases.fetchLatest(releasesUrl).getOrElse {
+        return Err(it)
+      }
+    val latest =
+      releases.validateTag(release.tagName).getOrElse {
+        return Err(it)
+      }
+
+    if (compareVersions(latest, currentVersion) <= 0) {
+      out("Already at latest version ($currentVersion)")
+      return Ok(UpdateOutcome.NoOp(current = currentVersion))
+    }
+
+    return runStaged(layout, release, latest)
+  }
+
+  // Download → verify → extract → place → swap, all inside this process's
+  // own `.staging-<pid>/`. The own-pid staging dir is recreated
+  // unconditionally so an interrupted prior run leaves no stale payload;
+  // sibling version dirs and other pids' staging dirs are never touched
+  // (dead-pid sweep handled separately). The new payload lands at
+  // `<shareRoot>/<new>/` only after the checksum matches and extraction
+  // succeeds; the swap is a single rename so a concurrent or interrupted
+  // run is observed as old-or-new, never partial.
+  @OptIn(ExperimentalForeignApi::class)
+  private fun runStaged(
+    layout: Layout,
+    release: LatestRelease,
+    newVersion: String,
+  ): Result<UpdateOutcome, SelfUpdateError> {
+    val tarballName = "kolt-$newVersion-linux-x64.tar.gz"
+    val sha256Name = "$tarballName.sha256"
+
+    val tarballUrl =
+      releases.assetUrl(release, tarballName).getOrElse {
+        return Err(it)
+      }
+    val sha256Url =
+      releases.assetUrl(release, sha256Name).getOrElse {
+        return Err(it)
+      }
+
+    val staging = "${layout.shareRoot}/.staging-${getpid()}"
+    removeDirectoryRecursive(staging)
+    ensureDirectoryRecursive(staging).getError()?.let {
+      return Err(SelfUpdateError.Extract("could not create staging dir $staging"))
+    }
+
+    out("downloading tarball")
+    val tarballPath = "$staging/$tarballName"
+    val sha256Path = "$staging/$sha256Name"
+    downloader.downloadFile(tarballUrl, tarballPath, null).getError()?.let {
+      return Err(SelfUpdateError.Asset(tarballName, "download failed"))
+    }
+    downloader.downloadFile(sha256Url, sha256Path, null).getError()?.let {
+      return Err(SelfUpdateError.Asset(sha256Name, "download failed"))
+    }
+
+    out("verifying checksum")
+    val computed =
+      computeSha256(tarballPath).getOrElse {
+        return Err(SelfUpdateError.Asset(tarballName, "could not hash downloaded tarball"))
+      }
+    val expected =
+      readSha256(sha256Path)
+        ?: return Err(SelfUpdateError.Asset(sha256Name, "could not read expected checksum"))
+    if (!computed.equals(expected, ignoreCase = true)) {
+      return Err(
+        SelfUpdateError.Asset(tarballName, "checksum mismatch: expected $expected, got $computed")
+      )
+    }
+
+    out("extracting")
+    val extractDir = "$staging/extract"
+    ensureDirectoryRecursive(extractDir).getError()?.let {
+      return Err(SelfUpdateError.Extract("could not create extract dir $extractDir"))
+    }
+    extractArchive(tarballPath, extractDir).getError()?.let {
+      return Err(SelfUpdateError.Extract(it.message))
+    }
+
+    // The release tarball wraps its content in a `kolt-<ver>-linux-x64/`
+    // directory (assemble-dist.sh / install.sh contract); when that wrapper
+    // is absent the extraction root itself is the payload.
+    val wrapper = "$extractDir/kolt-$newVersion-linux-x64"
+    val payloadDir = if (fileExists(wrapper)) wrapper else extractDir
+    val newInstallDir = "${layout.shareRoot}/$newVersion"
+    removeDirectoryRecursive(newInstallDir)
+    if (rename(payloadDir, newInstallDir) != 0) {
+      return Err(SelfUpdateError.Extract("could not place new version at $newInstallDir"))
+    }
+
+    out("switching to new version")
+    replaceSymlink(layout.binSymlink, "$newInstallDir/bin/kolt").getError()?.let {
+      return Err(
+        SelfUpdateError.Layout(
+          detectedPath = layout.binSymlink,
+          detail = "could not swap the bin symlink to the new version",
+        )
+      )
+    }
+
+    removeDirectoryRecursive(staging)
+    return Ok(UpdateOutcome.Switched(from = currentVersion, to = newVersion))
+  }
+
+  // Standard `sha256sum` format: `<64-hex>  <filename>`. Take the first
+  // whitespace-split field of the first non-blank line.
+  private fun readSha256(path: String): String? {
+    val body =
+      readFileAsString(path).getOrElse {
+        return null
+      }
+    val firstLine = body.lineSequence().firstOrNull { it.isNotBlank() } ?: return null
+    return firstLine.trim().split(Regex("\\s+")).firstOrNull()?.takeIf { it.isNotEmpty() }
   }
 
   // Wide assertion: linuxX64 is the only build target today. The `amd64`
@@ -192,4 +340,10 @@ sealed interface CheckOutcome {
   data class UpdateAvailable(override val current: String, val latest: String) : CheckOutcome
 
   data class AlreadyLatest(override val current: String) : CheckOutcome
+}
+
+sealed interface UpdateOutcome {
+  data class Switched(val from: String, val to: String) : UpdateOutcome
+
+  data class NoOp(val current: String) : UpdateOutcome
 }
