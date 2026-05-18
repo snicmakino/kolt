@@ -89,3 +89,5 @@
 ## Implementation Notes
 - 実装後は必ず `kolt fmt` を実行すること。pre-commit の ktfmt フックが未整形ファイルの commit を拒否する (task 1.2 で発覚)。
 - production コメントに `Requirement N.N` / task / spec ID を書かない (WHY のみ)。直接 posix 呼び出し (`getpid`/`rename`/`access` 等) には function-level `@OptIn(ExperimentalForeignApi::class)` を付ける。task 3.3 で両方再発し reviewer reject → remediation 要した。test ファイルの `// Req N.N:` シナリオタグは許容 idiom。
+- nativeTest で実 libcurl (`::downloadFile`) + `LoopbackHttpServer` (pthread) を full `kolt test` に混ぜると、後続の `fork()` する test (`PromptTest`) を futex deadlock させ `kolt test` が完了しなくなる (~2h hang)。SelfUpdater↔SelfCommands の seam を lock する integration test は network transport を in-memory fake `Downloader` (`GithubReleasesClient(downloader=...)` seam) に差し替え、実 `SelfUpdater` + 実 `doSelf` を通す。feature-level validation の NoOp double-print remediation で発覚。
+- cross-task seam バグ (NoOp message を SelfUpdater と SelfCommands が二重 print) は per-task review が見逃した: 両 test が seam の片側を stub していたため。実コンポーネントを通す integration test を 1 本足して seam を lock する。

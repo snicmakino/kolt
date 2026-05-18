@@ -146,9 +146,12 @@ private fun runUpdate(
       err(it.toMessage())
       return Err(EXIT_BUILD_ERROR)
     }
+  // SelfUpdater.update() already announces the already-latest state for the
+  // no-op branch via its own `out`; re-printing here would duplicate the
+  // line. Only the success arrow is this layer's to emit.
   when (outcome) {
     is UpdateOutcome.Switched -> out("${outcome.from} → ${outcome.to}")
-    is UpdateOutcome.NoOp -> out("Already at latest version (${outcome.current})")
+    is UpdateOutcome.NoOp -> Unit
   }
   return Ok(Unit)
 }

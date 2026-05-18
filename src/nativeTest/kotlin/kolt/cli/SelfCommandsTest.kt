@@ -112,14 +112,19 @@ class SelfCommandsTest {
     assertEquals("0.20.0 → 0.21.0", out.last(), "final line must be the version arrow")
   }
 
-  // Req 3.2: update no-op prints the already-latest line, exit 0.
+  // Req 3.2 / 3.3: the no-op already-latest line is SelfUpdater.update()'s to
+  // emit (via its own `out`), not SelfCommands'. With a stubbed runner that
+  // returns NoOp without an upstream print, SelfCommands must exit 0 and add
+  // no line of its own — re-printing here is the seam spill that double-prints
+  // the message in production. SelfCommands owns only the Switched arrow (3.3);
+  // the end-to-end single-print is locked by SelfCommandsIntegrationTest.
   @Test
-  fun updateNoOpPrintsAlreadyLatestExitsZero() {
+  fun updateNoOpExitsZeroWithoutReprintingAlreadyLatest() {
     val result = run(listOf("update"), updateResult = Ok(UpdateOutcome.NoOp(current = "0.20.0")))
     assertNull(result.getError(), "a no-op update exits 0")
     assertTrue(
-      out.any { it.contains("Already at latest version (0.20.0)") },
-      "expected the already-latest line, got: $out",
+      out.none { it.contains("Already at latest version") },
+      "SelfCommands must not re-print the already-latest line for NoOp, got: $out",
     )
   }
 
