@@ -14,6 +14,7 @@ import kolt.infra.downloadFile
 import kolt.infra.ensureDirectoryRecursive
 import kolt.infra.extractArchive
 import kolt.infra.fileExists
+import kolt.infra.listSubdirectories
 import kolt.infra.readFileAsString
 import kolt.infra.readSelfExe
 import kolt.infra.removeDirectoryRecursive
@@ -28,10 +29,13 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.set
 import kotlinx.cinterop.toKString
+import platform.posix.ESRCH
 import platform.posix.PATH_MAX
 import platform.posix.S_IFLNK
 import platform.posix.S_IFMT
+import platform.posix.errno
 import platform.posix.getpid
+import platform.posix.kill
 import platform.posix.lstat
 import platform.posix.readlink
 import platform.posix.rename
@@ -153,6 +157,8 @@ class SelfUpdater(
         return Err(it)
       }
 
+    sweepDeadStaging(layout.shareRoot)
+
     val staging = "${layout.shareRoot}/.staging-${getpid()}"
     removeDirectoryRecursive(staging)
     ensureDirectoryRecursive(staging).getError()?.let {
@@ -215,6 +221,39 @@ class SelfUpdater(
 
     removeDirectoryRecursive(staging)
     return Ok(UpdateOutcome.Switched(from = currentVersion, to = newVersion))
+  }
+
+  // A `.staging-<pid>/` whose owning process is no longer alive is debris
+  // from an interrupted run; with no advisory lock and no dedicated
+  // interrupt-recovery, sweeping these here is the only thing that keeps them
+  // from accumulating. The probe is `kill(pid, 0)`: a live or
+  // permission-shielded (EPERM) pid is left strictly untouched so a
+  // concurrent updater's payload is never destroyed; only an ESRCH (no such
+  // process) pid is reclaimed, best-effort. The own pid is skipped here — the
+  // caller recreates it deterministically right after.
+  @OptIn(ExperimentalForeignApi::class)
+  private fun sweepDeadStaging(shareRoot: String) {
+    val ownPid = getpid()
+    val names =
+      listSubdirectories(shareRoot).getOrElse {
+        return
+      }
+    for (name in names) {
+      val pid =
+        name.removePrefix(".staging-").takeIf { name.startsWith(".staging-") }?.toIntOrNull()
+      if (pid == null || pid == ownPid) continue
+      if (!isProcessDead(pid)) continue
+      removeDirectoryRecursive("$shareRoot/$name")
+    }
+  }
+
+  // ESRCH means no process bears this pid → safe to reclaim. A 0 return (alive)
+  // or EPERM (exists but signalling is denied) both mean "do not touch"; any
+  // other errno is treated conservatively as still-present.
+  @OptIn(ExperimentalForeignApi::class)
+  private fun isProcessDead(pid: Int): Boolean {
+    if (kill(pid, 0) == 0) return false
+    return errno == ESRCH
   }
 
   // Standard `sha256sum` format: `<64-hex>  <filename>`. Take the first

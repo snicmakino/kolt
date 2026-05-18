@@ -57,7 +57,7 @@
   - _Depends: 1.2, 2.1, 3.1_
   - _Boundary: SelfUpdater_
 
-- [ ] 3.4 死 pid staging 掃除実装 + `SelfUpdaterStagingIsolationTest` + `SelfUpdaterUpdateChecksumMismatchTest`
+- [x] 3.4 死 pid staging 掃除実装 + `SelfUpdaterStagingIsolationTest` + `SelfUpdaterUpdateChecksumMismatchTest`
   - 起動時に `.staging-*` を列挙し `kill(pid, 0)` で死 pid のみ best-effort 削除 (生存 pid 非干渉)。checksum mismatch 経路で `<new>` 未作成 + symlink 不変を保証
   - 観察: 両 test が green — 死 pid 分は掃除済 / 生存 pid 分は残存 / 自 pid は成功後削除、checksum mismatch で `<new>` 未作成 + symlink 不変
   - _Requirements: 4.3, 4.5, 7.2, 7.3_
