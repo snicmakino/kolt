@@ -19,6 +19,22 @@ class MainTest {
   }
 
   @Test
+  fun selfIsARecognizedSubcommand() {
+    assertTrue(
+      "self" in KNOWN_SUBCOMMANDS_SORTED,
+      "expected 'self' to be a recognized subcommand, not treated as unknown",
+    )
+  }
+
+  @Test
+  fun usageMentionsSelfUpdate() {
+    val lines = usageLines()
+
+    val self = lines.firstOrNull { it.contains("self") && it.contains("update") }
+    assertNotNull(self, "expected a 'kolt self update' line in usage output")
+  }
+
+  @Test
   fun flagsBlockMentionsKoltLocalTomlOverlay() {
     val lines = usageLines()
 

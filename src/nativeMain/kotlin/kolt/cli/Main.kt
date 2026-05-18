@@ -104,6 +104,7 @@ fun main(args: Array<String>) {
       val exit = doTool(filteredArgs.drop(1)).fold(success = { it }, failure = { it })
       exitProcess(exit)
     }
+    "self" -> doSelf(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "toolchain" -> doToolchain(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "daemon" -> doDaemon(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
     "cache" -> doCache(filteredArgs.drop(1)).getOrElse { exitProcess(it) }
@@ -139,6 +140,7 @@ internal val KNOWN_SUBCOMMANDS_SORTED: List<String> =
       "outdated",
       "remove",
       "run",
+      "self",
       "test",
       "tool",
       "toolchain",
@@ -252,6 +254,7 @@ internal fun usageLines(): List<String> =
     "  tree       Show dependency tree",
     "  outdated   Show dependencies with newer versions on Maven Central",
     "  tool       Run a [tools] alias (kolt tool run <alias> [-- args...])",
+    "  self       Self-update kolt (kolt self update [--check])",
     "  toolchain  Manage toolchains (install, list, remove)",
     "  daemon     Manage compiler daemons (stop)",
     "  cache      Manage the global dependency cache (clean)",

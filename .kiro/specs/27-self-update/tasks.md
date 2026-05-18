@@ -72,7 +72,7 @@
   - _Depends: 1.1, 3.2, 3.3_
   - _Boundary: SelfCommands_
 
-- [ ] 4.2 `Main.kt` 配線
+- [x] 4.2 `Main.kt` 配線
   - `when` 句に `"self" -> doSelf(args.drop(1))` (アルファベット順で `run` の前)、`KNOWN_SUBCOMMANDS_SORTED` に `"self"` 挿入、`usageLines()` に `kolt self update` 行を追加
   - 観察: `kolt self update --check` が dispatch され、`kolt self` が未知コマンド扱いされず、usage 出力に self が含まれる (既存 Main の挙動/テストで確認)
   - _Requirements: 1.1, 1.3_
