@@ -36,6 +36,11 @@ fun fileExists(path: String): Boolean {
 }
 
 @OptIn(ExperimentalForeignApi::class)
+fun canWrite(path: String): Boolean {
+  return access(path, W_OK) == 0
+}
+
+@OptIn(ExperimentalForeignApi::class)
 fun ensureDirectory(path: String): Result<Unit, MkdirFailed> {
   if (fileExists(path)) return Ok(Unit)
   return if (mkdir(path, 0b111111101u) == 0) { // 0755

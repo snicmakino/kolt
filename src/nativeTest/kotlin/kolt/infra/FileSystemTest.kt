@@ -78,6 +78,34 @@ class FileSystemTest {
   }
 
   @Test
+  fun canWriteReturnsTrueForWritableDirectory() {
+    val dir = "/tmp/kolt_can_write_writable_${platform.posix.getpid()}"
+    platform.posix.mkdir(dir, 0b111111101u)
+    try {
+      assertTrue(canWrite(dir))
+    } finally {
+      platform.posix.rmdir(dir)
+    }
+  }
+
+  @Test
+  fun canWriteReturnsFalseForReadOnlyDirectory() {
+    val dir = "/tmp/kolt_can_write_readonly_${platform.posix.getpid()}"
+    platform.posix.mkdir(dir, 0b101000000u) // 0500: read+execute, no write
+    try {
+      assertFalse(canWrite(dir))
+    } finally {
+      platform.posix.chmod(dir, 0b111111101u)
+      platform.posix.rmdir(dir)
+    }
+  }
+
+  @Test
+  fun canWriteReturnsFalseForNonExistentPath() {
+    assertFalse(canWrite("/tmp/kolt_can_write_nonexistent_${platform.posix.getpid()}"))
+  }
+
+  @Test
   fun ensureDirectoryCreatesNewDirectory() {
     val path = "/tmp/kolt_test_ensure_dir"
     remove(path)

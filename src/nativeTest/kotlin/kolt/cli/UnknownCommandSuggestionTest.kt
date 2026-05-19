@@ -33,6 +33,7 @@ class UnknownCommandSuggestionTest {
         "outdated",
         "remove",
         "run",
+        "self",
         "test",
         "tool",
         "toolchain",
